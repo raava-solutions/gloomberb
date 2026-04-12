@@ -22,6 +22,10 @@ import { predictionMarketsPlugin } from "./prediction-markets";
 import { correlationPlugin } from "./builtin/correlation";
 import { analyticsPlugin } from "./builtin/analytics";
 import { insiderPlugin } from "./builtin/insider";
+import { fxMatrixPlugin } from "./builtin/fx-matrix";
+import { yieldCurvePlugin } from "./builtin/yield-curve";
+import { sectorsPlugin } from "./builtin/sectors";
+import { earningsPlugin } from "./builtin/earnings";
 
 export interface PluginCatalogEntry {
   plugin: GloomPlugin;
@@ -52,6 +56,10 @@ export const builtinPlugins: GloomPlugin[] = [
   econCalendarPlugin,
   worldIndicesPlugin,
   marketMoversPlugin,
+  fxMatrixPlugin,
+  yieldCurvePlugin,
+  sectorsPlugin,
+  earningsPlugin,
   debugPlugin,
 ];
 
