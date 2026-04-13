@@ -1724,6 +1724,80 @@ describe("CommandBar", () => {
     expect(frame).toContain("QQ");
   });
 
+  test("shows pane templates that share the same shortcut", async () => {
+    testSetup = await testRender(<CommandBarHarness
+      query="DUP"
+      configurePluginRegistry={(pluginRegistry) => {
+        const paneTemplates = pluginRegistry.paneTemplates as Map<string, any>;
+        paneTemplates.set("first-duplicate-pane", {
+          id: "first-duplicate-pane",
+          paneId: "first-duplicate",
+          label: "First Duplicate",
+          description: "First pane using a shared shortcut",
+          shortcut: { prefix: "DUP" },
+        });
+        paneTemplates.set("second-duplicate-pane", {
+          id: "second-duplicate-pane",
+          paneId: "second-duplicate",
+          label: "Second Duplicate",
+          description: "Second pane using a shared shortcut",
+          shortcut: { prefix: "DUP" },
+        });
+      }}
+    />, {
+      width: 100,
+      height: 18,
+    });
+
+    await testSetup.renderOnce();
+
+    const frame = testSetup.captureCharFrame();
+    expect(frame).toContain("First Duplicate");
+    expect(frame).toContain("Second Duplicate");
+  });
+
+  test("does not treat no-argument shortcut prefixes as typed pane names", async () => {
+    const created: Array<{ templateId: string; options?: Record<string, unknown> }> = [];
+
+    testSetup = await testRender(<CommandBarHarness
+      query="Top News"
+      configurePluginRegistry={(pluginRegistry) => {
+        pluginRegistry.createPaneFromTemplateAsyncFn = async (templateId, options) => {
+          created.push({ templateId, options });
+        };
+        const paneTemplates = pluginRegistry.paneTemplates as Map<string, any>;
+        paneTemplates.set("market-movers-pane", {
+          id: "market-movers-pane",
+          paneId: "market-movers",
+          label: "Market Movers",
+          description: "Track market gainers and losers",
+          shortcut: { prefix: "MOST" },
+        });
+        paneTemplates.set("news-top-pane", {
+          id: "news-top-pane",
+          paneId: "news-top",
+          label: "Top News",
+          description: "Curated top market stories ranked by importance",
+          shortcut: { prefix: "TOP" },
+        });
+      }}
+    />, {
+      width: 100,
+      height: 18,
+    });
+
+    await testSetup.renderOnce();
+    expect(testSetup.captureCharFrame()).toContain("Top News");
+
+    await act(async () => {
+      testSetup!.mockInput.pressEnter();
+      await Bun.sleep(0);
+      await testSetup!.renderOnce();
+    });
+
+    expect(created).toEqual([{ templateId: "news-top-pane", options: undefined }]);
+  });
+
   test("opens plugin command wizards inline inside the command bar", async () => {
     let submittedValues: Record<string, string> | undefined;
 

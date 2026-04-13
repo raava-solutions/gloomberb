@@ -12,6 +12,10 @@ export { Spinner } from "./spinner";
 export type { SpinnerProps } from "./spinner";
 export { TickerListTable } from "./ticker-list-table";
 export type { QuoteFlashDirection, TickerTableCell } from "./ticker-list-table";
+export { DataTableStackView } from "./data-table-stack-view";
+export type { DataTableStackViewProps } from "./data-table-stack-view";
+export { FeedDataTableStackView } from "./feed-data-table-stack-view";
+export type { FeedDataTableItem } from "./feed-data-table-stack-view";
 
 // Theme
 export { colors, priceColor, hoverBg } from "../theme/colors";

@@ -379,6 +379,8 @@ export interface AppNotificationRequest {
   duration?: number;
   type?: AppNotificationType;
   toast?: boolean;
+  /** If true, in-app toast stays visible until user dismisses it */
+  persistent?: boolean;
   desktop?: AppDesktopNotificationMode;
   persistent?: boolean;
   sound?: string;
@@ -386,6 +388,8 @@ export interface AppNotificationRequest {
     label: string;
     onClick: () => void;
   };
+  /** macOS sound name (e.g., "Glass", "Ping", "Hero"). Ignored on other platforms. */
+  sound?: string;
 }
 
 export interface GloomPluginContext {
@@ -398,6 +402,7 @@ export interface GloomPluginContext {
   registerDetailTab(tab: DetailTabDef): void;
   registerShortcut(shortcut: KeyboardShortcut): void;
   registerTickerAction(action: TickerAction): void;
+  registerNewsSource(source: import("./news-source").NewsSource): () => void;
 
   getData(ticker: string): TickerFinancials | null;
   getTicker(ticker: string): TickerRecord | null;
