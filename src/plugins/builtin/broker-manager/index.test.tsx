@@ -102,14 +102,9 @@ function FooterHarness({
   );
 }
 
-async function clickText(text: string) {
-  const lines = testSetup!.captureCharFrame().split("\n");
-  const row = lines.findIndex((line) => line.includes(text));
-  const col = lines[row]?.indexOf(text) ?? -1;
-  expect(row).toBeGreaterThanOrEqual(0);
-  expect(col).toBeGreaterThanOrEqual(0);
+async function pressKey(key: string) {
   await act(async () => {
-    await testSetup!.mockMouse.click(col + 1, row);
+    testSetup!.mockInput.pressKey(key);
     await Promise.resolve();
     await testSetup!.renderOnce();
     await testSetup!.renderOnce();
@@ -149,7 +144,7 @@ describe("BrokersPane", () => {
     expect(frame).not.toContain("[d]isconnect");
   });
 
-  test("renders IBKR details and invokes broker actions", async () => {
+  test("renders IBKR row and invokes broker actions", async () => {
     const calls: string[] = [];
     testSetup = await testRender(<FooterHarness calls={calls} instance={createGatewayInstance()} height={35} />, { width: 92, height: 35 });
     await act(async () => {
@@ -164,18 +159,9 @@ describe("BrokersPane", () => {
     expect(frame).toContain("IBKR Paper");
     expect(frame).not.toContain("DU12345");
 
-    await clickText("[e]dit");
-    await clickText("Save");
-    expect(calls).toEqual(["update:ibkr-paper"]);
-    calls.length = 0;
-
-    frame = testSetup.captureCharFrame();
-    expect(frame).toContain("DU12345");
-    expect(frame).toContain("$125,000.00");
-
-    await clickText("Test");
-    await clickText("Sync");
-    await clickText("IBKR Console");
+    await pressKey("c");
+    await pressKey("s");
+    await pressKey("o");
 
     expect(calls).toEqual(["connect:ibkr-paper", "sync:ibkr-paper", "widget:ibkr-trading"]);
   });

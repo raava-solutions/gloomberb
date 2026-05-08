@@ -8,10 +8,12 @@ import {
   PaneInstanceProvider,
 } from "../../../state/app-context";
 import { setSharedMarketDataCoordinator } from "../../../market-data/coordinator";
+import { createTestPluginRuntime } from "../../../test-support/plugin-runtime";
 import { cloneLayout, createDefaultConfig, type AppConfig } from "../../../types/config";
 import type { TickerFinancials } from "../../../types/financials";
 import type { TickerRecord } from "../../../types/ticker";
 import type { BrokerAccount } from "../../../types/trading";
+import { PluginRenderProvider } from "../../plugin-runtime";
 import { analyticsPlugin } from "./index";
 
 const TEST_PANE_ID = "analytics:test";
@@ -141,13 +143,15 @@ function AnalyticsHarness({
   return (
     <AppContext value={{ state, dispatch }}>
       <PaneInstanceProvider paneId={TEST_PANE_ID}>
-        <AnalyticsPane
-          paneId={TEST_PANE_ID}
-          paneType="analytics"
-          focused
-          width={100}
-          height={24}
-        />
+        <PluginRenderProvider pluginId={analyticsPlugin.id} runtime={createTestPluginRuntime()}>
+          <AnalyticsPane
+            paneId={TEST_PANE_ID}
+            paneType="analytics"
+            focused
+            width={100}
+            height={24}
+          />
+        </PluginRenderProvider>
       </PaneInstanceProvider>
     </AppContext>
   );
