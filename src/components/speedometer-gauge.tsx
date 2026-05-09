@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { createElement, useMemo, type SVGProps } from "react";
 import { Box, ChartSurface, Span, Text, TextAttributes, useNativeRenderer, useUiCapabilities, useUiHost } from "../ui";
 import { computeBitmapSize, type NativeChartBitmap } from "./chart/native/chart-rasterizer";
 import { colors } from "../theme/colors";
@@ -61,6 +61,10 @@ const DESKTOP_TICK_LABEL_POSITIONS = [
   { x: 350, y: 224 },
   { x: 442, y: 224 },
 ];
+
+function SvgText(props: SVGProps<SVGTextElement>) {
+  return createElement("text", props);
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -399,7 +403,7 @@ function DesktopGauge({
           const midpoint = (valueToDegrees(segment.from, min, max) + valueToDegrees(segment.to, min, max)) / 2;
           const point = fixedPoint ?? polarToCartesian(DESKTOP_CENTER_X, DESKTOP_CENTER_Y, DESKTOP_ARC_RADIUS + 36, midpoint);
           return (
-            <text
+            <SvgText
               key={`label:${segment.label}`}
               x={point.x}
               y={point.y}
@@ -411,7 +415,7 @@ function DesktopGauge({
               fontWeight="700"
             >
               {compactSegmentLabel(segment)}
-            </text>
+            </SvgText>
           );
         })}
         {[min, min + (max - min) * 0.25, min + (max - min) * 0.5, min + (max - min) * 0.75, max].map((tick, index) => {
@@ -423,9 +427,9 @@ function DesktopGauge({
           return (
             <g key={tick}>
               <line x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y} stroke={colors.textDim} strokeWidth="2" />
-              <text x={label.x} y={label.y} fill={colors.textDim} textAnchor="middle" fontFamily="inherit" fontSize="13">
+              <SvgText x={label.x} y={label.y} fill={colors.textDim} textAnchor="middle" fontFamily="inherit" fontSize="13">
                 {formatGaugeValue(tick)}
-              </text>
+              </SvgText>
             </g>
           );
         })}
@@ -439,9 +443,9 @@ function DesktopGauge({
           strokeLinecap="round"
         />
         <circle cx={DESKTOP_CENTER_X} cy={DESKTOP_CENTER_Y} r="27" fill={colors.bg} />
-        <text x={DESKTOP_CENTER_X} y={DESKTOP_CENTER_Y + 18} fill={colors.textBright} textAnchor="middle" fontFamily="inherit" fontSize="31" fontWeight="800">
+        <SvgText x={DESKTOP_CENTER_X} y={DESKTOP_CENTER_Y + 18} fill={colors.textBright} textAnchor="middle" fontFamily="inherit" fontSize="31" fontWeight="800">
           {formatGaugeValue(value)}
-        </text>
+        </SvgText>
       </svg>
     </Box>
   );
