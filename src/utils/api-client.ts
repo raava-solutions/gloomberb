@@ -954,10 +954,10 @@ class GloomApiClient {
     return normalizeChatMessages(messages);
   }
 
-  async sendMessage(channelId: string, content: string, replyToId?: string): Promise<ChatMessage> {
+  async sendMessage(channelId: string, content: string, replyToId?: string, clientMessageId?: string): Promise<ChatMessage> {
     const message = await this.request<ChatMessage>(`/chat/channels/${channelId}/messages`, {
       method: "POST",
-      body: JSON.stringify({ content, replyToId }),
+      body: JSON.stringify({ content, replyToId, clientMessageId }),
     });
     return normalizeChatMessage(message);
   }
@@ -966,7 +966,7 @@ class GloomApiClient {
     channelId: string,
     onMessage: (msg: ChatMessage) => void,
     onError?: (err: string) => void,
-  ): { send: (content: string, replyToId?: string) => Promise<ChatMessage>; close: () => void } {
+  ): { send: (content: string, replyToId?: string, clientMessageId?: string) => Promise<ChatMessage>; close: () => void } {
     if (!channelId) {
       return {
         send: async () => {
@@ -986,9 +986,9 @@ class GloomApiClient {
     }
 
     return {
-      send: async (content: string, replyToId?: string) => {
+      send: async (content: string, replyToId?: string, clientMessageId?: string) => {
         try {
-          const message = await this.sendMessage(channelId, content, replyToId);
+          const message = await this.sendMessage(channelId, content, replyToId, clientMessageId);
           onMessage(message);
           return message;
         } catch (error) {

@@ -757,6 +757,40 @@ describe("ChatController", () => {
     expect(snapshot.messages).toEqual([replyTarget, sentMessage]);
   });
 
+  test("sends one idempotency key while the same message is pending", () => {
+    const persistence = new MemoryPersistence();
+    const controller = new ChatController();
+    const clientMessageIds: Array<string | undefined> = [];
+
+    persistence.setState("session", {
+      sessionToken: "token-123",
+      user: { id: "u1", username: "vince", emailVerified: true },
+    }, { schemaVersion: 1 });
+
+    controller.attachPersistence(persistence);
+    apiClient.getMessages = async () => [];
+    apiClient.connectChannel = () => ({
+      send: (_content, _replyToId, clientMessageId) => {
+        clientMessageIds.push(clientMessageId);
+        return new Promise<ChatMessage>(() => {});
+      },
+      close: () => {},
+    });
+
+    const detachFirstView = controller.attachChannelView("everyone");
+    const detachSecondView = controller.attachChannelView("everyone");
+
+    controller.sendToChannel("everyone", " hello ");
+    controller.sendToChannel("everyone", "hello");
+
+    expect(clientMessageIds).toHaveLength(1);
+    expect(clientMessageIds[0]).toBeTruthy();
+    expect(controller.getSnapshot("everyone").messages).toHaveLength(1);
+
+    detachFirstView();
+    detachSecondView();
+  });
+
   test("marks a pending message as failed when sending errors", async () => {
     const persistence = new MemoryPersistence();
     const controller = new ChatController();

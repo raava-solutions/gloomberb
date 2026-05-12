@@ -39,6 +39,7 @@ interface PersistedSessionState {
 
 interface PersistedChannelState {
   draft: string;
+  draftClientMessageId?: string | null;
   replyToId: string | null;
   lastCursor: string | null;
   lastViewedMessageId?: string | null;
@@ -65,7 +66,7 @@ export interface ChatControllerSnapshot {
   unreadMentionCount: number;
 }
 
-type ChatConnection = { send: (content: string, replyToId?: string) => Promise<ChatMessage>; close: () => void };
+type ChatConnection = { send: (content: string, replyToId?: string, clientMessageId?: string) => Promise<ChatMessage>; close: () => void };
 type MergeMessagesOptions = { countUnread?: boolean };
 
 interface ChannelRuntimeState {
@@ -78,6 +79,7 @@ interface ChannelRuntimeState {
   messages: ChatMessage[];
   pendingMessages: ChatMessage[];
   draft: string;
+  draftClientMessageId: string | null;
   replyToId: string | null;
   lastCursor: string | null;
   lastViewedMessageId: string | null;
@@ -114,6 +116,7 @@ function createEmptyChannelState(): ChannelRuntimeState {
     messages: [],
     pendingMessages: [],
     draft: "",
+    draftClientMessageId: null,
     replyToId: null,
     lastCursor: null,
     lastViewedMessageId: null,
@@ -200,6 +203,11 @@ function resolveHydratedCursor(messages: ChatMessage[], persistedCursor: string 
   // Desktop web can persist channel state without persisting the matching transcript cache.
   // Backfill from the transcript we actually loaded when those two cursors diverge.
   return persistedCursor === transcriptCursor ? persistedCursor : transcriptCursor;
+}
+
+function createClientMessageId(): string {
+  const randomUUID = globalThis.crypto?.randomUUID?.();
+  return randomUUID ?? `local:${Date.now().toString(36)}:${Math.random().toString(36).slice(2)}`;
 }
 
 function compareMessages(a: ChatMessage, b: ChatMessage): number {
@@ -432,6 +440,9 @@ export class ChatController {
       schemaVersion: CHANNEL_SCHEMA_VERSION,
     });
     channel.draft = persistedChannel?.draft ?? "";
+    channel.draftClientMessageId = channel.draft.trim()
+      ? persistedChannel?.draftClientMessageId ?? createClientMessageId()
+      : null;
     channel.replyToId = persistedChannel?.replyToId ?? null;
     const persistedCursor = persistedChannel?.lastCursor ?? null;
     const persistedViewedMessageId = persistedChannel?.lastViewedMessageId ?? null;
@@ -588,7 +599,13 @@ export class ChatController {
     const normalizedChannelId = normalizeChannelId(channelId);
     const channel = this.ensureChannelState(normalizedChannelId);
     if (draft === channel.draft) return;
+    const previousDraft = channel.draft;
     channel.draft = draft;
+    if (!draft.trim()) {
+      channel.draftClientMessageId = null;
+    } else if (!previousDraft.trim() || !channel.draftClientMessageId) {
+      channel.draftClientMessageId = createClientMessageId();
+    }
     this.scheduleDraftSync(normalizedChannelId);
   }
 
@@ -658,6 +675,9 @@ export class ChatController {
     this.sessionChecked = false;
     for (const channel of this.channelStates.values()) {
       channel.pendingMessages = [];
+      channel.draftClientMessageId = channel.draft.trim()
+        ? createClientMessageId()
+        : null;
       channel.lastViewedMessageId = null;
       channel.unreadCount = 0;
       channel.notificationsEnabled = false;
@@ -686,6 +706,7 @@ export class ChatController {
       channel.messages = [];
       channel.pendingMessages = [];
       channel.draft = "";
+      channel.draftClientMessageId = null;
       channel.replyToId = null;
       channel.lastCursor = null;
       channel.lastViewedMessageId = null;
@@ -738,7 +759,10 @@ export class ChatController {
   sendToChannel(channelId: string, content: string, replyToId?: string): void {
     const normalizedChannelId = normalizeChannelId(channelId);
     const channel = this.ensureChannelState(normalizedChannelId);
+    const messageContent = content.trim();
+    if (!messageContent) return;
     if (!this.user?.emailVerified || !this.sessionToken) return;
+    if (this.hasPendingSend(channel, messageContent, replyToId)) return;
     if (!channel.wsConnection && this.user?.emailVerified && this.sessionToken) {
       this.ensureConnection(normalizedChannelId);
     }
@@ -748,14 +772,16 @@ export class ChatController {
       return;
     }
 
-    const pendingMessage = this.createPendingMessage(normalizedChannelId, content, replyToId);
+    const clientMessageId = channel.draftClientMessageId ?? createClientMessageId();
+    const pendingMessage = this.createPendingMessage(normalizedChannelId, messageContent, replyToId);
     channel.pendingMessages = [...channel.pendingMessages, pendingMessage];
     channel.draft = "";
+    channel.draftClientMessageId = null;
     channel.replyToId = null;
     this.persistChannelState(normalizedChannelId);
     this.emit(normalizedChannelId);
 
-    void connection.send(content, replyToId).then((message) => {
+    void connection.send(messageContent, replyToId, clientMessageId).then((message) => {
       channel.pendingMessages = channel.pendingMessages.filter((entry) => entry.id !== pendingMessage.id);
       this.mergeMessages(normalizedChannelId, [message]);
     }).catch((error) => {
@@ -768,6 +794,15 @@ export class ChatController {
       this.emit(normalizedChannelId);
       this.notifyFn({ body: errorMessage, type: "error" });
     });
+  }
+
+  private hasPendingSend(channel: ChannelRuntimeState, content: string, replyToId?: string): boolean {
+    const replyToKey = replyToId ?? null;
+    return channel.pendingMessages.some((message) => (
+      message.clientStatus === "sending"
+      && message.content === content
+      && message.replyToId === replyToKey
+    ));
   }
 
   ensureConnection(channelId = DEFAULT_CHAT_CHANNEL_ID): void {
@@ -1025,6 +1060,7 @@ export class ChatController {
     const channel = this.ensureChannelState(channelId);
     const value = {
       draft: channel.draft,
+      draftClientMessageId: channel.draftClientMessageId,
       replyToId: channel.replyToId,
       lastCursor: channel.lastCursor,
       lastViewedMessageId: channel.lastViewedMessageId,
