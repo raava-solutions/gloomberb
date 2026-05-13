@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Bump version, commit, tag, and push.
-# Called by release.sh after Claude decides the version.
+# Called by release.sh after Codex decides the version.
 
 usage() {
   cat <<'EOF'

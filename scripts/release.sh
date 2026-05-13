@@ -6,7 +6,7 @@ usage() {
 Usage: ./scripts/release.sh [version]
 
 Options:
-  version    Optional version to force Claude to use for the release, in X.Y.Z format
+  version    Optional version to force Codex to use for the release, in X.Y.Z format
   -h, --help Show this help text
 EOF
 }
@@ -66,4 +66,10 @@ Steps:
 EOF
 )
 
-echo "$PROMPT" | claude -p --allowedTools 'Bash(gh:*),Bash(git:*),Bash(./scripts/bump-version.sh:*)'
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+echo "$PROMPT" | codex exec \
+  --cd "$ROOT_DIR" \
+  --sandbox danger-full-access \
+  --ask-for-approval never \
+  -
