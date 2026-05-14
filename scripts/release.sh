@@ -43,6 +43,8 @@ build_release_notes() {
         /^release script$/ { next }
         /^Update release automation runner$/ { next }
         /^Make release script self-contained$/ { next }
+        /^Create clean release notes drafts$/ { next }
+        /^Fix clean release notes draft generation$/ { next }
         !seen[$0]++ { print "- " $0 }
       ' > "$changes_file"
 
@@ -134,7 +136,7 @@ fi
 
 ./scripts/bump-version.sh "$VERSION"
 
-NOTES_FILE="$(mktemp "${TMPDIR:-/tmp}/gloomberb-release-notes-$TAG.XXXXXX.md")"
+NOTES_FILE="$(mktemp "${TMPDIR:-/tmp}/gloomberb-release-notes-$TAG.XXXXXX")"
 build_release_notes "$NOTES_FILE" "$LATEST_RELEASE_TAG" "$TAG"
 
 create_args=(
