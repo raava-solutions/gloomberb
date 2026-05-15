@@ -14,7 +14,7 @@
   ],
   "scripts": {
     "dev": "bun run --watch src/index.tsx",
-    "start": "bun src/index.tsx",
+    "start": "NODE_ENV=production bun src/index.tsx",
     "build": "bun run scripts/build.ts",
     "build:all": "bun run scripts/build.ts --all",
     "desktop:view:build": "bun run scripts/build-electrobun-view.ts",

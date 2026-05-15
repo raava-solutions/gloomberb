@@ -1,3 +1,5 @@
 #!/usr/bin/env bun
 
-import "../src/index.tsx"
+process.env.NODE_ENV ??= "production";
+
+await import("../src/index.tsx");

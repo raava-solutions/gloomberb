@@ -85,7 +85,7 @@ async function build(os: string, arch: string) {
   await runProcess(
     ["bun", "build", "--compile", `--target=${target}`, "src/index.tsx", `--outfile=${outfile}`],
     `Failed to build ${target}`,
-    { env: { ...process.env, GLOOMBERB_API_URL: "https://api.gloom.sh" } },
+    { env: { ...process.env, GLOOMBERB_API_URL: "https://api.gloom.sh", NODE_ENV: "production" } },
   );
 
   if (os === "darwin") {

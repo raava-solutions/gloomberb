@@ -572,6 +572,42 @@ function ResponsiveTickerBadgeText({
   );
 }
 
+function hasInteractiveInlineContent(text: string, catalog: Record<string, InlineTickerCatalogEntry>): boolean {
+  return tokenizeInlineContent(text).some((token) => {
+    if (token.kind === "link") return true;
+    if (token.kind !== "ticker") return false;
+    const entry = catalog[token.symbol];
+    return !!entry && entry.status !== "missing";
+  });
+}
+
+function getTerminalVisibleMessageStartIndex({
+  messages,
+  width,
+  viewportRows,
+}: {
+  messages: ChatMessage[];
+  width: number;
+  viewportRows: number;
+}) {
+  if (messages.length === 0) return 0;
+
+  const rowBudget = Math.max(viewportRows + 24, viewportRows * 3);
+  let rows = 0;
+  let startIndex = Math.max(0, messages.length - 1);
+
+  for (; startIndex >= 0; startIndex -= 1) {
+    rows += estimateMessageHeight(messages[startIndex]!, width, isGroupedWithPrevious(messages, startIndex));
+    if (rows >= rowBudget) break;
+  }
+
+  while (startIndex > 0 && isGroupedWithPrevious(messages, startIndex)) {
+    startIndex -= 1;
+  }
+
+  return Math.max(0, startIndex);
+}
+
 interface ChatMessageBaseProps {
   msg: ChatMessage;
   index: number;
@@ -677,13 +713,17 @@ function TerminalChatMessage({
           position={state.grouped ? "relative" : undefined}
         >
           <Box width={messageBodyWidth} height={1}>
-            <TickerBadgeText
-              text={line}
-              lineWidth={messageBodyWidth}
-              catalog={catalog}
-              textColor={state.bodyColor}
-              openTicker={openTicker}
-            />
+            {hasInteractiveInlineContent(line, catalog) ? (
+              <TickerBadgeText
+                text={line}
+                lineWidth={messageBodyWidth}
+                catalog={catalog}
+                textColor={state.bodyColor}
+                openTicker={openTicker}
+              />
+            ) : (
+              <Text fg={state.bodyColor}>{line}</Text>
+            )}
           </Box>
           {lineIndex === 0 && showGroupedReplyAction && (
             <Box position="absolute" top={0} right={0} width={MESSAGE_ACTION_WIDTH} height={1}>
@@ -1623,6 +1663,21 @@ export function ChatContent({
   const footerSeparatorHeight = !nativePaneChrome && !canSend ? 1 : 0;
   const messageAreaHeight = Math.max(1, height - topSeparatorHeight - footerSeparatorHeight - inputAreaHeight);
   const composerWidth = nativePaneChrome ? chatWidth : contentWidth;
+  const terminalVisibleMessageStartIndex = useMemo(() => {
+    if (nativePaneChrome || !stickyTranscript || selectionActive || loadingOlderMessages) return 0;
+    return getTerminalVisibleMessageStartIndex({
+      messages,
+      width: contentWidth,
+      viewportRows: messageAreaHeight,
+    });
+  }, [contentWidth, loadingOlderMessages, messageAreaHeight, messages, nativePaneChrome, selectionActive, stickyTranscript]);
+  const renderedMessageEntries = useMemo(
+    () => messages.slice(terminalVisibleMessageStartIndex).map((message, offset) => ({
+      message,
+      index: terminalVisibleMessageStartIndex + offset,
+    })),
+    [messages, terminalVisibleMessageStartIndex],
+  );
 
   useEffect(() => {
     if (selectedIdx < messages.length) return;
@@ -1776,7 +1831,7 @@ export function ChatContent({
             <Text fg={colors.textDim}>No messages yet. Be the first to say something!</Text>
           </Box>
         )}
-        {messages.map((msg, index) => (
+        {renderedMessageEntries.map(({ message: msg, index }) => (
           nativePaneChrome ? (
             <DesktopChatMessage
               key={msg.id}
