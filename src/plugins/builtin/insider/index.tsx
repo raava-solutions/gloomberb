@@ -8,21 +8,21 @@ import {
   useSecFilingsQuery,
 } from "../../../market-data/hooks";
 import { instrumentFromTicker } from "../../../market-data/request-types";
-import { usePaneTicker } from "../../../state/app-context";
+import { usePaneTicker } from "../../../state/app/context";
 import { colors } from "../../../theme/colors";
 import { FeedDataTableStackView, Spinner, useExternalLinkFooter, type FeedDataTableItem } from "../../../components";
-import { usePluginPaneState } from "../../plugin-runtime";
+import { usePluginPaneState } from "../../runtime";
 import { isUsEquityTicker } from "../../../utils/sec";
 import { formatCompact, formatCurrency } from "../../../utils/format";
 import { parseForm4Xml, type InsiderTransaction } from "./insider-data";
-import { createTickerSurfacePaneTemplate } from "../ticker-surface";
+import { createTickerSurfacePaneTemplate } from "../shared/ticker-surface";
 import {
   buildInsiderTransactionDetailBody,
   buildInsiderTransactionTitle,
   formatFilingFormLabel,
   formatFilingShortDate,
   renderFilingNotice,
-} from "../sec-filing-display";
+} from "../sec/filing-display";
 
 const FORM4_LIMIT = 20;
 const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
@@ -293,7 +293,7 @@ export const insiderPlugin: GloomPlugin = {
   ],
 
   setup(ctx) {
-    ctx.registerDetailTab({
+    ctx.registerTickerResearchTab({
       id: "insider",
       name: "Insider",
       order: 47,

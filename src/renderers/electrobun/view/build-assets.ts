@@ -18,10 +18,11 @@ type PageOptions = {
 const ELECTROBUN_VIEW_DIR = join(process.cwd(), "src", "renderers", "electrobun", "view");
 const COMMON_ALIAS_RULES: AliasRule[] = [
   ["notes-files", "notes-files.ts"],
-  ["native/kitty-support", "native-stubs/chart-kitty-support.ts"],
-  ["./kitty-support", "components/chart/native/renderer-selection.ts", "native-stubs/chart-kitty-support.ts"],
-  ["native/surface-manager", "native-stubs/chart-surface-manager.ts"],
-  ["native/surface-sync", "native-stubs/chart-surface-sync.ts"],
+  ["./files", "plugins/builtin/notes/index.tsx", "notes-files.ts"],
+  ["native/kitty/support", "native-stubs/chart/kitty-support.ts"],
+  ["./kitty/support", "components/chart/native/renderer-selection.ts", "native-stubs/chart/kitty-support.ts"],
+  ["native/surface/manager", "native-stubs/chart/surface-manager.ts"],
+  ["native/surface/sync", "native-stubs/chart/surface-sync.ts"],
 ];
 
 export function electrobunViewPath(...parts: string[]): string {

@@ -1,10 +1,10 @@
 import type { BrokerConfigField } from "../../types/broker";
-import type { IbkrGatewayConfig, ResolvedIbkrGatewayConnection } from "./gateway-service";
+import type { IbkrGatewayConfig, ResolvedIbkrGatewayConnection } from "./gateway/service";
 
 export const IBKR_STATEMENT_URL = "https://gdcdyn.interactivebrokers.com/Universal/servlet/FlexStatementService.SendRequest";
 
-export type IbkrConnectionMode = "flex" | "gateway";
-export type IbkrGatewaySetupMode = "auto" | "manual";
+type IbkrConnectionMode = "flex" | "gateway";
+type IbkrGatewaySetupMode = "auto" | "manual";
 
 export interface FlexQueryConfig {
   token: string;

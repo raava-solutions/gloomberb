@@ -1,7 +1,7 @@
 import type { GloomPlugin } from "../../../types/plugin";
 import { detectProviders } from "./providers";
-import { AskAiDetailTab } from "./ask-ai-detail-tab";
-import { AiScreenerPane } from "./screener-pane";
+import { AskAiResearchTab } from "./ask-ai-detail-tab";
+import { AiScreenerPane } from "./screener/pane";
 import { buildAiScreenerPaneSettingsDef, getAiScreenerPaneSettings } from "./settings";
 
 export const aiPlugin: GloomPlugin = {
@@ -21,11 +21,11 @@ export const aiPlugin: GloomPlugin = {
       }));
     const defaultProviderId = providerOptions[0]?.value ?? "claude";
 
-    ctx.registerDetailTab({
+    ctx.registerTickerResearchTab({
       id: "ai-chat",
       name: "Ask AI",
       order: 60,
-      component: AskAiDetailTab,
+      component: AskAiResearchTab,
     });
 
     ctx.registerPane({

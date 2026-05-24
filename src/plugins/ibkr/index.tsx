@@ -1,19 +1,17 @@
 import type { GloomPlugin, GloomPluginContext } from "../../types/plugin";
 import { ibkrBroker } from "./broker-adapter";
 import { buildPersistedIbkrGatewayConfig } from "./config";
-import { ibkrGatewayManager, setResolvedIbkrGatewayListener } from "./gateway-service";
+import { ibkrGatewayManager, setResolvedIbkrGatewayListener } from "./gateway/service";
 import {
   getTradeTicketState,
   getTradingPaneState,
   prefillTradeFromTicker,
   removeBrokerInstanceFromTradingState,
-} from "./trading-state";
+} from "./trading/state";
 import { getConfiguredIbkrGatewayInstances } from "./instance-selection";
-import { hasIbkrTradingProfiles } from "./trade-utils";
-import { TradeTab } from "./trade-tab";
-import { TradingPane } from "./trading-pane";
-
-export { TradeTab } from "./trade-tab";
+import { hasIbkrTradingProfiles } from "./trade/utils";
+import { TradeTab } from "./trade/tab";
+import { TradingPane } from "./trading/pane";
 
 let lastSelectedTickerSymbol: string | null = null;
 
@@ -46,6 +44,8 @@ export const ibkrPlugin: GloomPlugin = {
   id: "ibkr",
   name: "Interactive Brokers",
   version: "1.0.0",
+  description: "Interactive Brokers market data, account sync, and trading.",
+  toggleable: true,
   broker: ibkrBroker,
   paneTemplates: [
     {
@@ -80,7 +80,7 @@ export const ibkrPlugin: GloomPlugin = {
       component: TradingPane,
     });
 
-    ctx.registerDetailTab({
+    ctx.registerTickerResearchTab({
       id: "ibkr-trade",
       name: "Trade",
       order: 25,
