@@ -178,11 +178,11 @@ jobs:
             --output "$TAP_DIR/Casks/gloomberb.rb"
 
           cd "$TAP_DIR"
-          if git diff --quiet; then
+          git add Casks/gloomberb.rb
+          if git diff --cached --quiet; then
             echo "Homebrew tap already up to date."
             exit 0
           fi
-          git add Casks/gloomberb.rb
           git commit -m "Update Gloomberb to $VERSION"
           git push
 
