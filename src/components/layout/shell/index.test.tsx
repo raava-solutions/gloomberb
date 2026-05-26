@@ -4,7 +4,7 @@ import { openTuiUiHost } from "../../../renderers/opentui/ui-host";
 import type { ReactNode } from "react";
 import { act, useReducer } from "react";
 import { AppContext, appReducer, createInitialState } from "../../../state/app/context";
-import { cloneLayout, createDefaultConfig, type LayoutConfig } from "../../../types/config";
+import { cloneLayout, createDefaultConfig, TICKER_RESEARCH_PANE_ID, type LayoutConfig } from "../../../types/config";
 import type { PluginRegistry } from "../../../plugins/registry";
 import type { PaneProps } from "../../../types/plugin";
 import { Header } from "../header";
@@ -36,8 +36,8 @@ function createShellPluginRegistry(options?: {
         component: options?.portfolioListComponent ?? (() => <text>Portfolio Body</text>),
         defaultPosition: "left",
       }],
-      ["ticker-detail", {
-        id: "ticker-detail",
+      [TICKER_RESEARCH_PANE_ID, {
+        id: TICKER_RESEARCH_PANE_ID,
         name: "Ticker Research",
         component: options?.tickerDetailComponent ?? (() => <text>Ticker Research Body</text>),
         defaultPosition: "right",
