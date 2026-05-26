@@ -9,11 +9,13 @@ import {
   createInitialState,
   type AppAction,
 } from "../../../state/app/context";
-import { cloneLayout, createDefaultConfig, type AppConfig } from "../../../types/config";
+import { cloneLayout, createDefaultConfig, TICKER_RESEARCH_PANE_ID, type AppConfig } from "../../../types/config";
 import { createTestPluginRuntime } from "../../../test-support/plugin-runtime";
 import type { TickerFinancials } from "../../../types/financials";
+import type { TickerResearchTabDef } from "../../../types/plugin";
 import type { TickerRecord } from "../../../types/ticker";
 import { getNativeSurfaceManager } from "../../../components/chart/native/surface/manager";
+import { setSharedRegistryForTests, type PluginRegistry } from "../../registry";
 import { PluginRenderProvider } from "../../runtime";
 import { tickerDetailPlugin } from ".";
 
@@ -80,13 +82,21 @@ function makeDetailConfig(symbol: string): AppConfig {
     dockRoot: { kind: "pane", instanceId: TEST_PANE_ID },
     instances: [{
       instanceId: TEST_PANE_ID,
-      paneId: "ticker-detail",
+      paneId: TICKER_RESEARCH_PANE_ID,
       binding: { kind: "fixed", symbol },
     }],
     floating: [],
   };
   config.layouts = [{ name: "Default", layout: cloneLayout(config.layout) }];
   return config;
+}
+
+function makeRegistry(): PluginRegistry {
+  const tickerResearchTabs = new Map<string, TickerResearchTabDef>();
+  tickerDetailPlugin.setup?.({
+    registerTickerResearchTab: (tab: TickerResearchTabDef) => tickerResearchTabs.set(tab.id, tab),
+  } as any);
+  return { tickerResearchTabs } as unknown as PluginRegistry;
 }
 
 function DetailHarness({
@@ -116,7 +126,7 @@ function DetailHarness({
           <PluginRenderProvider pluginId={tickerDetailPlugin.id} runtime={runtime}>
             <DetailPane
               paneId={TEST_PANE_ID}
-              paneType="ticker-detail"
+              paneType={TICKER_RESEARCH_PANE_ID}
               focused
               width={90}
               height={28}
@@ -157,6 +167,7 @@ afterEach(() => {
     testSetup.renderer.destroy();
     testSetup = undefined;
   }
+  setSharedRegistryForTests(undefined);
   actEnvironment.IS_REACT_ACT_ENVIRONMENT = false;
 });
 
@@ -164,6 +175,7 @@ describe("Ticker detail chart tab switching", () => {
   test("restores the overview kitty surface after visiting the full chart tab", async () => {
     const symbol = "AAPL";
     const config = makeDetailConfig(symbol);
+    setSharedRegistryForTests(makeRegistry());
 
     actEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
     testSetup = await createTestRenderer({ width: 120, height: 36 });
@@ -220,6 +232,7 @@ describe("Ticker detail chart tab switching", () => {
   test("hides the full chart kitty surface when switching to financials", async () => {
     const symbol = "AAPL";
     const config = makeDetailConfig(symbol);
+    setSharedRegistryForTests(makeRegistry());
 
     actEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
     testSetup = await createTestRenderer({ width: 120, height: 36 });
