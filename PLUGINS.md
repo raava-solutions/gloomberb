@@ -131,6 +131,10 @@ ctx.registerContextMenuProvider({
 
 Available context kinds are `pane`, `ticker`, `link`, `editable-text`, `selected-text`, `layout`, and `app`. Return `null` or an empty array when your plugin has nothing useful for a context. Keep actions renderer-neutral: call plugin context methods such as `ctx.openCommandBar()`, `ctx.selectTicker()`, `ctx.pinTicker()`, `ctx.focusPane()`, and `ctx.notify()` instead of using renderer-specific APIs.
 
+### Command-bar shortcut discovery
+
+Commands registered with `ctx.registerCommand({ shortcut, shortcutArg })` and pane templates registered with `shortcut` are picked up by the in-app Help pane automatically. Use those fields for user-facing command-bar prefixes instead of adding separate Help text. When a built-in command or pane shortcut is added or renamed, also update the README command tables so the public docs match the live registry.
+
 ### CLI commands
 
 Plugins can also declare root CLI commands directly on the plugin object:

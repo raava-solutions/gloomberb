@@ -200,6 +200,12 @@ export function HelpPane({ width, height }: PaneProps) {
                 description="Pop the focused pane out to a desktop window."
               />
             )}
+            {isDesktopWeb && (
+              <ShortcutRow
+                badges={[platformShortcut(["Shift", "C"])]}
+                description="Copy a screenshot of the focused pane."
+              />
+            )}
             <ShortcutRow
               badges={[platformShortcut(["Shift", "L"])]}
               description="Open layout actions."
