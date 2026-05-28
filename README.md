@@ -19,11 +19,11 @@ Available as a desktop app or TUI.
 
 ## Functions
 
-Open the command bar with `Ctrl+P` or `` ` ``, then type a shortcut or command name.
+Open the command bar with `Ctrl+P` or `` ` ``, then type a shortcut or command name. Use `HELP` for the live in-app shortcut list.
 
 | Shortcut | Function |
 |----------|----------|
-| `DES <ticker>` | Security details for a ticker |
+| `DES <ticker>` / `T <ticker>` | Security details for a ticker |
 | `FA <ticker>` | Financial statement view |
 | `GP <ticker>` | Price chart |
 | `GIP <ticker>` | Intraday price chart |
@@ -51,7 +51,11 @@ Open the command bar with `Ctrl+P` or `` ` ``, then type a shortcut or command n
 | `FXC` | Major FX cross rates |
 | `FNG` | Fear and greed market gauge |
 | `ALRT` | Price alerts |
-| `CHAT` | Gloom Cloud chat |
+| `CHAT [channel]` | Gloom Cloud chat |
+| `DM @user [@user...]` | Open or start a direct or group chat |
+| `ACM` | Gloom Cloud account settings |
+| `TBO` | TheBuildout infrastructure intelligence |
+| `CG` | Congress trading disclosures |
 | `PF` | Portfolio and watchlist workspace |
 | `N` | News feed |
 | `CN <ticker>` | Ticker news |
@@ -62,11 +66,31 @@ Open the command bar with `Ctrl+P` or `` ` ``, then type a shortcut or command n
 | `GC` | Yield curve |
 | `ERN` | Earnings calendar |
 | `HDS <ticker>` | Institutional holders |
+| `13F [fund/ticker/CIK]` | 13F fund filings and holdings |
 | `INS <ticker>` | Insider activity |
 | `EVT <ticker>` | Corporate actions, earnings, and estimates |
 | `RV <tickers>` | Relative valuation |
 | `IBKR` | IBKR trading pane |
 | `BR` | Broker connections |
+| `CHG` | Changelog |
+
+## Command Bar Utilities
+
+| Shortcut | Command |
+|----------|---------|
+| `HELP` | Open shortcut and layout help |
+| `AW` / `AP <ticker>` | Add a ticker to the active watchlist or portfolio |
+| `RW` / `RP <ticker>` | Remove a ticker from the active watchlist or portfolio |
+| `SA <symbol condition price>` | Create a price alert |
+| `PS` | Open focused pane settings |
+| `LAY <action>` | Open layout actions |
+| `WIN move|resize` | Move or resize the focused window |
+| `GL` | Gridlock all visible panes |
+| `SB` | Toggle the status bar |
+| `VF` | Toggle quote value flashing |
+| `TH <theme>` | Change color theme |
+| `CR` | Cycle chart renderer |
+| `PL <plugin>` | Manage plugins |
 
 ## Install
 
@@ -110,6 +134,9 @@ Running `gloomberb` with no arguments launches the terminal UI. Use `gloomberb h
 | `gloomberb help` | Show all CLI commands |
 | `gloomberb search <query>` | Search tickers and company names |
 | `gloomberb ticker <symbol>` | Show quote, ownership, and financials |
+| `gloomberb fn <function-or-pane> [argument]` | Run a pane-backed market function |
+| `gloomberb shot <function-or-pane> [argument]` | Render a desktop-style function screenshot |
+| `gloomberb catalog [query]` | List searchable pane-backed functions |
 | `gloomberb portfolio [action]` | Manage manual portfolios |
 | `gloomberb watchlist [action]` | Manage watchlists |
 | `gloomberb predictions [...]` | Launch Prediction Markets |
@@ -148,7 +175,7 @@ See [PLUGINS.md](PLUGINS.md) for the plugin API and the shared UI surface availa
 | `m` | Cycle chart mode |
 | `q` | Quit |
 
-Desktop builds also accept the matching `Cmd` shortcuts on macOS, plus `Cmd/Ctrl+Shift+O` to pop out a pane.
+Desktop builds also accept `Cmd/Ctrl+K` for the command bar, the matching `Cmd` shortcuts on macOS, `Cmd/Ctrl+Shift+O` to pop out a pane, and `Cmd/Ctrl+Shift+C` to copy a focused pane screenshot.
 
 ## License
 
