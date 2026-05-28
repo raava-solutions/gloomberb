@@ -134,9 +134,6 @@ Running `gloomberb` with no arguments launches the terminal UI. Use `gloomberb h
 | `gloomberb help` | Show all CLI commands |
 | `gloomberb search <query>` | Search tickers and company names |
 | `gloomberb ticker <symbol>` | Show quote, ownership, and financials |
-| `gloomberb fn <function-or-pane> [argument]` | Run a pane-backed market function |
-| `gloomberb shot <function-or-pane> [argument]` | Render a desktop-style function screenshot |
-| `gloomberb catalog [query]` | List searchable pane-backed functions |
 | `gloomberb portfolio [action]` | Manage manual portfolios |
 | `gloomberb watchlist [action]` | Manage watchlists |
 | `gloomberb predictions [...]` | Launch Prediction Markets |
