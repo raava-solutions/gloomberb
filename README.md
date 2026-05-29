@@ -123,7 +123,9 @@ Desktop builds also accept `Cmd/Ctrl+K` for the command bar, the matching `Cmd` 
 Use `HELP` inside Gloomberb for the live shortcut list. The common command-bar prefixes are listed here for quick scanning.
 
 <details>
-<summary>Show market and workflow shortcuts</summary>
+<summary>Show command-bar shortcuts by area</summary>
+
+### Company Research
 
 | Shortcut | Function |
 |----------|----------|
@@ -139,56 +141,58 @@ Use `HELP` inside Gloomberb for the live shortcut list. The common command-bar p
 | `EM [tickers]` | Earnings monitor |
 | `SRCH <query>` | Provider symbol search |
 | `QQ <tickers>` | Ticker quote monitor |
-| `PM <query>` | Polymarket and Kalshi prediction data |
-| `TOP` | Ranked market stories |
-| `MOST` | Top gainers, losers, most active, and trending tickers |
-| `WEI` | Global equity indices |
-| `ECON` | Economic events and releases |
 | `CMP <tickers>` | Ticker charts |
 | `CORR <tickers>` | Ticker return correlations |
 | `ANR <ticker>` | Analyst targets and ratings |
 | `SEC <ticker>` | SEC filings and company disclosures |
-| `TWIT <query>` | Ticker-related market posts |
 | `OMON <ticker>` | Options monitor |
-| `PORT` | Portfolio risk and sector exposure |
-| `BI` / `SP` | S&P 500 sector performance |
-| `FXC` | Major FX cross rates |
-| `FNG` | Fear and greed market gauge |
-| `ALRT` | Price alerts |
-| `CHAT [channel]` | Gloom Cloud chat |
-| `DM @user [@user...]` | Open or start a direct or group chat |
-| `ACM` | Gloom Cloud account settings |
-| `TBO` | TheBuildout infrastructure intelligence |
-| `CG` | Congress trading disclosures |
-| `PF` | Portfolio and watchlist workspace |
-| `N` | News feed |
-| `CN <ticker>` | Ticker news |
-| `NI` | Sector news |
-| `FIRST` | Breaking news |
-| `NOTE` | Notes |
-| `AI <prompt>` | AI screener |
-| `GC` | Yield curve |
-| `ERN` | Earnings calendar |
 | `HDS <ticker>` | Institutional holders |
 | `13F [fund/ticker/CIK]` | 13F fund filings and holdings |
 | `INS <ticker>` | Insider activity |
 | `EVT <ticker>` | Corporate actions, earnings, and estimates |
 | `RV <tickers>` | Relative valuation |
+
+### Markets, News, and Macro
+
+| Shortcut | Function |
+|----------|----------|
+| `TOP` | Ranked market stories |
+| `MOST` | Top gainers, losers, most active, and trending tickers |
+| `N` | News feed |
+| `CN <ticker>` | Ticker news |
+| `NI` | Sector news |
+| `FIRST` | Breaking news |
+| `TWIT <query>` | Ticker-related market posts |
+| `WEI` | Global equity indices |
+| `ECON` | Economic events and releases |
+| `GC` | Yield curve |
+| `ERN` | Earnings calendar |
+| `BI` / `SP` | S&P 500 sector performance |
+| `FXC` | Major FX cross rates |
+| `FNG` | Fear and greed market gauge |
+
+### Workspace and App Controls
+
+| Shortcut | Function |
+|----------|----------|
+| `PF` | Portfolio and watchlist workspace |
+| `PORT` | Portfolio risk and sector exposure |
+| `ALRT` | Price alerts |
+| `SA <symbol condition price>` | Create a price alert |
+| `PM <query>` | Polymarket and Kalshi prediction data |
+| `AI <prompt>` | AI screener |
+| `CHAT [channel]` | Gloom Cloud chat |
+| `DM @user [@user...]` | Open or start a direct or group chat |
+| `ACM` | Gloom Cloud account settings |
+| `TBO` | TheBuildout infrastructure intelligence |
+| `CG` | Congress trading disclosures |
+| `NOTE` | Notes |
 | `IBKR` | IBKR trading pane |
 | `BR` | Broker connections |
 | `CHG` | Changelog |
-
-</details>
-
-<details>
-<summary>Show command-bar utilities</summary>
-
-| Shortcut | Command |
-|----------|---------|
 | `HELP` | Open shortcut and layout help |
 | `AW` / `AP <ticker>` | Add a ticker to the active watchlist or portfolio |
 | `RW` / `RP <ticker>` | Remove a ticker from the active watchlist or portfolio |
-| `SA <symbol condition price>` | Create a price alert |
 | `PS` | Open focused pane settings |
 | `LAY <action>` | Open layout actions |
 | `WIN move|resize` | Move or resize the focused window |
