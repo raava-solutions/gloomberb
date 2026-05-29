@@ -122,9 +122,6 @@ Desktop builds also accept `Cmd/Ctrl+K` for the command bar, the matching `Cmd` 
 
 Use `HELP` inside Gloomberb for the live shortcut list. The common command-bar prefixes are listed here for quick scanning.
 
-<details>
-<summary>Show command-bar shortcuts by area</summary>
-
 ### Company Research
 
 | Shortcut | Function |
@@ -195,15 +192,13 @@ Use `HELP` inside Gloomberb for the live shortcut list. The common command-bar p
 | `RW` / `RP <ticker>` | Remove a ticker from the active watchlist or portfolio |
 | `PS` | Open focused pane settings |
 | `LAY <action>` | Open layout actions |
-| `WIN move|resize` | Move or resize the focused window |
+| `WIN move\|resize` | Move or resize the focused window |
 | `GL` | Gridlock all visible panes |
 | `SB` | Toggle the status bar |
 | `VF` | Toggle quote value flashing |
 | `TH <theme>` | Change color theme |
 | `CR` | Cycle chart renderer |
 | `PL <plugin>` | Manage plugins |
-
-</details>
 
 ## License
 
