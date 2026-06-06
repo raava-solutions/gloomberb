@@ -1,18 +1,29 @@
 import { describe, expect, test } from "bun:test";
 import { applyDesktopWindowControl } from "./window-controls";
 
-type WindowCall = "close" | "minimize" | "maximize" | "unmaximize";
+type WindowCall =
+  | { type: "close" }
+  | { type: "minimize" }
+  | { type: "maximize" }
+  | { type: "unmaximize" }
+  | { type: "setFrame"; frame: { x: number; y: number; width: number; height: number } };
 
-function createWindow(isMaximized = false) {
+function createWindow() {
   const calls: WindowCall[] = [];
+  const frame = { x: 120, y: 80, width: 640, height: 420 };
   return {
     calls,
     window: {
-      close: () => calls.push("close"),
-      minimize: () => calls.push("minimize"),
-      maximize: () => calls.push("maximize"),
-      unmaximize: () => calls.push("unmaximize"),
-      isMaximized: () => isMaximized,
+      frame,
+      close: () => calls.push({ type: "close" }),
+      minimize: () => calls.push({ type: "minimize" }),
+      maximize: () => calls.push({ type: "maximize" }),
+      unmaximize: () => calls.push({ type: "unmaximize" }),
+      getFrame: () => frame,
+      setFrame: (x: number, y: number, width: number, height: number) => calls.push({
+        type: "setFrame",
+        frame: { x, y, width, height },
+      }),
     },
   };
 }
@@ -24,17 +35,19 @@ describe("applyDesktopWindowControl", () => {
     applyDesktopWindowControl(target.window, "minimize");
     applyDesktopWindowControl(target.window, "close");
 
-    expect(target.calls).toEqual(["minimize", "close"]);
+    expect(target.calls).toEqual([{ type: "minimize" }, { type: "close" }]);
   });
 
-  test("toggles maximize based on the current window state", () => {
-    const restored = createWindow(false);
-    const maximized = createWindow(true);
+  test("toggles maximize from the custom control state", () => {
+    const target = createWindow();
 
-    applyDesktopWindowControl(restored.window, "toggle-maximize");
-    applyDesktopWindowControl(maximized.window, "toggle-maximize");
+    applyDesktopWindowControl(target.window, "toggle-maximize");
+    applyDesktopWindowControl(target.window, "toggle-maximize");
 
-    expect(restored.calls).toEqual(["maximize"]);
-    expect(maximized.calls).toEqual(["unmaximize"]);
+    expect(target.calls).toEqual([
+      { type: "maximize" },
+      { type: "unmaximize" },
+      { type: "setFrame", frame: { x: 120, y: 80, width: 640, height: 420 } },
+    ]);
   });
 });
