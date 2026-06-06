@@ -131,7 +131,6 @@ export function WebAsciiText({
         lineHeight: `${lineHeightPx}px`,
         whiteSpace: "pre",
         letterSpacing: 0,
-        transform: isWordmark ? "translateX(-50%)" : undefined,
         userSelect: selectable ? "text" : "none",
         ...(props.style as CSSProperties | undefined),
       }}
