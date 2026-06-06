@@ -27,6 +27,7 @@ import { applyWindowsWindowIcon } from "./windows-icons";
 import { desktopTitleBarStyle } from "./window-style";
 
 const INITIAL_DOCK_SUPPRESSION_MS = 800;
+const WINDOW_CONTROL_DOCK_SUPPRESSION_MS = 1_500;
 
 interface DesktopDetachedWindowManagerOptions<Rpc extends DesktopStateRpc> {
   createRpc: (key: string) => Rpc;
@@ -65,6 +66,13 @@ export class DesktopDetachedWindowManager<Rpc extends DesktopStateRpc> {
   getWindowForRpcKey(rpcKey: string | undefined): BrowserWindow | null {
     const paneId = paneIdFromDetachedRpcKey(rpcKey);
     return paneId ? this.windows.get(paneId) ?? null : null;
+  }
+
+  suppressAutoDockForRpcKey(rpcKey: string | undefined): void {
+    const paneId = paneIdFromDetachedRpcKey(rpcKey);
+    if (!paneId || !this.windows.has(paneId)) return;
+    this.suppressDockUntil.set(paneId, Date.now() + WINDOW_CONTROL_DOCK_SUPPRESSION_MS);
+    this.options.stateBroadcaster.clearDockPreview(paneId);
   }
 
   resolveFrame(instanceId: string): WindowFrame {
