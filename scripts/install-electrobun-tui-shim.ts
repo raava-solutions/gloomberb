@@ -174,9 +174,9 @@ function assertWindowsIconFile(path: string): void {
 }
 
 function createWindowsIcon(resourcesPath: string): string {
-  const sourceIcoPath = join(process.cwd(), "src", "assets", "gloomberb-logo.ico");
+  const sourceIcoPath = join(process.cwd(), "src", "assets", "gloomberb-logo-windows.ico");
   const pngToIcoCli = join(process.cwd(), "node_modules", "png-to-ico", "bin", "cli.js");
-  const sourcePngPath = join(process.cwd(), "src", "assets", "gloomberb-logo.png");
+  const sourcePngPath = join(process.cwd(), "src", "assets", "gloomberb-logo-windows.png");
   const iconPath = join(resourcesPath, "gloomberb-logo.ico");
   const appIconPath = join(resourcesPath, "app.ico");
   if (existsSync(sourceIcoPath)) {

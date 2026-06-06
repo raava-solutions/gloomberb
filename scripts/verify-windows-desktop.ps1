@@ -372,6 +372,29 @@ function Assert-GloomberbIconImage {
   }
 }
 
+function Assert-IconHasTransparentCorners {
+  param(
+    [string]$Path,
+    [string]$Label
+  )
+
+  $Bitmap = [System.Drawing.Bitmap]::FromFile($Path)
+  try {
+    $CornerPixels = @(
+      $Bitmap.GetPixel(0, 0),
+      $Bitmap.GetPixel($Bitmap.Width - 1, 0),
+      $Bitmap.GetPixel(0, $Bitmap.Height - 1),
+      $Bitmap.GetPixel($Bitmap.Width - 1, $Bitmap.Height - 1)
+    )
+    $TransparentCorners = @($CornerPixels | Where-Object { $_.A -lt 16 }).Count
+    if ($TransparentCorners -lt 3) {
+      throw "$Label is still a square icon; expected transparent rounded corners."
+    }
+  } finally {
+    $Bitmap.Dispose()
+  }
+}
+
 function Export-AssociatedIcon {
   param(
     [string]$ExecutablePath,
@@ -397,6 +420,7 @@ function Export-AssociatedIcon {
 
   Assert-ScreenshotHasContent $OutputPath "$Label associated icon"
   Assert-GloomberbIconImage $OutputPath "$Label associated icon"
+  Assert-IconHasTransparentCorners $OutputPath "$Label associated icon"
 }
 
 function Get-WindowIconHandle {
@@ -456,6 +480,7 @@ function Export-WindowIcon {
 
   Assert-ScreenshotHasContent $OutputPath "$Label window icon"
   Assert-GloomberbIconImage $OutputPath "$Label window icon"
+  Assert-IconHasTransparentCorners $OutputPath "$Label window icon"
 }
 
 function Resolve-HomeDir {

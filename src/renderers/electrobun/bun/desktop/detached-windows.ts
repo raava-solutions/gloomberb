@@ -23,6 +23,7 @@ import {
 } from "./window-events";
 import type { DesktopStateBroadcaster, DesktopStateRpc } from "./state-broadcaster";
 import { applyWindowsWindowIcon } from "./windows-icons";
+import { desktopTitleBarStyle } from "./window-style";
 
 interface DesktopDetachedWindowManagerOptions<Rpc extends DesktopStateRpc> {
   createRpc: (key: string) => Rpc;
@@ -168,7 +169,7 @@ export class DesktopDetachedWindowManager<Rpc extends DesktopStateRpc> {
       url: "views://mainview/index.html",
       renderer: "native",
       rpc: rpc as never,
-      titleBarStyle: "hiddenInset",
+      titleBarStyle: desktopTitleBarStyle(),
       navigationRules: JSON.stringify(["views://*"]),
       sandbox: false,
     });

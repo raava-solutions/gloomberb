@@ -48,6 +48,7 @@ import { handleDesktopWorkspaceRequest } from "./desktop/workspace/requests";
 import { handleDesktopBackendRequest } from "./desktop/backend-requests";
 import { initializeDesktopBackend } from "./desktop/initialization";
 import { applyWindowsWindowIcon } from "./desktop/windows-icons";
+import { desktopTitleBarStyle } from "./desktop/window-style";
 
 type DesktopRpc = ReturnType<typeof BrowserView.defineRPC<ElectrobunDesktopRpcSchema>>;
 
@@ -440,7 +441,7 @@ mainWindow = new BrowserWindow({
   url: "views://mainview/index.html",
   renderer: "native",
   rpc: mainRpc,
-  titleBarStyle: "hiddenInset",
+  titleBarStyle: desktopTitleBarStyle(),
   navigationRules: JSON.stringify(["views://*"]),
   sandbox: false,
 });
