@@ -219,15 +219,20 @@ function Assert-CustomWindowControls {
     [string]$Label
   )
 
+  $Window = Resolve-VisibleWindowByTitle -Title $Window.MainWindowTitle -Label $Label
   $Handle = Get-WindowHandle $Window
   $OriginalBounds = Get-WindowBounds $Window
 
   Click-WindowControl -Window $Window -Action "maximize"
+  $Window = Resolve-VisibleWindowByTitle -Title $Window.MainWindowTitle -Label $Label
+  $Handle = Get-WindowHandle $Window
   if (-not [GloomberbWin32]::IsZoomed($Handle)) {
     throw "$Label custom maximize control did not maximize the window."
   }
 
   Click-WindowControl -Window $Window -Action "maximize"
+  $Window = Resolve-VisibleWindowByTitle -Title $Window.MainWindowTitle -Label $Label
+  $Handle = Get-WindowHandle $Window
   if ([GloomberbWin32]::IsZoomed($Handle)) {
     throw "$Label custom maximize control did not restore the window."
   }
@@ -237,12 +242,16 @@ function Assert-CustomWindowControls {
   }
 
   Click-WindowControl -Window $Window -Action "minimize"
+  $Window = Resolve-VisibleWindowByTitle -Title $Window.MainWindowTitle -Label $Label
+  $Handle = Get-WindowHandle $Window
   if (-not [GloomberbWin32]::IsIconic($Handle)) {
     throw "$Label custom minimize control did not minimize the window."
   }
   [GloomberbWin32]::ShowWindow($Handle, 9) | Out-Null
   [GloomberbWin32]::SetForegroundWindow($Handle) | Out-Null
   Start-Sleep -Milliseconds 700
+  $Window = Resolve-VisibleWindowByTitle -Title $Window.MainWindowTitle -Label $Label
+  $Handle = Get-WindowHandle $Window
   if ([GloomberbWin32]::IsIconic($Handle)) {
     throw "$Label custom minimize control did not restore through ShowWindow."
   }
@@ -307,9 +316,45 @@ function Capture-WindowScreenshot {
 function Get-VisibleWindowByTitle {
   param([string]$Title)
 
-  Get-VisibleWindows |
-    Where-Object { $_.MainWindowTitle -eq $Title } |
-    Select-Object -First 1
+  $Candidates = @(
+    Get-VisibleWindows |
+      Where-Object { $_.MainWindowTitle -eq $Title } |
+      ForEach-Object {
+        try {
+          $Bounds = Get-WindowBounds $_
+          [pscustomobject]@{
+            Window = $_
+            Area = $Bounds.Width * $Bounds.Height
+          }
+        } catch {
+          $null
+        }
+      } |
+      Where-Object { $_ -ne $null }
+  )
+
+  $Candidates |
+    Sort-Object Area -Descending |
+    Select-Object -First 1 -ExpandProperty Window
+}
+
+function Resolve-VisibleWindowByTitle {
+  param(
+    [string]$Title,
+    [string]$Label,
+    [int]$TimeoutSeconds = 10
+  )
+
+  $Deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+  do {
+    $Window = Get-VisibleWindowByTitle $Title
+    if ($Window) {
+      return $Window
+    }
+    Start-Sleep -Milliseconds 500
+  } while ((Get-Date) -lt $Deadline)
+
+  throw "$Label window could not be reacquired by title: $Title"
 }
 
 function Capture-WindowScreenshotByTitle {
