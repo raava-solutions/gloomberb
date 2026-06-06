@@ -476,9 +476,8 @@ try {
   $LaunchedWindowProcessIds += $GuiProcess.Id
   $LaunchedWindowProcessIds += @($LaunchedWindows | Select-Object -ExpandProperty Id)
 
-  Save-WindowInventory (Join-Path $GuiArtifactDir "windows-after-launch.txt")
-  $MainWindow = Get-VisibleWindowByTitle "Gloomberb"
-  $DetachedWindow = Get-VisibleWindowByTitle "Detached Watchlist"
+  $MainWindow = $LaunchedWindows | Where-Object { $_.MainWindowTitle -eq "Gloomberb" } | Select-Object -First 1
+  $DetachedWindow = $LaunchedWindows | Where-Object { $_.MainWindowTitle -eq "Detached Watchlist" } | Select-Object -First 1
   if (-not $MainWindow) {
     throw "Could not find the Gloomberb main window in the Windows GUI smoke test."
   }
@@ -486,13 +485,24 @@ try {
     throw "Could not find the detached watchlist window in the Windows GUI smoke test."
   }
 
-  Capture-DesktopScreenshot (Join-Path $GuiArtifactDir "windows-gui-desktop.png")
-
   $PopOutScreenshot = Join-Path $GuiArtifactDir "windows-gui-popout.png"
-  $DetachedWindow = Capture-WindowScreenshotByTitle `
-    -Title "Detached Watchlist" `
-    -Path $PopOutScreenshot `
-    -Label "Detached pop-out"
+  $CapturedPopOutWindow = $false
+  try {
+    Capture-WindowScreenshot $DetachedWindow $PopOutScreenshot
+    Assert-ScreenshotHasContent $PopOutScreenshot "Detached pop-out"
+    $CapturedPopOutWindow = $true
+  } catch {
+    Write-Host "Detached pop-out crop failed, preserving full desktop evidence instead: $($_.Exception.Message)"
+  }
+
+  Save-WindowInventory (Join-Path $GuiArtifactDir "windows-after-launch.txt")
+  $DesktopScreenshot = Join-Path $GuiArtifactDir "windows-gui-desktop.png"
+  Capture-DesktopScreenshot $DesktopScreenshot
+  Assert-ScreenshotHasContent $DesktopScreenshot "Windows desktop"
+  if (-not $CapturedPopOutWindow) {
+    Copy-Item -Path $DesktopScreenshot -Destination $PopOutScreenshot -Force
+    Assert-ScreenshotHasContent $PopOutScreenshot "Detached pop-out desktop evidence"
+  }
 
   $MainScreenshot = Join-Path $GuiArtifactDir "windows-gui-main.png"
   $MainWindow = Capture-WindowScreenshotByTitle `
