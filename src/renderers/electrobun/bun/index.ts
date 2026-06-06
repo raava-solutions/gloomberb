@@ -25,8 +25,8 @@ import {
 } from "./desktop/update";
 import { DesktopCapabilityBridge } from "./desktop/capability-bridge";
 import {
-  DEFAULT_WINDOW_FRAME,
   MAIN_WINDOW_MIN_SIZE,
+  defaultMainWindowFrame,
   normalizeWindowFrameWithMinimum,
 } from "./window/frame";
 import { MAIN_WINDOW_RPC_KEY } from "./window/focus";
@@ -434,10 +434,15 @@ ApplicationMenu.on("application-menu-clicked", (event: unknown) => {
 installApplicationMenu();
 
 const mainRpc = createWindowRpc(MAIN_WINDOW_RPC_KEY);
+const initialMainWindowFrame = normalizeWindowFrameWithMinimum(
+  defaultMainWindowFrame(),
+  defaultMainWindowFrame(),
+  MAIN_WINDOW_MIN_SIZE,
+);
 
 mainWindow = new BrowserWindow({
   title: "Gloomberb",
-  frame: normalizeWindowFrameWithMinimum(DEFAULT_WINDOW_FRAME, DEFAULT_WINDOW_FRAME, MAIN_WINDOW_MIN_SIZE),
+  frame: initialMainWindowFrame,
   url: "views://mainview/index.html",
   renderer: "native",
   rpc: mainRpc,
@@ -446,7 +451,7 @@ mainWindow = new BrowserWindow({
   sandbox: false,
 });
 applyWindowsWindowIcon("Gloomberb");
-updateWindowFrameCache(mainWindow, DEFAULT_WINDOW_FRAME, MAIN_WINDOW_MIN_SIZE);
+updateWindowFrameCache(mainWindow, initialMainWindowFrame, MAIN_WINDOW_MIN_SIZE);
 detachedWindowManager.focusWindowForRpcKey(MAIN_WINDOW_RPC_KEY);
 (mainWindow as any).on?.("move", (event: WindowMoveEvent) => {
   applyWindowMoveEvent(mainWindow, event);

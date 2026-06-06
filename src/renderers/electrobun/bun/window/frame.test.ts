@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
   DEFAULT_WINDOW_FRAME,
+  DEFAULT_WINDOWS_WINDOW_FRAME,
   MAIN_WINDOW_MIN_SIZE,
   constrainWindowFrame,
+  defaultMainWindowFrame,
   normalizeWindowFrameWithMinimum,
 } from "./frame";
 
@@ -36,5 +38,10 @@ describe("electrobun window frames", () => {
 
   test("uses the default frame when no frame data is available", () => {
     expect(normalizeWindowFrameWithMinimum(null)).toEqual(DEFAULT_WINDOW_FRAME);
+  });
+
+  test("uses a compact default main window frame on Windows", () => {
+    expect(defaultMainWindowFrame("win32")).toEqual(DEFAULT_WINDOWS_WINDOW_FRAME);
+    expect(defaultMainWindowFrame("darwin")).toEqual(DEFAULT_WINDOW_FRAME);
   });
 });
