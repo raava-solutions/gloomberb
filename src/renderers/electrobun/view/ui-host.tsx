@@ -27,11 +27,21 @@ import { cleanDomProps, commonStyle } from "./host/style";
 import { WebAsciiText, WebSpan, WebStrong, WebText, WebUnderline } from "./host/text";
 import { WebTabs } from "./host/tabs";
 
+function currentDesktopPlatform(): string {
+  const navigatorWithUserAgentData = navigator as Navigator & {
+    userAgentData?: { platform?: string };
+  };
+  return navigatorWithUserAgentData.userAgentData?.platform ?? navigator.platform ?? "";
+}
+
+const DESKTOP_PLATFORM = currentDesktopPlatform();
+const USES_TITLEBAR_OVERLAY = !/win/i.test(DESKTOP_PLATFORM);
+
 export const webUiHost: UiHost = {
   kind: "desktop-web",
   capabilities: {
     nativePaneChrome: true,
-    titleBarOverlay: true,
+    titleBarOverlay: USES_TITLEBAR_OVERLAY,
     precisePointer: true,
     fractionalViewport: true,
     cellWidthPx: WEB_CELL_WIDTH,
