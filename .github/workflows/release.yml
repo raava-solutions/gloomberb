@@ -144,7 +144,7 @@ jobs:
       - run: bun install
 
       - name: Build Windows desktop package
-        run: bunx electrobun build --env=stable --targets=win-x64
+        run: bun run desktop:release:windows
 
       - name: Install Inno Setup
         run: choco install innosetup -y --no-progress
@@ -158,6 +158,7 @@ jobs:
         run: ./scripts/verify-windows-desktop.ps1
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: gloomberb-desktop-windows-x64
           path: artifacts/*
@@ -179,7 +180,13 @@ jobs:
       - name: Upload assets to GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*
+          files: |
+            dist/*.dmg
+            dist/*.exe
+            dist/*.gz
+            dist/*.json
+            dist/*.zip
+            dist/*.zst
 
       - uses: oven-sh/setup-bun@v2
         with:
