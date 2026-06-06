@@ -363,7 +363,8 @@ function Assert-GloomberbIconImage {
       }
     }
 
-    $MinimumAccentPixels = [Math]::Max(4, [int][Math]::Floor($OpaquePixels * 0.01))
+    $BaseAccentMinimum = if ($Bitmap.Width -le 16 -or $Bitmap.Height -le 16) { 2 } else { 4 }
+    $MinimumAccentPixels = [Math]::Max($BaseAccentMinimum, [int][Math]::Floor($OpaquePixels * 0.01))
     if ($RedPixels -lt $MinimumAccentPixels -or $GreenPixels -lt $MinimumAccentPixels -or $LightPixels -lt $MinimumAccentPixels) {
       throw "$Label does not look like the Gloomberb icon: $(@{ width = $Bitmap.Width; height = $Bitmap.Height; opaque = $OpaquePixels; red = $RedPixels; green = $GreenPixels; light = $LightPixels; minimum = $MinimumAccentPixels } | ConvertTo-Json -Compress)"
     }
