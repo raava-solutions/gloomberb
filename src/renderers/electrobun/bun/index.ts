@@ -281,6 +281,9 @@ function controlWindowForRpcKey(windowKey: string | undefined, action: DesktopWi
     ? mainWindow
     : detachedWindowManager.getWindowForRpcKey(windowKey);
   if (!targetWindow) return false;
+  if (action !== "close") {
+    detachedWindowManager.suppressAutoDockForRpcKey(windowKey);
+  }
   applyDesktopWindowControl(targetWindow, action);
   return true;
 }
