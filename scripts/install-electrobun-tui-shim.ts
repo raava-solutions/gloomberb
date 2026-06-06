@@ -166,6 +166,46 @@ function normalizeWindowsExecutableNames(runtimePath: string): void {
   }
 }
 
+function createWindowsIcon(resourcesPath: string): string {
+  const pngToIcoCli = join(process.cwd(), "node_modules", "png-to-ico", "bin", "cli.js");
+  const sourcePngPath = join(process.cwd(), "src", "assets", "gloomberb-logo.png");
+  const iconPath = join(resourcesPath, "gloomberb-logo.ico");
+  const converted = Bun.spawnSync({
+    cmd: [process.execPath, pngToIcoCli, sourcePngPath],
+    stdout: "pipe",
+    stderr: "inherit",
+  });
+  if (converted.exitCode !== 0) {
+    process.exit(converted.exitCode ?? 1);
+  }
+  writeFileSync(iconPath, converted.stdout);
+  return iconPath;
+}
+
+function rceditExecutablePath(): string {
+  const rceditBinDir = join(process.cwd(), "node_modules", "rcedit", "bin");
+  const rceditX64Path = join(rceditBinDir, "rcedit-x64.exe");
+  return existsSync(rceditX64Path) ? rceditX64Path : join(rceditBinDir, "rcedit.exe");
+}
+
+function embedWindowsIcons(runtimePath: string, resourcesPath: string): void {
+  const iconPath = createWindowsIcon(resourcesPath);
+  const rceditPath = rceditExecutablePath();
+  for (const exeName of ["launcher.exe", "bun.exe"]) {
+    const exePath = join(runtimePath, exeName);
+    if (!existsSync(exePath)) continue;
+    const edited = Bun.spawnSync({
+      cmd: [rceditPath, exePath, "--set-icon", iconPath],
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+    if (edited.exitCode !== 0) {
+      process.exit(edited.exitCode ?? 1);
+    }
+    console.log(`Embedded Windows icon: ${exePath}`);
+  }
+}
+
 const os = targetOs();
 const arch = targetArch();
 const nativeCorePackageName = `core-${nodePlatformForTarget(os)}-${arch}`;
@@ -209,6 +249,7 @@ for (const bundlePath of bundleCandidates(os)) {
 
   if (os === "win") {
     normalizeWindowsExecutableNames(runtimePath);
+    embedWindowsIcons(runtimePath, resourcesPath);
   }
 
   installShim(runtimePath, resourcesPath, os);

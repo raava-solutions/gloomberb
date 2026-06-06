@@ -12,7 +12,7 @@ import { PaneBodyFrame, getPaneWindowAttributes } from "./pane/frame";
 import { PaneContent } from "./pane/content";
 import { resolvePaneBodyFrame } from "./pane/sizing";
 import { getPaneDisplayTitle } from "./pane/title";
-import { TITLEBAR_OVERLAY_HEIGHT_PX, TITLEBAR_TRAFFIC_LIGHT_WIDTH } from "./titlebar-overlay";
+import { TITLEBAR_OVERLAY_HEIGHT_PX, getTitlebarLeadingInset } from "./titlebar-overlay";
 import {
   createDoubleEscapeCloseState,
   recordDoubleEscapeClose,
@@ -42,6 +42,7 @@ export function DetachedPaneShell({ pluginRegistry, desktopWindowBridge }: Detac
   ));
   const { width, height } = useViewport();
   const { cellHeightPx = 18, nativePaneChrome, titleBarOverlay } = useUiCapabilities();
+  const titlebarLeadingInset = titleBarOverlay ? getTitlebarLeadingInset() : 0;
   const instance = useAppSelector((state) => findPaneInstance(state.config.layout, desktopWindowBridge.paneId) ?? null);
   const paneDef = instance ? pluginRegistry.panes.get(instance.paneId) ?? null : null;
   const hasPaneSettings = !!instance && pluginRegistry.hasPaneSettings(instance.instanceId);
@@ -171,7 +172,7 @@ export function DetachedPaneShell({ pluginRegistry, desktopWindowBridge }: Detac
                 alignItems="center"
                 flexGrow={1}
                 minWidth={0}
-                paddingLeft={titleBarOverlay ? TITLEBAR_TRAFFIC_LIGHT_WIDTH : 1}
+                paddingLeft={titleBarOverlay ? titlebarLeadingInset : 1}
                 paddingRight={1}
               >
                 <Box flexGrow={1} minWidth={0} overflow="hidden">

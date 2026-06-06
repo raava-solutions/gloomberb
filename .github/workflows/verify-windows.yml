@@ -46,7 +46,7 @@ jobs:
       - run: bun install
 
       - name: Build Windows desktop package
-        run: bunx electrobun build --env=stable --targets=win-x64
+        run: bun run desktop:release:windows
 
       - name: Install Inno Setup
         run: choco install innosetup -y --no-progress
@@ -60,6 +60,7 @@ jobs:
         run: ./scripts/verify-windows-desktop.ps1
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: gloomberb-windows-verification-artifacts
           path: artifacts/*

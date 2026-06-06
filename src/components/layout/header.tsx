@@ -17,7 +17,7 @@ import { formatPercentRaw } from "../../utils/format";
 import { formatMarketPrice } from "../../market-data/market/format";
 import { marketStateLabel, marketStateColor, getActiveQuoteDisplay } from "../../market-data/market/status";
 import { VERSION } from "../../version";
-import { TITLEBAR_TRAFFIC_LIGHT_WIDTH } from "./titlebar-overlay";
+import { getTitlebarLeadingInset } from "./titlebar-overlay";
 
 const SPY_REFRESH_MS = 5 * 60_000; // 5 min
 const UPDATE_NOTICE_DURATION_MS = 5_000;
@@ -126,6 +126,7 @@ export function Header() {
   const baseCurrency = useAppSelector(selectBaseCurrency);
   const appActive = useAppActive();
   const { titleBarOverlay } = useUiCapabilities();
+  const titlebarLeadingInset = titleBarOverlay ? getTitlebarLeadingInset() : 0;
   const spyQuoteEntry = useQuoteEntry("SPY", null);
   const spyQuote = useResolvedEntryValue(spyQuoteEntry);
 
@@ -168,7 +169,7 @@ export function Header() {
           paddingRight: 12,
         }}
       >
-        <Box paddingLeft={TITLEBAR_TRAFFIC_LIGHT_WIDTH} flexDirection="row" alignItems="center" gap={1}>
+        <Box paddingLeft={titlebarLeadingInset} flexDirection="row" alignItems="center" gap={1}>
           <Text attributes={TextAttributes.BOLD} fg={colors.headerText}>
             Gloomberb
           </Text>
@@ -209,7 +210,7 @@ export function Header() {
       data-titlebar-overlay={titleBarOverlay ? "true" : undefined}
       className={titleBarOverlay ? "electrobun-webkit-app-region-drag" : undefined}
     >
-      <Box paddingLeft={titleBarOverlay ? TITLEBAR_TRAFFIC_LIGHT_WIDTH : 1}>
+      <Box paddingLeft={titleBarOverlay ? titlebarLeadingInset : 1}>
         <Text attributes={TextAttributes.BOLD} fg={colors.headerText}>
           Gloomberb v{VERSION}
         </Text>
