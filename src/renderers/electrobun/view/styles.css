@@ -66,6 +66,10 @@ button, [data-gloom-interactive="true"] { cursor: pointer; }
   color: color-mix(in srgb, var(--gloom-header-text, #f2f2f2) 86%, transparent);
   transition: background-color 90ms linear, color 90ms linear;
 }
+[data-gloom-role="window-control"] svg {
+  display: block;
+  pointer-events: none;
+}
 [data-gloom-role="window-control"]:hover {
   background: color-mix(in srgb, var(--gloom-header-text, #f2f2f2) 13%, transparent);
   color: var(--gloom-header-text, #f2f2f2);
