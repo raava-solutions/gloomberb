@@ -681,24 +681,7 @@ try {
     -OutputPath (Join-Path $GuiArtifactDir "windows-window-icon-popout.png") `
     -Label "Detached pop-out"
 
-  $PopOutScreenshot = Join-Path $GuiArtifactDir "windows-gui-popout.png"
-  $CapturedPopOutWindow = $false
-  try {
-    Capture-WindowScreenshot $DetachedWindow $PopOutScreenshot
-    Assert-ScreenshotHasContent $PopOutScreenshot "Detached pop-out"
-    $CapturedPopOutWindow = $true
-  } catch {
-    Write-Host "Detached pop-out crop failed, preserving full desktop evidence instead: $($_.Exception.Message)"
-  }
-
   Save-WindowInventory (Join-Path $GuiArtifactDir "windows-after-launch.txt")
-  $DesktopScreenshot = Join-Path $GuiArtifactDir "windows-gui-desktop.png"
-  Capture-DesktopScreenshot $DesktopScreenshot
-  Assert-ScreenshotHasContent $DesktopScreenshot "Windows desktop"
-  if (-not $CapturedPopOutWindow) {
-    Copy-Item -Path $DesktopScreenshot -Destination $PopOutScreenshot -Force
-    Assert-ScreenshotHasContent $PopOutScreenshot "Detached pop-out desktop evidence"
-  }
 
   $MainScreenshot = Join-Path $GuiArtifactDir "windows-gui-main.png"
   $MainWindow = Capture-WindowScreenshotByTitle `
@@ -706,6 +689,16 @@ try {
     -Path $MainScreenshot `
     -Label "Main window" `
     -InitialDelaySeconds 8
+
+  $PopOutScreenshot = Join-Path $GuiArtifactDir "windows-gui-popout.png"
+  $DetachedWindow = Capture-WindowScreenshotByTitle `
+    -Title "Detached Watchlist" `
+    -Path $PopOutScreenshot `
+    -Label "Detached pop-out"
+
+  $DesktopScreenshot = Join-Path $GuiArtifactDir "windows-gui-desktop.png"
+  Capture-DesktopScreenshot $DesktopScreenshot
+  Assert-ScreenshotHasContent $DesktopScreenshot "Windows desktop"
 
   $GuiProcess.Refresh()
   if ($GuiProcess.HasExited) {
