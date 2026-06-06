@@ -121,3 +121,7 @@ export function buildApplicationMenu(): ApplicationMenuItemConfig[] {
     },
   ];
 }
+
+export function buildDesktopApplicationMenu(platform = process.platform): ApplicationMenuItemConfig[] {
+  return platform === "win32" ? [] : buildApplicationMenu();
+}
