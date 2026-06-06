@@ -16,7 +16,7 @@ import { ELECTROBUN_CONTEXT_MENU_ACTION, type DesktopRestartMessage, type Electr
 import { decodeRpcValue, encodeRpcValue } from "../view/rpc-codec";
 import { contextMenuSelectionMessage } from "./context-menu/click";
 import type { DesktopWorkspace } from "./desktop/workspace";
-import { buildApplicationMenu } from "./application-menu";
+import { buildDesktopApplicationMenu } from "./application-menu";
 import { applicationMenuCommand } from "./application-menu/click";
 import { registerElectrobunCoreCapabilities } from "./core-capabilities";
 import { setNativeIbkrGatewayModuleLoader } from "../../../plugins/ibkr/gateway/service";
@@ -385,7 +385,7 @@ async function handleBackendRequest(
 }
 
 function installApplicationMenu() {
-  ApplicationMenu.setApplicationMenu(buildApplicationMenu());
+  ApplicationMenu.setApplicationMenu(buildDesktopApplicationMenu());
 }
 
 function createWindowRpc(key: string): DesktopRpc {
