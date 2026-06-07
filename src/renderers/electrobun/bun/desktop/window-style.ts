@@ -1,5 +1,31 @@
 type DesktopTitleBarStyle = "default" | "hidden" | "hiddenInset";
+type DesktopWindowRenderer = "native" | "cef";
+type DesktopWindowStyleMask = {
+  Borderless?: boolean;
+  Closable?: boolean;
+  Miniaturizable?: boolean;
+  Titled?: boolean;
+  FullSizeContentView?: boolean;
+};
 
 export function desktopTitleBarStyle(): DesktopTitleBarStyle {
-  return process.platform === "darwin" ? "hiddenInset" : "hidden";
+  if (process.platform === "darwin") return "hiddenInset";
+  if (process.platform === "win32") return "hidden";
+  return "hidden";
+}
+
+export function desktopWindowRenderer(): DesktopWindowRenderer {
+  if (process.platform === "win32") return "cef";
+  return "native";
+}
+
+export function desktopWindowStyleMask(): DesktopWindowStyleMask {
+  if (process.platform !== "win32") return {};
+  return {
+    Borderless: true,
+    Closable: false,
+    Miniaturizable: false,
+    Titled: false,
+    FullSizeContentView: true,
+  };
 }

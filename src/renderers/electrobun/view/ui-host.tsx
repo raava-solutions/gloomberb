@@ -31,92 +31,117 @@ function currentDesktopPlatform(): string {
   const navigatorWithUserAgentData = navigator as Navigator & {
     userAgentData?: { platform?: string };
   };
-  return navigatorWithUserAgentData.userAgentData?.platform ?? navigator.platform ?? "";
+  return [
+    navigatorWithUserAgentData.userAgentData?.platform,
+    navigator.platform,
+    navigator.userAgent,
+  ].filter((value): value is string => Boolean(value)).join(" ");
 }
 
 const DESKTOP_PLATFORM = currentDesktopPlatform();
-const USES_WINDOWS_CONTROLS = /win/i.test(DESKTOP_PLATFORM);
+const USES_WINDOWS_CONTROLS = !/(darwin|ipad|iphone|linux|mac)/i.test(DESKTOP_PLATFORM);
+const NON_WINDOWS_DESKTOP_PLATFORMS = /^(darwin|linux|freebsd|openbsd|aix|sunos)$/i;
 
-export const webUiHost: UiHost = {
-  kind: "desktop-web",
-  capabilities: {
-    nativePaneChrome: true,
-    titleBarOverlay: true,
-    precisePointer: true,
-    fractionalViewport: true,
-    cellWidthPx: WEB_CELL_WIDTH,
-    cellHeightPx: WEB_CELL_HEIGHT,
-    pixelRatio: Math.min(window.devicePixelRatio || 1, 2),
-    canvasCharts: true,
-    nativeContextMenu: NATIVE_CONTEXT_MENU_SUPPORTED,
-    windowControls: USES_WINDOWS_CONTROLS ? "windows" : undefined,
-  },
-  Box: WebBox,
-  Text: WebText,
-  Span: WebSpan,
-  Strong: WebStrong,
-  Underline: WebUnderline,
-  ScrollBox: WebScrollBox,
-  Input: WebInput,
-  Textarea: WebTextarea,
-  Button: WebButton,
-  TextField: WebTextField,
-  MessageComposer: WebMessageComposer,
-  ListView: WebListView,
-  SegmentedControl: WebSegmentedControl,
-  DialogFrame: WebDialogFrame,
-  PageStackView: WebPageStackView,
-  DataTable: WebDataTable,
-  Tabs: WebTabs,
-  ChartSurface: WebChartSurface,
-  ImageSurface: ({ children, src, alt = "", objectFit = "contain", ...props }) => {
-    const imageSrc = typeof src === "string" ? src.trim() : "";
-    const [failed, setFailed] = useState(false);
-    useEffect(() => setFailed(false), [imageSrc]);
-    const baseStyle = commonStyle(props);
-    return (
-      <div
+function usesWindowsWindowControls(desktopPlatform?: string): boolean {
+  const platform = desktopPlatform?.trim();
+  if (!platform) {
+    return USES_WINDOWS_CONTROLS;
+  }
+  if (/^win/i.test(platform)) {
+    return true;
+  }
+  if (NON_WINDOWS_DESKTOP_PLATFORMS.test(platform)) {
+    return false;
+  }
+  return USES_WINDOWS_CONTROLS;
+}
+
+export function createWebUiHost(desktopPlatform?: string): UiHost {
+  const usesWindowsControls = usesWindowsWindowControls(desktopPlatform);
+
+  return {
+    kind: "desktop-web",
+    capabilities: {
+      nativePaneChrome: true,
+      titleBarOverlay: true,
+      precisePointer: true,
+      fractionalViewport: true,
+      cellWidthPx: WEB_CELL_WIDTH,
+      cellHeightPx: WEB_CELL_HEIGHT,
+      pixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+      canvasCharts: true,
+      nativeContextMenu: NATIVE_CONTEXT_MENU_SUPPORTED,
+      windowControls: usesWindowsControls ? "windows" : undefined,
+    },
+    Box: WebBox,
+    Text: WebText,
+    Span: WebSpan,
+    Strong: WebStrong,
+    Underline: WebUnderline,
+    ScrollBox: WebScrollBox,
+    Input: WebInput,
+    Textarea: WebTextarea,
+    Button: WebButton,
+    TextField: WebTextField,
+    MessageComposer: WebMessageComposer,
+    ListView: WebListView,
+    SegmentedControl: WebSegmentedControl,
+    DialogFrame: WebDialogFrame,
+    PageStackView: WebPageStackView,
+    DataTable: WebDataTable,
+    Tabs: WebTabs,
+    ChartSurface: WebChartSurface,
+    ImageSurface: ({ children, src, alt = "", objectFit = "contain", ...props }) => {
+      const imageSrc = typeof src === "string" ? src.trim() : "";
+      const [failed, setFailed] = useState(false);
+      useEffect(() => setFailed(false), [imageSrc]);
+      const baseStyle = commonStyle(props);
+      return (
+        <div
+          {...cleanDomProps(props)}
+          style={{
+            ...baseStyle,
+            overflow: baseStyle.overflow ?? "hidden",
+            ...(props.style as CSSProperties | undefined),
+          }}
+        >
+          {imageSrc && !failed ? (
+            <img
+              src={imageSrc}
+              alt={alt}
+              draggable={false}
+              onError={() => setFailed(true)}
+              style={{
+                width: "100%",
+                height: "100%",
+                display: "block",
+                objectFit,
+              }}
+            />
+          ) : children as ReactNode}
+        </div>
+      );
+    },
+    SpinnerMark: ({ color, ...props }) => (
+      <span
         {...cleanDomProps(props)}
+        aria-hidden="true"
         style={{
-          ...baseStyle,
-          overflow: baseStyle.overflow ?? "hidden",
+          color,
+          display: "inline-block",
+          width: "1ch",
+          animation: "gloom-spin 0.9s steps(8) infinite",
           ...(props.style as CSSProperties | undefined),
         }}
       >
-        {imageSrc && !failed ? (
-          <img
-            src={imageSrc}
-            alt={alt}
-            draggable={false}
-            onError={() => setFailed(true)}
-            style={{
-              width: "100%",
-              height: "100%",
-              display: "block",
-              objectFit,
-            }}
-          />
-        ) : children as ReactNode}
-      </div>
-    );
-  },
-  SpinnerMark: ({ color, ...props }) => (
-    <span
-      {...cleanDomProps(props)}
-      aria-hidden="true"
-      style={{
-        color,
-        display: "inline-block",
-        width: "1ch",
-        animation: "gloom-spin 0.9s steps(8) infinite",
-        ...(props.style as CSSProperties | undefined),
-      }}
-    >
-      *
-    </span>
-  ),
-  AsciiText: WebAsciiText,
-};
+        *
+      </span>
+    ),
+    AsciiText: WebAsciiText,
+  };
+}
+
+export const webUiHost: UiHost = createWebUiHost();
 
 export const webRendererHost: RendererHost = {
   supportsNativeDesktopNotifications: true,
