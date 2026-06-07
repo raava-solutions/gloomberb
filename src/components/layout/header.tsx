@@ -1,5 +1,5 @@
-import { Box, SpinnerMark, Text, TextAttributes, useUiCapabilities } from "../../ui";
-import { useEffect, type ReactNode } from "react";
+import { Box, SpinnerMark, Text, TextAttributes, useRendererHost, useUiCapabilities } from "../../ui";
+import { useCallback, useEffect, type ReactNode } from "react";
 import { blendHex, colors, priceColor } from "../../theme/colors";
 import { useThemeColors } from "../../theme/theme-context";
 import { useAppActive } from "../../state/app/activity";
@@ -18,7 +18,7 @@ import { formatMarketPrice } from "../../market-data/market/format";
 import { marketStateLabel, marketStateColor, getActiveQuoteDisplay } from "../../market-data/market/status";
 import { VERSION } from "../../version";
 import { getTitlebarLeadingInset } from "./titlebar-overlay";
-import { WindowControls } from "./window-controls";
+import { WindowControls, WINDOWS_CONTROL_GROUP_WIDTH_PX } from "./window-controls";
 
 const SPY_REFRESH_MS = 5 * 60_000; // 5 min
 const UPDATE_NOTICE_DURATION_MS = 5_000;
@@ -124,6 +124,7 @@ function UpdateStatus() {
 
 export function Header() {
   useThemeColors();
+  const rendererHost = useRendererHost();
   const baseCurrency = useAppSelector(selectBaseCurrency);
   const appActive = useAppActive();
   const { titleBarOverlay, windowControls } = useUiCapabilities();
@@ -150,6 +151,11 @@ export function Header() {
     ? `SPY ${formatMarketPrice(activeSpyQuote.price, { assetCategory: "ETF" })} ${formatPercentRaw(activeSpyQuote.changePercent)}`
     : "SPY —";
 
+  const startWindowDrag = useCallback(() => {
+    if (!titleBarOverlay) return;
+    void rendererHost.startWindowDrag?.();
+  }, [rendererHost, titleBarOverlay]);
+
   // Market status
   const mktState = spyQuote?.marketState;
   const mktLabel = mktState ? marketStateLabel(mktState) : "";
@@ -164,11 +170,12 @@ export function Header() {
         backgroundColor={colors.header}
         data-gloom-role="app-header"
         data-titlebar-overlay="true"
-        className="electrobun-webkit-app-region-drag"
+        onMouseDown={startWindowDrag}
         style={{
           boxShadow: `0 -1px 0 ${colors.header}, inset 0 1px 0 ${colors.header}`,
           paddingLeft: 8,
           paddingRight: showWindowControls ? 0 : 12,
+          position: "relative",
         }}
       >
         <Box paddingLeft={titlebarLeadingInset} flexDirection="row" alignItems="center" gap={1}>
@@ -201,6 +208,7 @@ export function Header() {
         <Box paddingRight={showWindowControls ? 1 : 0}>
           <Text fg={colors.headerText}>{baseCurrency}</Text>
         </Box>
+        {showWindowControls ? <Box flexShrink={0} width={`${WINDOWS_CONTROL_GROUP_WIDTH_PX}px`} /> : null}
         {showWindowControls ? <WindowControls /> : null}
       </Box>
     );
@@ -213,7 +221,7 @@ export function Header() {
       backgroundColor={colors.header}
       data-gloom-role="app-header"
       data-titlebar-overlay={titleBarOverlay ? "true" : undefined}
-      className={titleBarOverlay ? "electrobun-webkit-app-region-drag" : undefined}
+      onMouseDown={startWindowDrag}
     >
       <Box paddingLeft={titleBarOverlay ? titlebarLeadingInset : 1}>
         <Text attributes={TextAttributes.BOLD} fg={colors.headerText}>

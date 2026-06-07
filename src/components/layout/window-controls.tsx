@@ -1,8 +1,9 @@
 import { Box, useRendererHost } from "../../ui";
 import { useCallback } from "react";
+import { TITLEBAR_OVERLAY_HEIGHT_PX } from "./titlebar-overlay";
 
-const WINDOWS_CONTROL_WIDTH_PX = 30;
-const WINDOWS_CONTROL_TRAILING_PADDING_PX = 10;
+const WINDOWS_CONTROL_SIZE_PX = TITLEBAR_OVERLAY_HEIGHT_PX;
+export const WINDOWS_CONTROL_GROUP_WIDTH_PX = WINDOWS_CONTROL_SIZE_PX * 3;
 
 type WindowControlAction = "minimize" | "toggle-maximize" | "close";
 
@@ -44,7 +45,11 @@ function WindowControlIcon({ action }: { action: WindowControlAction }) {
   );
 }
 
-export function WindowControls() {
+interface WindowControlsProps {
+  windowKind?: "main" | "detached";
+}
+
+export function WindowControls({ windowKind = "main" }: WindowControlsProps) {
   const rendererHost = useRendererHost();
 
   const controlWindow = useCallback((action: WindowControlAction, event: { stopPropagation?: () => void; preventDefault?: () => void }) => {
@@ -57,11 +62,17 @@ export function WindowControls() {
       flexDirection="row"
       alignItems="stretch"
       flexShrink={0}
-      className="electrobun-webkit-app-region-no-drag"
+      width={`${WINDOWS_CONTROL_GROUP_WIDTH_PX}px`}
       data-gloom-role="window-controls"
+      data-window-kind={windowKind}
       aria-hidden={false}
       style={{
-        paddingRight: WINDOWS_CONTROL_TRAILING_PADDING_PX,
+        position: "fixed",
+        top: 0,
+        right: 0,
+        height: `${WINDOWS_CONTROL_SIZE_PX}px`,
+        zIndex: 1000,
+        backgroundColor: "inherit",
       }}
     >
       {WINDOWS_CONTROLS.map((control) => (
@@ -69,18 +80,16 @@ export function WindowControls() {
           key={control.action}
           alignItems="center"
           justifyContent="center"
+          flexShrink={0}
+          width={`${WINDOWS_CONTROL_SIZE_PX}px`}
+          height="100%"
           data-gloom-role="window-control"
           data-window-control-action={control.action}
           data-gloom-interactive="true"
           role="button"
           aria-label={control.label}
           title={control.label}
-          className="electrobun-webkit-app-region-no-drag"
           onMouseDown={(event: { stopPropagation?: () => void; preventDefault?: () => void }) => controlWindow(control.action, event)}
-          style={{
-            width: WINDOWS_CONTROL_WIDTH_PX,
-            height: "100%",
-          }}
         >
           <WindowControlIcon action={control.action} />
         </Box>

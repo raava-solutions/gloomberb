@@ -26,6 +26,9 @@ public static class GloomberbWin32 {
   public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
 
   [DllImport("user32.dll")]
+  public static extern bool EnumChildWindows(IntPtr hWndParent, EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+  [DllImport("user32.dll")]
   public static extern bool IsWindowVisible(IntPtr hWnd);
 
   [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
@@ -33,6 +36,9 @@ public static class GloomberbWin32 {
 
   [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
   public static extern int GetWindowTextLength(IntPtr hWnd);
+
+  [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+  public static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
 
   [DllImport("user32.dll")]
   public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
@@ -51,6 +57,29 @@ public static class GloomberbWin32 {
 
   [DllImport("user32.dll")]
   public static extern bool GetWindowRect(IntPtr hWnd, out GloomberbWindowRect rect);
+
+  [DllImport("user32.dll")]
+  public static extern bool GetClientRect(IntPtr hWnd, out GloomberbWindowRect rect);
+
+  [DllImport("user32.dll")]
+  public static extern bool ClientToScreen(IntPtr hWnd, ref GloomberbPoint point);
+
+  [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
+  public static extern IntPtr GetWindowLongPtr64(IntPtr hWnd, int nIndex);
+
+  [DllImport("user32.dll", EntryPoint = "GetWindowLongW", SetLastError = true)]
+  public static extern int GetWindowLong32(IntPtr hWnd, int nIndex);
+
+  public static IntPtr GetWindowLongPtrCompat(IntPtr hWnd, int nIndex)
+  {
+    if (IntPtr.Size == 8)
+      return GetWindowLongPtr64(hWnd, nIndex);
+
+    return new IntPtr(GetWindowLong32(hWnd, nIndex));
+  }
+
+  [DllImport("dwmapi.dll")]
+  public static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out GloomberbWindowRect pvAttribute, int cbAttribute);
 
   [DllImport("user32.dll")]
   public static extern bool SetCursorPos(int x, int y);
@@ -88,6 +117,12 @@ public struct GloomberbWindowRect {
   public int Top;
   public int Right;
   public int Bottom;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct GloomberbPoint {
+  public int X;
+  public int Y;
 }
 "@
 
@@ -201,9 +236,9 @@ function Click-WindowControl {
 
   $Bounds = Get-WindowBounds $Window
   $OffsetFromRight = switch ($Action) {
-    "close" { 25 }
-    "maximize" { 55 }
-    "minimize" { 85 }
+    "close" { 14 }
+    "maximize" { 44 }
+    "minimize" { 74 }
   }
   $X = [int]($Bounds.Left + $Bounds.Width - $OffsetFromRight)
   $Y = [int]($Bounds.Top + 14)
@@ -297,6 +332,275 @@ function Get-WindowBounds {
   }
 }
 
+function Convert-WindowRect {
+  param([GloomberbWindowRect]$Rect)
+
+  [pscustomobject]@{
+    Left = $Rect.Left
+    Top = $Rect.Top
+    Right = $Rect.Right
+    Bottom = $Rect.Bottom
+    Width = $Rect.Right - $Rect.Left
+    Height = $Rect.Bottom - $Rect.Top
+  }
+}
+
+function Get-WindowClientBounds {
+  param([object]$Window)
+
+  $Handle = [IntPtr]::new([long]$Window.Handle)
+  $ClientRect = New-Object GloomberbWindowRect
+  if (-not [GloomberbWin32]::GetClientRect($Handle, [ref]$ClientRect)) {
+    throw "Could not read client bounds for $($Window.ProcessName) $($Window.Handle)."
+  }
+
+  $ClientOrigin = New-Object GloomberbPoint
+  if (-not [GloomberbWin32]::ClientToScreen($Handle, [ref]$ClientOrigin)) {
+    throw "Could not map client bounds for $($Window.ProcessName) $($Window.Handle)."
+  }
+
+  $Width = $ClientRect.Right - $ClientRect.Left
+  $Height = $ClientRect.Bottom - $ClientRect.Top
+  if ($Width -le 1 -or $Height -le 1) {
+    throw "Client bounds are invalid for $($Window.ProcessName) $($Window.Handle): $($ClientRect | ConvertTo-Json -Compress)"
+  }
+
+  [pscustomobject]@{
+    Left = $ClientOrigin.X
+    Top = $ClientOrigin.Y
+    Width = $Width
+    Height = $Height
+  }
+}
+
+function Get-WindowGeometry {
+  param(
+    [object]$Window,
+    [string]$Label
+  )
+
+  $Handle = [IntPtr]::new([long]$Window.Handle)
+  $WindowRect = New-Object GloomberbWindowRect
+  if (-not [GloomberbWin32]::GetWindowRect($Handle, [ref]$WindowRect)) {
+    throw "Could not read window geometry for $($Window.ProcessName) $($Window.Handle)."
+  }
+
+  $ClientRect = New-Object GloomberbWindowRect
+  if (-not [GloomberbWin32]::GetClientRect($Handle, [ref]$ClientRect)) {
+    throw "Could not read client geometry for $($Window.ProcessName) $($Window.Handle)."
+  }
+
+  $ClientOrigin = New-Object GloomberbPoint
+  if (-not [GloomberbWin32]::ClientToScreen($Handle, [ref]$ClientOrigin)) {
+    throw "Could not map client geometry for $($Window.ProcessName) $($Window.Handle)."
+  }
+
+  $WindowBounds = Convert-WindowRect $WindowRect
+  $ClientWidth = $ClientRect.Right - $ClientRect.Left
+  $ClientHeight = $ClientRect.Bottom - $ClientRect.Top
+  $ClientScreenBounds = [pscustomobject]@{
+    Left = $ClientOrigin.X
+    Top = $ClientOrigin.Y
+    Right = $ClientOrigin.X + $ClientWidth
+    Bottom = $ClientOrigin.Y + $ClientHeight
+    Width = $ClientWidth
+    Height = $ClientHeight
+  }
+
+  $DwmBounds = $null
+  $DwmRect = New-Object GloomberbWindowRect
+  try {
+    $DwmResult = [GloomberbWin32]::DwmGetWindowAttribute(
+      $Handle,
+      9,
+      [ref]$DwmRect,
+      [System.Runtime.InteropServices.Marshal]::SizeOf([type][GloomberbWindowRect])
+    )
+    if ($DwmResult -eq 0) {
+      $DwmBounds = Convert-WindowRect $DwmRect
+    }
+  } catch {
+    $DwmBounds = $null
+  }
+
+  $StylePtr = [GloomberbWin32]::GetWindowLongPtrCompat($Handle, -16)
+  $Style = [uint32]($StylePtr.ToInt64() -band [int64]0xffffffff)
+
+  [pscustomobject]@{
+    Label = $Label
+    Title = $Window.MainWindowTitle
+    ProcessName = $Window.ProcessName
+    ProcessId = $Window.Id
+    Handle = $Window.Handle
+    Style = [pscustomobject]@{
+      Value = ("0x{0:X8}" -f $Style)
+      Caption = [bool]($Style -band 0x00c00000)
+      SystemMenu = [bool]($Style -band 0x00080000)
+      ThickFrame = [bool]($Style -band 0x00040000)
+      MinimizeBox = [bool]($Style -band 0x00020000)
+      MaximizeBox = [bool]($Style -band 0x00010000)
+    }
+    WindowBounds = $WindowBounds
+    DwmExtendedFrameBounds = $DwmBounds
+    ClientBounds = $ClientScreenBounds
+    ClientInsets = [pscustomobject]@{
+      Left = $ClientScreenBounds.Left - $WindowBounds.Left
+      Top = $ClientScreenBounds.Top - $WindowBounds.Top
+      Right = $WindowBounds.Right - $ClientScreenBounds.Right
+      Bottom = $WindowBounds.Bottom - $ClientScreenBounds.Bottom
+    }
+  }
+}
+
+function Save-WindowGeometry {
+  param(
+    [object]$Window,
+    [string]$Path,
+    [string]$Label
+  )
+
+  $Geometry = Get-WindowGeometry -Window $Window -Label $Label
+  $Geometry |
+    ConvertTo-Json -Depth 8 |
+    Set-Content -Path $Path -Encoding UTF8
+  return $Geometry
+}
+
+function Get-WindowTitleText {
+  param([IntPtr]$Handle)
+
+  $TextLength = [GloomberbWin32]::GetWindowTextLength($Handle)
+  if ($TextLength -le 0) {
+    return ""
+  }
+
+  $TitleBuilder = New-Object System.Text.StringBuilder ($TextLength + 1)
+  [void][GloomberbWin32]::GetWindowText($Handle, $TitleBuilder, $TitleBuilder.Capacity)
+  $TitleBuilder.ToString()
+}
+
+function Get-WindowClassName {
+  param([IntPtr]$Handle)
+
+  $ClassBuilder = New-Object System.Text.StringBuilder 256
+  [void][GloomberbWin32]::GetClassName($Handle, $ClassBuilder, $ClassBuilder.Capacity)
+  $ClassBuilder.ToString()
+}
+
+function Get-ChildWindowDiagnostics {
+  param([object]$Window)
+
+  $ParentHandle = Get-WindowHandle $Window
+  $Children = New-Object System.Collections.Generic.List[object]
+  $Callback = [GloomberbWin32+EnumWindowsProc]{
+    param([IntPtr]$Handle, [IntPtr]$Param)
+
+    $Rect = New-Object GloomberbWindowRect
+    $Bounds = $null
+    if ([GloomberbWin32]::GetWindowRect($Handle, [ref]$Rect)) {
+      $Bounds = Convert-WindowRect $Rect
+    }
+
+    $ProcessIdValue = [uint32]0
+    [void][GloomberbWin32]::GetWindowThreadProcessId($Handle, [ref]$ProcessIdValue)
+    $Children.Add([pscustomobject]@{
+      Handle = $Handle.ToInt64()
+      ProcessId = [int]$ProcessIdValue
+      Visible = [GloomberbWin32]::IsWindowVisible($Handle)
+      ClassName = Get-WindowClassName $Handle
+      Text = Get-WindowTitleText $Handle
+      Bounds = $Bounds
+    })
+    return $true
+  }
+
+  [void][GloomberbWin32]::EnumChildWindows($ParentHandle, $Callback, [IntPtr]::Zero)
+  $Children
+}
+
+function Get-UiAutomationDiagnostics {
+  param([object]$Window)
+
+  try {
+    Add-Type -AssemblyName UIAutomationClient
+    Add-Type -AssemblyName UIAutomationTypes
+  } catch {
+    return @([pscustomobject]@{
+      Error = "UI Automation assemblies could not be loaded: $($_.Exception.Message)"
+    })
+  }
+
+  $Handle = Get-WindowHandle $Window
+  try {
+    $RootElement = [System.Windows.Automation.AutomationElement]::FromHandle($Handle)
+  } catch {
+    return @([pscustomobject]@{
+      Error = "UI Automation root element could not be read: $($_.Exception.Message)"
+    })
+  }
+  if (-not $RootElement) {
+    return @([pscustomobject]@{
+      Error = "UI Automation root element could not be read."
+    })
+  }
+
+  try {
+    $Elements = $RootElement.FindAll(
+      [System.Windows.Automation.TreeScope]::Descendants,
+      [System.Windows.Automation.Condition]::TrueCondition
+    )
+  } catch {
+    return @([pscustomobject]@{
+      Error = "UI Automation descendants could not be read: $($_.Exception.Message)"
+    })
+  }
+  $Diagnostics = New-Object System.Collections.Generic.List[object]
+  foreach ($Element in $Elements) {
+    $Current = $Element.Current
+    $Rectangle = $Current.BoundingRectangle
+    if ($Rectangle.IsEmpty) {
+      $Bounds = $null
+    } else {
+      $Bounds = [pscustomobject]@{
+        Left = [int]$Rectangle.Left
+        Top = [int]$Rectangle.Top
+        Right = [int]$Rectangle.Right
+        Bottom = [int]$Rectangle.Bottom
+        Width = [int]$Rectangle.Width
+        Height = [int]$Rectangle.Height
+      }
+    }
+
+    $Diagnostics.Add([pscustomobject]@{
+      ControlType = $Current.ControlType.ProgrammaticName
+      Name = $Current.Name
+      AutomationId = $Current.AutomationId
+      ClassName = $Current.ClassName
+      LocalizedControlType = $Current.LocalizedControlType
+      IsOffscreen = $Current.IsOffscreen
+      Bounds = $Bounds
+    })
+  }
+
+  $Diagnostics
+}
+
+function Save-WindowDiagnostics {
+  param(
+    [object]$Window,
+    [string]$Path,
+    [string]$Label
+  )
+
+  [pscustomobject]@{
+    Label = $Label
+    ChildWindows = @(Get-ChildWindowDiagnostics $Window)
+    UiAutomation = @(Get-UiAutomationDiagnostics $Window)
+  } |
+    ConvertTo-Json -Depth 8 |
+    Set-Content -Path $Path -Encoding UTF8
+}
+
 function Capture-WindowScreenshot {
   param(
     [object]$Window,
@@ -304,6 +608,24 @@ function Capture-WindowScreenshot {
   )
 
   $Bounds = Get-WindowBounds $Window
+  $Bitmap = New-Object System.Drawing.Bitmap $Bounds.Width, $Bounds.Height
+  $Graphics = [System.Drawing.Graphics]::FromImage($Bitmap)
+  try {
+    $Graphics.CopyFromScreen($Bounds.Left, $Bounds.Top, 0, 0, [System.Drawing.Size]::new($Bounds.Width, $Bounds.Height))
+    $Bitmap.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png)
+  } finally {
+    $Graphics.Dispose()
+    $Bitmap.Dispose()
+  }
+}
+
+function Capture-WindowClientScreenshot {
+  param(
+    [object]$Window,
+    [string]$Path
+  )
+
+  $Bounds = Get-WindowClientBounds $Window
   $Bitmap = New-Object System.Drawing.Bitmap $Bounds.Width, $Bounds.Height
   $Graphics = [System.Drawing.Graphics]::FromImage($Bitmap)
   try {
@@ -432,6 +754,163 @@ function Assert-ScreenshotHasContent {
   $Stats = Get-ScreenshotStats $Path
   if ($Stats.Width -le 1 -or $Stats.Height -le 1 -or $Stats.UniqueColors -lt 8) {
     throw "$Label screenshot appears blank: $($Stats | ConvertTo-Json -Compress)"
+  }
+}
+
+function Test-WindowControlGlyphPixel {
+  param([System.Drawing.Color]$Color)
+
+  if ($Color.A -le 120 -or $Color.R -le 120 -or $Color.G -le 120 -or $Color.B -le 120) {
+    return $false
+  }
+
+  $MaxChannel = [Math]::Max($Color.R, [Math]::Max($Color.G, $Color.B))
+  $MinChannel = [Math]::Min($Color.R, [Math]::Min($Color.G, $Color.B))
+  return ($MaxChannel - $MinChannel) -lt 80
+}
+
+function Measure-WindowCloseGlyphPadding {
+  param(
+    [string]$Path,
+    [string]$Label
+  )
+
+  $Bitmap = [System.Drawing.Bitmap]::FromFile($Path)
+  try {
+    $Width = $Bitmap.Width
+    $Height = $Bitmap.Height
+    $MaxY = [Math]::Min(60, $Height)
+    $MinX = [Math]::Max(0, $Width - 200)
+    $Mask = [System.Collections.Generic.HashSet[string]]::new()
+    $Seen = [System.Collections.Generic.HashSet[string]]::new()
+
+    for ($Y = 0; $Y -lt $MaxY; $Y += 1) {
+      for ($X = $MinX; $X -lt $Width; $X += 1) {
+        if (Test-WindowControlGlyphPixel -Color ($Bitmap.GetPixel($X, $Y))) {
+          [void]$Mask.Add("$X,$Y")
+        }
+      }
+    }
+
+    $Components = @()
+    $Directions = @(
+      @(1, 0), @(-1, 0), @(0, 1), @(0, -1),
+      @(1, 1), @(1, -1), @(-1, 1), @(-1, -1)
+    )
+
+    foreach ($StartKey in $Mask) {
+      if ($Seen.Contains($StartKey)) {
+        continue
+      }
+
+      $Queue = [System.Collections.Generic.Queue[string]]::new()
+      $Queue.Enqueue($StartKey)
+      [void]$Seen.Add($StartKey)
+      $StartParts = $StartKey -split ","
+      $MinComponentX = [int]$StartParts[0]
+      $MaxComponentX = [int]$StartParts[0]
+      $MinComponentY = [int]$StartParts[1]
+      $MaxComponentY = [int]$StartParts[1]
+      $Count = 0
+
+      while ($Queue.Count -gt 0) {
+        $CurrentKey = $Queue.Dequeue()
+        $Parts = $CurrentKey -split ","
+        $CurrentX = [int]$Parts[0]
+        $CurrentY = [int]$Parts[1]
+        $Count += 1
+        $MinComponentX = [Math]::Min($MinComponentX, $CurrentX)
+        $MaxComponentX = [Math]::Max($MaxComponentX, $CurrentX)
+        $MinComponentY = [Math]::Min($MinComponentY, $CurrentY)
+        $MaxComponentY = [Math]::Max($MaxComponentY, $CurrentY)
+
+        foreach ($Direction in $Directions) {
+          $NextX = $CurrentX + [int]$Direction[0]
+          $NextY = $CurrentY + [int]$Direction[1]
+          if ($NextX -lt $MinX -or $NextX -ge $Width -or $NextY -lt 0 -or $NextY -ge $MaxY) {
+            continue
+          }
+
+          $NextKey = "$NextX,$NextY"
+          if ($Mask.Contains($NextKey) -and -not $Seen.Contains($NextKey)) {
+            [void]$Seen.Add($NextKey)
+            $Queue.Enqueue($NextKey)
+          }
+        }
+      }
+
+      if ($Count -ge 2) {
+        $Components += [pscustomobject]@{
+          MinX = $MinComponentX
+          MaxX = $MaxComponentX
+          MinY = $MinComponentY
+          MaxY = $MaxComponentY
+          Count = $Count
+        }
+      }
+    }
+
+    if ($Components.Count -eq 0) {
+      throw "$Label window control glyphs could not be measured."
+    }
+
+    $RightmostX = ($Components | Measure-Object -Property MaxX -Maximum).Maximum
+    $CloseParts = @($Components | Where-Object { $_.MaxX -ge ($RightmostX - 10) })
+    if ($CloseParts.Count -eq 0) {
+      throw "$Label close control glyph could not be measured."
+    }
+
+    $CloseMinX = ($CloseParts | Measure-Object -Property MinX -Minimum).Minimum
+    $CloseMaxX = ($CloseParts | Measure-Object -Property MaxX -Maximum).Maximum
+    $CloseMinY = ($CloseParts | Measure-Object -Property MinY -Minimum).Minimum
+    $CloseMaxY = ($CloseParts | Measure-Object -Property MaxY -Maximum).Maximum
+    $TopInset = [int]$CloseMinY
+    $RightInset = [int]($Width - 1 - $CloseMaxX)
+
+    [pscustomobject]@{
+      Label = $Label
+      Image = $Path
+      Width = $Width
+      Height = $Height
+      CloseGlyph = [pscustomobject]@{
+        MinX = [int]$CloseMinX
+        MaxX = [int]$CloseMaxX
+        MinY = [int]$CloseMinY
+        MaxY = [int]$CloseMaxY
+        Parts = $CloseParts.Count
+      }
+      TopInset = $TopInset
+      RightInset = $RightInset
+      Delta = [int]($RightInset - $TopInset)
+    }
+  } finally {
+    $Bitmap.Dispose()
+  }
+}
+
+function Assert-WindowControlPadding {
+  param(
+    [string]$Path,
+    [string]$Label
+  )
+
+  $Measurement = Measure-WindowCloseGlyphPadding -Path $Path -Label $Label
+  Write-Host "$Label close glyph padding: top=$($Measurement.TopInset) right=$($Measurement.RightInset) delta=$($Measurement.Delta)"
+
+  if ([Math]::Abs($Measurement.Delta) -gt 2) {
+    throw "$Label close glyph padding is not balanced: $($Measurement | ConvertTo-Json -Depth 5 -Compress)"
+  }
+
+  return $Measurement
+}
+
+function Assert-WindowControlPaddingMeasurement {
+  param([object]$Measurement)
+
+  Write-Host "$($Measurement.Label) close glyph padding: top=$($Measurement.TopInset) right=$($Measurement.RightInset) delta=$($Measurement.Delta)"
+
+  if ([Math]::Abs($Measurement.Delta) -gt 2) {
+    throw "$($Measurement.Label) close glyph padding is not balanced: $($Measurement | ConvertTo-Json -Depth 5 -Compress)"
   }
 }
 
@@ -946,31 +1425,81 @@ try {
     -OutputPath (Join-Path $GuiArtifactDir "windows-window-icon-popout.png") `
     -Label "Detached pop-out"
 
-  Assert-CustomWindowControls `
-    -Window $DetachedWindow `
-    -Label "Detached pop-out"
-
-  Save-WindowInventory (Join-Path $GuiArtifactDir "windows-after-launch.txt")
-
   $MainScreenshot = Join-Path $GuiArtifactDir "windows-gui-main.png"
   $MainWindow = Capture-WindowScreenshotByTitle `
     -Title "Gloomberb" `
     -Path $MainScreenshot `
     -Label "Main window" `
     -InitialDelaySeconds 8
+  $MainGeometry = Save-WindowGeometry `
+    -Window $MainWindow `
+    -Path (Join-Path $GuiArtifactDir "windows-main-geometry.json") `
+    -Label "Main window"
+  $MainClientScreenshot = Join-Path $GuiArtifactDir "windows-gui-main-client.png"
+  Capture-WindowClientScreenshot $MainWindow $MainClientScreenshot
+  Assert-ScreenshotHasContent $MainClientScreenshot "Main window client area"
 
   $PopOutScreenshot = Join-Path $GuiArtifactDir "windows-gui-popout.png"
   $DetachedWindow = Capture-WindowScreenshotByTitle `
     -Title "Detached Watchlist" `
     -Path $PopOutScreenshot `
     -Label "Detached pop-out"
+  $DetachedGeometry = Save-WindowGeometry `
+    -Window $DetachedWindow `
+    -Path (Join-Path $GuiArtifactDir "windows-popout-geometry.json") `
+    -Label "Detached pop-out"
+  $PopOutClientScreenshot = Join-Path $GuiArtifactDir "windows-gui-popout-client.png"
+  Capture-WindowClientScreenshot $DetachedWindow $PopOutClientScreenshot
+  Assert-ScreenshotHasContent $PopOutClientScreenshot "Detached pop-out client area"
+
+  $ControlPaddingMeasurements = @(
+    Measure-WindowCloseGlyphPadding `
+      -Path $MainScreenshot `
+      -Label "Main window"
+    Measure-WindowCloseGlyphPadding `
+      -Path $MainClientScreenshot `
+      -Label "Main window client area"
+    Measure-WindowCloseGlyphPadding `
+      -Path $PopOutScreenshot `
+      -Label "Detached pop-out"
+    Measure-WindowCloseGlyphPadding `
+      -Path $PopOutClientScreenshot `
+      -Label "Detached pop-out client area"
+  )
+  $WindowGeometry = @($MainGeometry, $DetachedGeometry)
+  $ControlPaddingMeasurements |
+    ConvertTo-Json -Depth 6 |
+    Set-Content -Path (Join-Path $GuiArtifactDir "windows-control-padding.json") -Encoding UTF8
+  $WindowGeometry |
+    ConvertTo-Json -Depth 8 |
+    Set-Content -Path (Join-Path $GuiArtifactDir "windows-window-geometry.json") -Encoding UTF8
+  Save-WindowDiagnostics `
+    -Window $MainWindow `
+    -Path (Join-Path $GuiArtifactDir "windows-main-diagnostics.json") `
+    -Label "Main window"
+  Save-WindowDiagnostics `
+    -Window $DetachedWindow `
+    -Path (Join-Path $GuiArtifactDir "windows-popout-diagnostics.json") `
+    -Label "Detached pop-out"
+
+  Assert-WindowControlPaddingMeasurement ($ControlPaddingMeasurements | Where-Object { $_.Label -eq "Main window" })
+  Assert-WindowControlPaddingMeasurement ($ControlPaddingMeasurements | Where-Object { $_.Label -eq "Detached pop-out" })
+
+  Assert-CustomWindowControls `
+    -Window $DetachedWindow `
+    -Label "Detached pop-out"
+
+  Save-WindowInventory (Join-Path $GuiArtifactDir "windows-after-launch.txt")
 
   $DesktopScreenshot = Join-Path $GuiArtifactDir "windows-gui-desktop.png"
   Capture-DesktopScreenshot $DesktopScreenshot
   Assert-ScreenshotHasContent $DesktopScreenshot "Windows desktop"
 
+  Resolve-VisibleWindowByTitle -Title "Gloomberb" -Label "Main window liveness" | Out-Null
+  Resolve-VisibleWindowByTitle -Title "Detached Watchlist" -Label "Detached pop-out liveness" | Out-Null
+
   $GuiProcess.Refresh()
-  if ($GuiProcess.HasExited) {
+  if ($GuiProcess.HasExited -and $GuiProcess.ExitCode -ne 0) {
     throw "Windows GUI exited during smoke test with code $($GuiProcess.ExitCode)"
   }
 } catch {
