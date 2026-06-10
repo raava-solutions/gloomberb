@@ -1,5 +1,5 @@
 import { AsciiText, Box, Text, compactContextMenuItems, useContextMenu, useUiHost } from "../../../ui";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRendererHost, useUiCapabilities } from "../../../ui";
 import { useViewport } from "../../../react/input";
 import { useDialogState } from "../../../ui/dialog";
@@ -8,6 +8,7 @@ import type { DesktopDockPreviewState, DesktopWindowBridge } from "../../../type
 import {
   getDockDividerLayouts,
   getDockLeafLayouts,
+  isPaneInLayout,
   type DockGeometryOptions,
   type LayoutBounds,
   type ResolvedPane,
@@ -58,6 +59,7 @@ import {
   useShellVisibleLayout,
 } from "./layout-state";
 import { useShellPaneActions } from "./pane/actions";
+import { resolvePaneFullscreenLayout } from "./fullscreen";
 
 export { resolveAppHeaderHeightCells } from "./chrome";
 export { buildNativeWindowState } from "./native/window-state";
@@ -103,6 +105,9 @@ export function Shell({
     setHoveredPaneId((current) => (current === paneId ? current : paneId));
   }, []);
   const [menuState, setMenuState] = useState<ActionMenuState | null>(null);
+  const [fullscreenPaneId, setFullscreenPaneId] = useState<string | null>(null);
+  const fullscreenPaneIdRef = useRef<string | null>(null);
+  fullscreenPaneIdRef.current = fullscreenPaneId;
   const [hoveredMenuItemId, setHoveredMenuItemId] = useState<string | null>(null);
   const closePaneMenu = useCallback(() => {
     setMenuState(null);
@@ -149,7 +154,7 @@ export function Shell({
   }, [dispatch]);
 
   const {
-    activeLayout,
+    activeLayout: windowModeLayout,
     nativeWindowModePanelRect,
     selectWindowModePane,
     startWindowMode,
@@ -171,6 +176,20 @@ export function Shell({
     visibleLayout,
     width,
   });
+  const fullscreenLayout = useMemo(
+    () => (!windowMode && fullscreenPaneId
+      ? resolvePaneFullscreenLayout(visibleLayout, fullscreenPaneId)
+      : null),
+    [fullscreenPaneId, visibleLayout, windowMode],
+  );
+  const activeLayout = fullscreenLayout ?? windowModeLayout;
+
+  useEffect(() => {
+    if (!fullscreenPaneId) return;
+    if (windowMode || !isPaneInLayout(visibleLayout, fullscreenPaneId)) {
+      setFullscreenPaneId(null);
+    }
+  }, [fullscreenPaneId, visibleLayout, windowMode]);
 
   const {
     dockedPanes,
@@ -211,6 +230,19 @@ export function Shell({
     visibleLayout,
     width,
   });
+  const toggleFocusedPaneFullscreen = useCallback(() => {
+    if (!focusedPaneId || !isPaneInLayout(visibleLayout, focusedPaneId)) {
+      pluginRegistry.notify({ body: "Focus a pane to make it fullscreen", type: "info" });
+      return false;
+    }
+
+    closePaneMenu();
+    const nextFullscreenPaneId = fullscreenPaneIdRef.current === focusedPaneId ? null : focusedPaneId;
+    fullscreenPaneIdRef.current = nextFullscreenPaneId;
+    setFullscreenPaneId(nextFullscreenPaneId);
+    focusPane(focusedPaneId);
+    return true;
+  }, [closePaneMenu, focusedPaneId, focusPane, pluginRegistry, visibleLayout]);
 
   useShellPaneManagementShortcuts({
     cancelActiveDrag,
@@ -226,6 +258,7 @@ export function Shell({
     overlayOpen,
     popOutFocusedPane,
     startWindowMode,
+    toggleFocusedPaneFullscreen,
     toggleFocusedPaneFloating,
   });
 
@@ -392,6 +425,7 @@ export function Shell({
         dockLeafLayouts={dockLeafLayouts}
         dragFloatingRect={dragFloatingRect}
         focusedPaneId={focusedPaneId}
+        fullscreenPaneId={fullscreenLayout ? fullscreenPaneId : null}
         getPaneTitle={getPaneTitle}
         handleFloatingClose={handleFloatingClose}
         handleFloatingCloseMouseDown={handleFloatingCloseMouseDown}

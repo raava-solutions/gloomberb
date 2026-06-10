@@ -30,6 +30,7 @@ interface ShellPaneLayersProps {
   dockLeafLayouts: DockLeafLayout[];
   dragFloatingRect: { paneId: string; rect: FloatingRect } | null;
   focusedPaneId: string | null;
+  fullscreenPaneId: string | null;
   getPaneTitle: (pane: ResolvedPane) => string;
   handleFloatingClose: (paneId: string) => void;
   handleFloatingCloseMouseDown: (paneId: string, event: any) => void;
@@ -61,6 +62,7 @@ export function ShellPaneLayers({
   dockLeafLayouts,
   dragFloatingRect,
   focusedPaneId,
+  fullscreenPaneId,
   getPaneTitle,
   handleFloatingClose,
   handleFloatingCloseMouseDown,
@@ -90,6 +92,7 @@ export function ShellPaneLayers({
         const pane = paneMap.get(leaf.instanceId);
         if (!pane) return null;
         const focused = focusedPaneId === leaf.instanceId && (!overlayOpen || menuPaneId === leaf.instanceId);
+        const fullscreen = fullscreenPaneId === leaf.instanceId;
         const windowModeSelected = windowModePaneId === leaf.instanceId;
         const showActions = focused || hoveredPaneId === leaf.instanceId || menuPaneId === leaf.instanceId;
         return (
@@ -122,9 +125,9 @@ export function ShellPaneLayers({
                     footer={footer}
                     onMouseDown={nativePaneChrome ? (event) => handleNativePaneMouseDown(leaf.instanceId, event) : undefined}
                     onMouseMove={() => setHoveredPaneIfChanged(leaf.instanceId)}
-                    onHeaderMouseDown={nativePaneChrome ? (event) => startNativeDockedDrag(leaf.instanceId, leaf.rect, event) : undefined}
-                    onHeaderMouseDrag={nativePaneChrome ? handleNativeDrag : undefined}
-                    onHeaderMouseDragEnd={nativePaneChrome ? handleNativeDrag : undefined}
+                    onHeaderMouseDown={nativePaneChrome && !fullscreen ? (event) => startNativeDockedDrag(leaf.instanceId, leaf.rect, event) : undefined}
+                    onHeaderMouseDrag={nativePaneChrome && !fullscreen ? handleNativeDrag : undefined}
+                    onHeaderMouseDragEnd={nativePaneChrome && !fullscreen ? handleNativeDrag : undefined}
                     onHeaderContextMenu={nativePaneChrome && nativeContextMenu === true ? (event) => handleNativePaneContextMenu(leaf.instanceId, leaf.rect, event) : undefined}
                     onActionMouseDown={(event) => handlePaneAction(leaf.instanceId, leaf.rect, event)}
                   >

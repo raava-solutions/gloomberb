@@ -417,12 +417,53 @@ describe("Shell", () => {
     expect(resolvePaneManagementShortcut({ ...base, name: "o", key: "o" })).toBe("pop-out");
     expect(resolvePaneManagementShortcut({ ...base, name: "c", key: "c" })).toBe("copy-screenshot");
     expect(resolvePaneManagementShortcut({ ...base, name: "l", key: "l" })).toBe("layout-actions");
+    expect(resolvePaneManagementShortcut({ ...base, name: "f", key: "f" })).toBe("toggle-fullscreen");
     expect(resolvePaneManagementShortcut({ ...base, name: "g", key: "g" })).toBe("gridlock-all");
     expect(resolvePaneManagementShortcut({ ...base, name: "m", key: "m" })).toBe("window-mode");
     expect(resolvePaneManagementShortcut({ ...base, name: "r", key: "r" })).toBe("window-resize-mode");
     expect(resolvePaneManagementShortcut({ ...base, name: "n", key: "n" })).toBeNull();
     expect(resolvePaneManagementShortcut({ ...base, name: "d", key: "d", alt: true })).toBeNull();
     expect(resolvePaneManagementShortcut({ ...base, name: "d", key: "d", meta: false, super: false })).toBeNull();
+  });
+
+  test("toggles the focused pane fullscreen without persisting layout", async () => {
+    const config = createDefaultConfig("/tmp/gloomberb-shell-fullscreen-shortcut-test");
+    const mainPane = requireLayoutInstance(config, "portfolio-list:main");
+    const detailPane = requireLayoutInstance(config, "ticker-detail:main");
+    const dockedLayout = {
+      dockRoot: {
+        kind: "split" as const,
+        axis: "horizontal" as const,
+        ratio: 0.5,
+        first: { kind: "pane" as const, instanceId: "portfolio-list:main" },
+        second: { kind: "pane" as const, instanceId: "ticker-detail:main" },
+      },
+      instances: [{ ...mainPane }, { ...detailPane }],
+      floating: [],
+      detached: [],
+    };
+    const { actions } = await renderShellForWindowModeTest(
+      createShellStateWithLayout(config, dockedLayout, "portfolio-list:main"),
+      { width: 80, height: 18 },
+    );
+
+    expect(testSetup.captureCharFrame()).toContain("Main Portfolio");
+    expect(testSetup.captureCharFrame()).toContain("Ticker Research Body");
+
+    await emitKeypress({ name: "f", ctrl: true, shift: true });
+    let frame = testSetup.captureCharFrame();
+    expect(frame).toContain("Main Portfolio");
+    expect(frame).not.toContain("Ticker Research Body");
+    expect(actions.some((action) => action.type === "UPDATE_LAYOUT")).toBe(false);
+
+    await emitKeypress({ name: "f", ctrl: true, shift: true });
+    await act(async () => {
+      await testSetup!.renderOnce();
+    });
+    frame = testSetup.captureCharFrame();
+    expect(frame).toContain("Main Portfolio");
+    expect(frame).toContain("Ticker Research Body");
+    expect(actions.some((action) => action.type === "UPDATE_LAYOUT")).toBe(false);
   });
 
   test("exits window mode on Enter without changes", async () => {
