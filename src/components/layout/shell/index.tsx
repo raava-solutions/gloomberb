@@ -105,9 +105,9 @@ export function Shell({
     setHoveredPaneId((current) => (current === paneId ? current : paneId));
   }, []);
   const [menuState, setMenuState] = useState<ActionMenuState | null>(null);
-  const [fullscreenPaneId, setFullscreenPaneId] = useState<string | null>(null);
-  const fullscreenPaneIdRef = useRef<string | null>(null);
-  fullscreenPaneIdRef.current = fullscreenPaneId;
+  const [transientFocusPaneId, setTransientFocusPaneId] = useState<string | null>(null);
+  const transientFocusPaneIdRef = useRef<string | null>(null);
+  transientFocusPaneIdRef.current = transientFocusPaneId;
   const [hoveredMenuItemId, setHoveredMenuItemId] = useState<string | null>(null);
   const closePaneMenu = useCallback(() => {
     setMenuState(null);
@@ -176,20 +176,21 @@ export function Shell({
     visibleLayout,
     width,
   });
-  const fullscreenLayout = useMemo(
-    () => (!windowMode && fullscreenPaneId
-      ? resolvePaneFullscreenLayout(visibleLayout, fullscreenPaneId)
+  const transientFocusLayout = useMemo(
+    () => (!windowMode && transientFocusPaneId
+      ? resolvePaneFullscreenLayout(visibleLayout, transientFocusPaneId)
       : null),
-    [fullscreenPaneId, visibleLayout, windowMode],
+    [transientFocusPaneId, visibleLayout, windowMode],
   );
-  const activeLayout = fullscreenLayout ?? windowModeLayout;
+  const transientFocusActive = !!transientFocusLayout;
+  const activeLayout = transientFocusLayout ?? windowModeLayout;
 
   useEffect(() => {
-    if (!fullscreenPaneId) return;
-    if (windowMode || !isPaneInLayout(visibleLayout, fullscreenPaneId)) {
-      setFullscreenPaneId(null);
+    if (!transientFocusPaneId) return;
+    if (windowMode || !isPaneInLayout(visibleLayout, transientFocusPaneId)) {
+      setTransientFocusPaneId(null);
     }
-  }, [fullscreenPaneId, visibleLayout, windowMode]);
+  }, [transientFocusPaneId, visibleLayout, windowMode]);
 
   const {
     dockedPanes,
@@ -237,9 +238,9 @@ export function Shell({
     }
 
     closePaneMenu();
-    const nextFullscreenPaneId = fullscreenPaneIdRef.current === focusedPaneId ? null : focusedPaneId;
-    fullscreenPaneIdRef.current = nextFullscreenPaneId;
-    setFullscreenPaneId(nextFullscreenPaneId);
+    const nextTransientFocusPaneId = transientFocusPaneIdRef.current === focusedPaneId ? null : focusedPaneId;
+    transientFocusPaneIdRef.current = nextTransientFocusPaneId;
+    setTransientFocusPaneId(nextTransientFocusPaneId);
     focusPane(focusedPaneId);
     return true;
   }, [closePaneMenu, focusedPaneId, focusPane, pluginRegistry, visibleLayout]);
@@ -383,6 +384,7 @@ export function Shell({
     setHoveredMenuItemId,
     setMenuState,
     snapGuides,
+    transientFocusActive,
     updateWindowModePreviewLayout,
     visibleFloatingPanes,
     visibleLayout,
@@ -425,7 +427,6 @@ export function Shell({
         dockLeafLayouts={dockLeafLayouts}
         dragFloatingRect={dragFloatingRect}
         focusedPaneId={focusedPaneId}
-        fullscreenPaneId={fullscreenLayout ? fullscreenPaneId : null}
         getPaneTitle={getPaneTitle}
         handleFloatingClose={handleFloatingClose}
         handleFloatingCloseMouseDown={handleFloatingCloseMouseDown}
@@ -444,6 +445,7 @@ export function Shell({
         startNativeDockedDrag={startNativeDockedDrag}
         startNativeFloatingDrag={startNativeFloatingDrag}
         startNativeFloatResize={startNativeFloatResize}
+        transientFocusActive={transientFocusActive}
         visibleFloatingPanes={visibleFloatingPanes}
         width={width}
         windowModeDockResizePathKey={windowModeDockResizePathKey}

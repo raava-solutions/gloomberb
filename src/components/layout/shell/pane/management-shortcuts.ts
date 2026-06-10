@@ -56,8 +56,11 @@ export function useShellPaneManagementShortcuts({
 
   useShortcut((event) => {
     const shortcut = resolvePaneManagementShortcut(event);
-    if (shortcut === "toggle-fullscreen" && !hasActiveDrag() && !overlayOpen) {
+    if (shortcut === "toggle-fullscreen" && !overlayOpen) {
       if (!inputCaptured || inputCaptureAllowsPaneManagementShortcut(shortcut, event)) {
+        if (hasActiveDrag()) {
+          cancelActiveDrag();
+        }
         if (toggleFocusedPaneFullscreen()) {
           event.preventDefault();
           event.stopPropagation();
