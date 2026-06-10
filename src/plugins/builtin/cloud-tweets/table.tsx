@@ -6,6 +6,7 @@ import {
   usePaneFooter,
   type DataTableCell,
   type DataTableKeyEvent,
+  type DataTableRootKeyContext,
 } from "../../../components";
 import { TickerBadgeText } from "../../../components/ticker/badge/text";
 import { RemoteImage } from "../../../components/ui";
@@ -15,6 +16,7 @@ import type { CloudTweetPayload, CloudTweetSearchResponse } from "../../../api-c
 import { formatTimeAgo } from "../../../utils/format";
 import { colors } from "../../../theme/colors";
 import { CloudAuthNotice } from "../cloud/auth-actions";
+import { isPlainArrowUp, stopSearchFocusNavigation } from "../../../utils/search-focus-navigation";
 import {
   buildTweetColumns,
   formatMetric,
@@ -152,6 +154,7 @@ export function TweetSearchTable({
   load,
   onResult,
   onError,
+  onFocusSearch,
   emptyStateTitle,
   emptyStateHint,
 }: {
@@ -165,6 +168,7 @@ export function TweetSearchTable({
   load: () => Promise<CloudTweetSearchResponse>;
   onResult?: (result: CloudTweetSearchResponse) => void;
   onError?: (message: string) => void;
+  onFocusSearch?: () => void;
   emptyStateTitle?: string;
   emptyStateHint?: string;
 }) {
@@ -219,13 +223,21 @@ export function TweetSearchTable({
     ));
   }, []);
 
-  const handleRootKeyDown = useCallback((event: DataTableKeyEvent) => {
+  const handleRootKeyDown = useCallback((
+    event: DataTableKeyEvent,
+    context: DataTableRootKeyContext,
+  ) => {
+    if (onFocusSearch && context.selectedIndex <= 0 && isPlainArrowUp(event)) {
+      stopSearchFocusNavigation(event);
+      onFocusSearch();
+      return true;
+    }
     if (event.name !== "r") return false;
     event.preventDefault?.();
     event.stopPropagation?.();
     reload();
     return true;
-  }, [reload]);
+  }, [onFocusSearch, reload]);
 
   const handleDetailKeyDown = useCallback((event: DataTableKeyEvent) => {
     if (event.name !== "o") return false;
