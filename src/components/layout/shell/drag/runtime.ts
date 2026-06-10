@@ -6,6 +6,7 @@ import {
   type MutableRefObject,
   type SetStateAction,
 } from "react";
+import { useRafCallback } from "../../../../react/use-raf-callback";
 import {
   type DockDividerLayout,
   type DockGeometryOptions,
@@ -92,17 +93,26 @@ export function useShellDragRuntimeState({
 }): ShellDragRuntimeState {
   const dragRef = useRef<DragMode | null>(null);
   const [dragFloatingRect, setDragFloatingRect] = useState<{ paneId: string; rect: FloatingRect } | null>(null);
+  const pendingDragFloatingRectRef = useRef<{ paneId: string; rect: FloatingRect } | null>(null);
   const [dragCursor, setDragCursor] = useState<{ x: number; y: number } | null>(null);
   const [dividerPreview, setDividerPreview] = useState<DividerPreviewState | null>(null);
   const [dockPreview, setDockPreview] = useState<DragPreview | null>(null);
   const dividerPreviewRef = useRef<DividerPreviewState | null>(null);
   const dockPreviewRef = useRef<DragPreview | null>(null);
+  const flushDragFloatingRect = useRafCallback(() => {
+    setDragFloatingRect(pendingDragFloatingRectRef.current);
+  });
 
   const updateDragFloatingRect = useCallback((next: { paneId: string; rect: FloatingRect } | null) => {
-    setDragFloatingRect(next
+    pendingDragFloatingRectRef.current = next
       ? { paneId: next.paneId, rect: constrainFloatingRectToBounds(next.rect, width, contentHeight) }
-      : null);
-  }, [contentHeight, width]);
+      : null;
+    if (!next) {
+      setDragFloatingRect(null);
+      return;
+    }
+    flushDragFloatingRect();
+  }, [contentHeight, flushDragFloatingRect, width]);
 
   const updateDividerPreview = useCallback((next: DividerPreviewState | null) => {
     dividerPreviewRef.current = next;

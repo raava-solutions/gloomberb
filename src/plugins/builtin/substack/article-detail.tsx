@@ -1,4 +1,4 @@
-import { useCallback, type RefObject } from "react";
+import { memo, useCallback, useMemo, type RefObject } from "react";
 import { Box, ScrollBox, Text, TextAttributes, useRendererHost, type ScrollBoxRenderable } from "../../../ui";
 import { Spinner } from "../../../components";
 import { RemoteImage } from "../../../components/ui";
@@ -251,7 +251,7 @@ function ArticleBlockView({
   }
 }
 
-function ArticleRichContent({
+const ArticleRichContent = memo(function ArticleRichContent({
   blocks,
   fallbackText,
   fallbackImageUrls,
@@ -269,14 +269,20 @@ function ArticleRichContent({
   imageHeight: number;
 }) {
   const rendererHost = useRendererHost();
-  const resolvedBlocks = blocks.length > 0
-    ? blocks
-    : [
-      ...(fallbackText ? [{ type: "paragraph" as const, text: fallbackText }] : []),
-      ...fallbackImageUrls.map((url): SubstackContentBlock => ({ type: "image", url, alt: articleTitle })),
-    ];
-  const tickerText = resolvedBlocks.map(articleBlockText).filter(Boolean).join("\n");
-  const { catalog, openTicker } = useInlineTickers([tickerText], { liveQuotes: false });
+  const resolvedBlocks = useMemo(() => (
+    blocks.length > 0
+      ? blocks
+      : [
+        ...(fallbackText ? [{ type: "paragraph" as const, text: fallbackText }] : []),
+        ...fallbackImageUrls.map((url): SubstackContentBlock => ({ type: "image", url, alt: articleTitle })),
+      ]
+  ), [articleTitle, blocks, fallbackImageUrls, fallbackText]);
+  const tickerText = useMemo(
+    () => resolvedBlocks.map(articleBlockText).filter(Boolean).join("\n"),
+    [resolvedBlocks],
+  );
+  const tickerTexts = useMemo(() => [tickerText], [tickerText]);
+  const { catalog, openTicker } = useInlineTickers(tickerTexts, { liveQuotes: false });
   const openLink = useCallback((url: string) => {
     void rendererHost.openExternal(url);
   }, [rendererHost]);
@@ -307,9 +313,9 @@ function ArticleRichContent({
       ))}
     </Box>
   );
-}
+});
 
-export function ArticleDetail({
+export const ArticleDetail = memo(function ArticleDetail({
   article,
   detail,
   width,
@@ -356,4 +362,4 @@ export function ArticleDetail({
       </Box>
     </ScrollBox>
   );
-}
+});
