@@ -1,6 +1,7 @@
 import { useCallback, type RefObject } from "react";
 import { type ScrollBoxRenderable } from "../../../ui";
 import { useShortcut } from "../../../react/input";
+import { isPlainArrowDown, stopSearchFocusNavigation } from "../../../utils/search-focus-navigation";
 import { getAdjacentPredictionCategoryId } from "../categories";
 import { resolvePredictionKeyboardCommand } from "../keyboard";
 import { getAdjacentPredictionVenueScope } from "../navigation";
@@ -16,7 +17,14 @@ import type {
 interface PredictionKeyboardEvent {
   name?: string;
   sequence?: string;
+  ctrl?: boolean;
+  meta?: boolean;
+  super?: boolean;
+  alt?: boolean;
+  option?: boolean;
   shift?: boolean;
+  defaultPrevented?: boolean;
+  propagationStopped?: boolean;
   preventDefault?: () => void;
   stopPropagation?: () => void;
 }
@@ -62,6 +70,25 @@ export function usePredictionControllerKeyboard({
   setVenue,
   toggleWatchlist,
 }: UsePredictionControllerKeyboardParams) {
+  const handleSearchNavigation = useCallback(
+    (event: PredictionKeyboardEvent) => {
+      if (!focused || !searchFocused) return;
+
+      if (isPlainArrowDown(event)) {
+        stopSearchFocusNavigation(event);
+        blurSearch();
+        return;
+      }
+
+      if (resolvePredictionKeyboardCommand(event) === "escape") {
+        event.stopPropagation?.();
+        event.preventDefault?.();
+        blurSearch();
+      }
+    },
+    [blurSearch, focused, searchFocused],
+  );
+
   const cycleDetailOutcome = useCallback(
     (direction: "previous" | "next") => {
       if (detailTab !== "overview" || sortedOutcomeMarkets.length === 0) {
@@ -98,15 +125,11 @@ export function usePredictionControllerKeyboard({
 
   const handleKeyboard = useCallback(
     (event: PredictionKeyboardEvent) => {
+      if (event.defaultPrevented || event.propagationStopped) return;
       if (!focused) return;
       const command = resolvePredictionKeyboardCommand(event);
 
       if (searchFocused) {
-        if (command === "escape") {
-          event.stopPropagation?.();
-          event.preventDefault?.();
-          blurSearch();
-        }
         return;
       }
 
@@ -215,6 +238,12 @@ export function usePredictionControllerKeyboard({
       toggleWatchlist,
     ],
   );
+
+  useShortcut(handleSearchNavigation, {
+    allowEditable: true,
+    enabled: focused && searchFocused,
+    phase: "before",
+  });
 
   useShortcut(handleKeyboard);
 }

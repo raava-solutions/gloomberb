@@ -15,6 +15,7 @@ import {
   Tabs,
   usePaneFooter,
   type DataTableKeyEvent,
+  type DataTableRootKeyContext,
 } from "../../../components";
 import { useShortcut } from "../../../react/input";
 import { usePaneSettingValue } from "../../../state/app/context";
@@ -23,6 +24,7 @@ import { TICKER_RESEARCH_PANE_ID } from "../../../types/config";
 import type { PaneProps } from "../../../types/plugin";
 import { isDetailBackNavigationKey } from "../../../utils/back-navigation";
 import { isPlainKey } from "../../../utils/keyboard";
+import { isPlainArrowUp, stopSearchFocusNavigation } from "../../../utils/search-focus-navigation";
 import { truncateWithEllipsis } from "../../../utils/text-wrap";
 import { usePluginPaneState, usePluginTickerActions } from "../../runtime";
 import { loadBrowserRows, loadFilingPositions, loadFundDetail } from "./data";
@@ -303,6 +305,7 @@ export function ThirteenFPane({ focused, width, height }: PaneProps) {
         normalizeValue={trimSearchValue}
         onFocus={focusSearch}
         onBlur={blurSearch}
+        onNavigateDown={blurSearch}
         onQueryChange={updateQuery}
       />
     </Box>
@@ -312,7 +315,15 @@ export function ThirteenFPane({ focused, width, height }: PaneProps) {
     ? "Loading 13F funds..."
     : error ?? warning ?? "No 13F funds found.";
 
-  const handleRootKeyDown = useCallback((event: DataTableKeyEvent) => {
+  const handleRootKeyDown = useCallback((
+    event: DataTableKeyEvent,
+    context: DataTableRootKeyContext,
+  ) => {
+    if (context.selectedIndex <= 0 && isPlainArrowUp(event)) {
+      stopSearchFocusNavigation(event);
+      focusSearch();
+      return true;
+    }
     if (event.name === "r") {
       event.preventDefault?.();
       event.stopPropagation?.();
