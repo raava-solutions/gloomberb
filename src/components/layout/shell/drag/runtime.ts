@@ -178,6 +178,7 @@ interface UseShellPointerRuntimeOptions {
   setHoveredMenuItemId: Dispatch<SetStateAction<string | null>>;
   setMenuState: Dispatch<SetStateAction<ActionMenuState | null>>;
   snapGuides: ReturnType<typeof makeSnapGuides>;
+  transientFocusActive: boolean;
   updateWindowModePreviewLayout: (nextLayout: LayoutConfig, paneId?: string) => void;
   visibleFloatingPanes: VisibleFloatingPane[];
   visibleLayout: LayoutConfig;
@@ -208,6 +209,7 @@ export function useShellPointerRuntime({
   setHoveredMenuItemId,
   setMenuState,
   snapGuides,
+  transientFocusActive,
   updateWindowModePreviewLayout,
   visibleFloatingPanes,
   visibleLayout,
@@ -251,6 +253,7 @@ export function useShellPointerRuntime({
     selectWindowModePane,
     setHoveredMenuItemId,
     setMenuState,
+    transientFocusActive,
     visibleFloatingPanes,
     width,
     windowMode,
@@ -268,6 +271,7 @@ export function useShellPointerRuntime({
     selectWindowModePane,
     setHoveredMenuItemId,
     setMenuState,
+    transientFocusActive,
     windowMode,
   });
 

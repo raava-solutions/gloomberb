@@ -14,6 +14,7 @@ import {
   resolveAppHeaderHeightCells,
   Shell,
 } from "./index";
+import { resolvePaneFullscreenLayout } from "./fullscreen";
 
 let testSetup: Awaited<ReturnType<typeof testRender>> | undefined;
 
@@ -463,6 +464,56 @@ describe("Shell", () => {
     frame = testSetup.captureCharFrame();
     expect(frame).toContain("Main Portfolio");
     expect(frame).toContain("Ticker Research Body");
+    expect(actions.some((action) => action.type === "UPDATE_LAYOUT")).toBe(false);
+  });
+
+  test("builds fullscreen as a transient one-pane layout", () => {
+    const config = createDefaultConfig("/tmp/gloomberb-shell-fullscreen-layout-test");
+    const layout = cloneLayout(config.layout);
+    layout.dockRoot = { kind: "pane", instanceId: "portfolio-list:main" };
+    layout.floating = [{ instanceId: "ticker-detail:main", x: 8, y: 2, width: 32, height: 10, zIndex: 75 }];
+
+    const focusedLayout = resolvePaneFullscreenLayout(layout, "ticker-detail:main");
+
+    expect(focusedLayout).toMatchObject({
+      dockRoot: { kind: "pane", instanceId: "ticker-detail:main" },
+      floating: [],
+      detached: [],
+    });
+    expect(focusedLayout?.instances.map((instance) => instance.instanceId)).toEqual(["ticker-detail:main"]);
+  });
+
+  test("locks layout-changing mouse drags while fullscreen is active", async () => {
+    const config = createDefaultConfig("/tmp/gloomberb-shell-fullscreen-drag-test");
+    const mainPane = requireLayoutInstance(config, "portfolio-list:main");
+    const detailPane = requireLayoutInstance(config, "ticker-detail:main");
+    const dockedLayout = {
+      dockRoot: {
+        kind: "split" as const,
+        axis: "horizontal" as const,
+        ratio: 0.5,
+        first: { kind: "pane" as const, instanceId: "portfolio-list:main" },
+        second: { kind: "pane" as const, instanceId: "ticker-detail:main" },
+      },
+      instances: [{ ...mainPane }, { ...detailPane }],
+      floating: [],
+      detached: [],
+    };
+    const { actions } = await renderShellForWindowModeTest(
+      createShellStateWithLayout(config, dockedLayout, "portfolio-list:main"),
+      { width: 80, height: 18 },
+    );
+
+    await emitKeypress({ name: "f", ctrl: true, shift: true });
+    await act(async () => {
+      await testSetup!.mockMouse.drag(4, 0, 32, 4);
+      await testSetup!.renderOnce();
+      await testSetup!.renderOnce();
+    });
+
+    const frame = testSetup.captureCharFrame();
+    expect(frame).toContain("Main Portfolio");
+    expect(frame).not.toContain("Ticker Research Body");
     expect(actions.some((action) => action.type === "UPDATE_LAYOUT")).toBe(false);
   });
 
