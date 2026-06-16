@@ -112,6 +112,7 @@ describe("resolvePortfolioAccountState", () => {
           currency: "USD",
           source: "flex",
           updatedAt: new Date("2026-05-15T05:02:17.000Z").getTime(),
+          asOfDate: "2026-05-14",
           netLiquidation: 123456,
         }],
       },
@@ -121,6 +122,63 @@ describe("resolvePortfolioAccountState", () => {
     });
 
     expect(accountState?.account.netLiquidation).toBe(123456);
-    expect(accountState?.sourceLabel).toBe("Flex May 15");
+    expect(accountState?.sourceLabel).toBe("Flex May 14");
   });
+
+  test("uses the account as-of date when choosing the freshest cached Flex account", () => {
+    const accountState = resolvePortfolioAccountState({
+      id: "broker:ibkr-old:U12345",
+      name: "U12345",
+      currency: "USD",
+      brokerId: "ibkr",
+      brokerInstanceId: "ibkr-old",
+      brokerAccountId: "U12345",
+    }, {
+      config: {
+        brokerInstances: [
+          {
+            id: "ibkr-old",
+            label: "IBKR Old",
+            brokerType: "ibkr",
+            enabled: true,
+            config: {},
+          },
+          {
+            id: "ibkr-new",
+            label: "IBKR New",
+            brokerType: "ibkr",
+            enabled: true,
+            config: {},
+          },
+        ],
+      } as any,
+      brokerAccounts: {
+        "ibkr-old": [{
+          accountId: "U12345",
+          name: "U12345",
+          currency: "USD",
+          source: "flex",
+          updatedAt: new Date("2026-06-16T10:00:00.000Z").getTime(),
+          asOfDate: "2026-06-15",
+          netLiquidation: 100000,
+        }],
+        "ibkr-new": [{
+          accountId: "U12345",
+          name: "U12345",
+          currency: "USD",
+          source: "flex",
+          updatedAt: new Date("2026-06-15T10:00:00.000Z").getTime(),
+          asOfDate: "2026-06-16",
+          netLiquidation: 200000,
+        }],
+      },
+    }, {
+      status: null,
+      accounts: [],
+    });
+
+    expect(accountState?.account.netLiquidation).toBe(200000);
+    expect(accountState?.sourceLabel).toBe("Flex Jun 16");
+  });
+
 });

@@ -7,7 +7,7 @@ import { formatCompact, formatNumber, formatPercentRaw } from "../../../utils/fo
 import { formatRelativeAge } from "../../../utils/relative-time";
 import { instrumentFromTicker, type ChartRequest } from "../../../market-data/request-types";
 import { buildChartKey } from "../../../market-data/selectors";
-import { resolvePortfolioAccountMetrics } from "../portfolio-list/account-metrics";
+import { resolvePortfolioAccountMetrics, resolvePortfolioMarketValue } from "../portfolio-list/account-metrics";
 import type { ColumnContext, PortfolioSummaryTotals } from "../portfolio-list/metrics";
 import type { ResolvedPortfolioAccountState } from "../portfolio-list/summary";
 import { performancePointValue } from "./broker-performance";
@@ -37,6 +37,22 @@ export type ChartEntryLookup = Map<string, {
   data?: PricePoint[] | null;
   lastGoodData?: PricePoint[] | null;
 } | undefined>;
+
+function formatIsoDateMonthDay(value: string): string {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return value;
+  const [, year, month, day] = match;
+  return new Date(Number(year), Number(month) - 1, Number(day)).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function formatAccountFreshness(account: ResolvedPortfolioAccountState["account"] | undefined): string | null {
+  if (!account) return null;
+  if (account.asOfDate) return formatIsoDateMonthDay(account.asOfDate);
+  return account.updatedAt ? formatRelativeAge(account.updatedAt) : null;
+}
 
 export function buildPortfolioChartTargets(portfolioTickers: TickerRecord[]): PortfolioChartTarget[] {
   return portfolioTickers.flatMap((ticker) => {
@@ -96,7 +112,6 @@ export function buildBenchmarkReturnSeries(
 
 export function buildAnalyticsSummaryRows({
   accountState,
-  activePortfolio,
   brokerPerformance,
   portfolioStats,
 }: {
@@ -108,7 +123,7 @@ export function buildAnalyticsSummaryRows({
   const rows: AnalyticsMetricRow[] = [];
   const account = accountState?.account;
   const accountMetrics = resolvePortfolioAccountMetrics(portfolioStats, account);
-  const syncedAt = activePortfolio?.lastSyncedAt ?? account?.updatedAt;
+  const accountFreshness = formatAccountFreshness(account);
 
   if (account?.netLiquidation != null) {
     rows.push({
@@ -122,7 +137,7 @@ export function buildAnalyticsSummaryRows({
   rows.push({
     id: "total-value",
     label: "Val",
-    value: formatCompact(portfolioStats.totalMktValue),
+    value: formatCompact(resolvePortfolioMarketValue(portfolioStats, account)),
     color: colors.text,
   });
 
@@ -202,11 +217,11 @@ export function buildAnalyticsSummaryRows({
     });
   }
   if (accountState) {
-    if (syncedAt) {
+    if (accountFreshness) {
       rows.push({
-        id: "last-sync",
-        label: "Synced",
-        value: formatRelativeAge(syncedAt),
+        id: "account-freshness",
+        label: "As Of",
+        value: accountFreshness,
         color: colors.textDim,
       });
     }
