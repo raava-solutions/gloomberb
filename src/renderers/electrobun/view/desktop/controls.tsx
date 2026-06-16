@@ -84,6 +84,7 @@ export function WebTextField({
   inputRef,
   onChange,
   onSubmit,
+  onBlur,
   hint,
   type = "text",
   variant = "default",
@@ -155,7 +156,12 @@ export function WebTextField({
           }}
           onInput={onChange}
           onChange={onChange}
-          onSubmit={() => onSubmit?.(value ?? resolvedInputRef.current?.editBuffer.getText() ?? "")}
+          onSubmit={(nextValue?: string) => onSubmit?.(
+            typeof nextValue === "string" ? nextValue : resolvedInputRef.current?.editBuffer.getText() ?? value ?? "",
+          )}
+          onBlur={(nextValue?: string) => onBlur?.(
+            typeof nextValue === "string" ? nextValue : resolvedInputRef.current?.editBuffer.getText() ?? value ?? "",
+          )}
         />
       </Box>
       {hint && (
@@ -370,7 +376,7 @@ export function WebPageStackView({
           flexDirection="row"
           alignItems="center"
           backgroundColor={panelFill()}
-          onMouseDown={(event) => {
+          onMouseDown={(event: { preventDefault?: () => void; stopPropagation?: () => void }) => {
             event.preventDefault?.();
             event.stopPropagation?.();
             onBack();

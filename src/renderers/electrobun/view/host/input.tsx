@@ -2,12 +2,14 @@
 /** @jsxImportSource react */
 import {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useRef,
   useState,
   type CSSProperties,
   type KeyboardEvent,
+  type RefObject,
 } from "react";
 import type { InputRenderable, TextareaRenderable } from "../../../../ui/host";
 import { WEB_CELL_HEIGHT, WEB_CELL_WIDTH } from "../input-host";
@@ -77,6 +79,65 @@ function useEditableValue(props: Record<string, unknown>) {
   };
 
   return { value, valueRef, setValue };
+}
+
+function useLatestRef<T>(value: T): RefObject<T> {
+  const ref = useRef(value);
+  ref.current = value;
+  return ref;
+}
+
+function useSyncedEditableElement<T extends HTMLInputElement | HTMLTextAreaElement>({
+  elementRef,
+  propsRef,
+  valueRef,
+  handleValueChange,
+  active,
+}: {
+  elementRef: RefObject<T | null>;
+  propsRef: RefObject<Record<string, unknown>>;
+  valueRef: RefObject<string>;
+  handleValueChange: (nextValue: string) => void;
+  active: boolean;
+}): () => string {
+  const syncElementValue = useCallback(() => {
+    const nextValue = elementRef.current?.value;
+    if (typeof nextValue !== "string") return valueRef.current;
+    if (nextValue !== valueRef.current) {
+      handleValueChange(nextValue);
+    }
+    return nextValue;
+  }, [elementRef, handleValueChange, valueRef]);
+
+  useEffect(() => {
+    if (!active) return;
+    let animationFrame: number | null = null;
+    const syncDomValue = () => {
+      syncElementValue();
+      animationFrame = globalThis.requestAnimationFrame?.(syncDomValue) ?? null;
+    };
+    animationFrame = globalThis.requestAnimationFrame?.(syncDomValue) ?? null;
+    return () => {
+      if (animationFrame !== null) globalThis.cancelAnimationFrame?.(animationFrame);
+    };
+  }, [active, syncElementValue]);
+
+  useEffect(() => {
+    if (!active) return;
+    const commitBeforeOutsideMouseDown = (event: globalThis.MouseEvent) => {
+      const element = elementRef.current;
+      const target = event.target;
+      if (!element || (target instanceof Node && element.contains(target))) return;
+      const nextValue = syncElementValue();
+      callTextHandler(propsRef.current.onBlur, nextValue);
+    };
+    document.addEventListener("mousedown", commitBeforeOutsideMouseDown, true);
+    return () => {
+      document.removeEventListener("mousedown", commitBeforeOutsideMouseDown, true);
+    };
+  }, [active, elementRef, propsRef, syncElementValue]);
+
+  return syncElementValue;
 }
 
 type WebVisualCursor = TextareaRenderable["visualCursor"];
@@ -149,8 +210,10 @@ function textareaMetrics(
 
 export const WebInput = forwardRef<InputRenderable, Record<string, unknown>>(function WebInput(props, ref) {
   const elementRef = useRef<HTMLInputElement | null>(null);
+  const propsRef = useLatestRef(props);
   const { value, valueRef, setValue } = useEditableValue(props);
   const [cursorOffset, setCursorOffset] = useState(value.length);
+  const [domFocused, setDomFocused] = useState(false);
   const applyCursorOffset = (offset: number) => {
     setCursorOffset(offset);
     queueMicrotask(() => applyDomCursorOffset(elementRef.current, offset));
@@ -165,7 +228,7 @@ export const WebInput = forwardRef<InputRenderable, Record<string, unknown>>(fun
 
   useImperativeHandle(ref, () => ({
     editBuffer: {
-      getText: () => valueRef.current,
+      getText: () => elementRef.current?.value ?? valueRef.current,
       setText: (nextText: string) => setValue(nextText),
     },
     get cursorOffset() {
@@ -175,18 +238,25 @@ export const WebInput = forwardRef<InputRenderable, Record<string, unknown>>(fun
     focus: () => elementRef.current?.focus(),
   }), [applyCursorOffset, cursorOffset, setValue, valueRef]);
 
-  const handleValueChange = (nextValue: string) => {
+  const handleValueChange = useCallback((nextValue: string) => {
     setValue(nextValue);
     setCursorOffset(elementRef.current?.selectionStart ?? nextValue.length);
-    callTextHandler(props.onInput, nextValue);
-    callTextHandler(props.onChange, nextValue);
-    callTextHandler(props.onCursorChange, nextValue);
-  };
+    callTextHandler(propsRef.current.onInput, nextValue);
+    callTextHandler(propsRef.current.onChange, nextValue);
+    callTextHandler(propsRef.current.onCursorChange, nextValue);
+  }, [propsRef, setValue]);
+  const syncElementValue = useSyncedEditableElement({
+    elementRef,
+    propsRef,
+    valueRef,
+    handleValueChange,
+    active: props.focused === true || domFocused,
+  });
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Enter" && typeof props.onSubmit === "function") {
+    if (event.key === "Enter" && typeof propsRef.current.onSubmit === "function") {
       event.preventDefault();
-      (props.onSubmit as (value: string) => void)(valueRef.current);
+      (propsRef.current.onSubmit as (value: string) => void)(syncElementValue());
     }
   };
 
@@ -200,7 +270,16 @@ export const WebInput = forwardRef<InputRenderable, Record<string, unknown>>(fun
       autoComplete="off"
       spellCheck={false}
       placeholder={getStringProp(props, "placeholder")}
+      onInput={(event) => handleValueChange(event.currentTarget.value)}
       onChange={(event) => handleValueChange(event.currentTarget.value)}
+      onFocus={() => {
+        setDomFocused(true);
+        callTextHandler(propsRef.current.onFocus, elementRef.current?.value ?? valueRef.current);
+      }}
+      onBlur={() => {
+        setDomFocused(false);
+        callTextHandler(propsRef.current.onBlur, syncElementValue());
+      }}
       onKeyDown={handleKeyDown}
       onContextMenu={(event) => {
         if (!NATIVE_CONTEXT_MENU_SUPPORTED) return;
@@ -211,7 +290,7 @@ export const WebInput = forwardRef<InputRenderable, Record<string, unknown>>(fun
       }}
       onSelect={() => {
         setCursorOffset(elementRef.current?.selectionStart ?? valueRef.current.length);
-        callTextHandler(props.onCursorChange, valueRef.current);
+        callTextHandler(propsRef.current.onCursorChange, valueRef.current);
       }}
       style={textInputStyle(props, false)}
     />
@@ -220,8 +299,10 @@ export const WebInput = forwardRef<InputRenderable, Record<string, unknown>>(fun
 
 export const WebTextarea = forwardRef<TextareaRenderable, Record<string, unknown>>(function WebTextarea(props, ref) {
   const elementRef = useRef<HTMLTextAreaElement | null>(null);
+  const propsRef = useLatestRef(props);
   const { value, valueRef, setValue } = useEditableValue(props);
   const [cursorOffset, setCursorOffset] = useState(value.length);
+  const [domFocused, setDomFocused] = useState(false);
   const applyCursorOffset = (offset: number) => {
     setCursorOffset(offset);
     queueMicrotask(() => applyDomCursorOffset(elementRef.current, offset));
@@ -236,7 +317,7 @@ export const WebTextarea = forwardRef<TextareaRenderable, Record<string, unknown
 
   useImperativeHandle(ref, () => ({
     editBuffer: {
-      getText: () => valueRef.current,
+      getText: () => elementRef.current?.value ?? valueRef.current,
       setText: (nextText: string) => setValue(nextText),
     },
     get cursorOffset() {
@@ -271,18 +352,25 @@ export const WebTextarea = forwardRef<TextareaRenderable, Record<string, unknown
     clearLineHighlights: () => {},
   }), [applyCursorOffset, cursorOffset, props, setValue, valueRef]);
 
-  const handleValueChange = (nextValue: string) => {
+  const handleValueChange = useCallback((nextValue: string) => {
     setValue(nextValue);
     setCursorOffset(elementRef.current?.selectionStart ?? nextValue.length);
-    callTextHandler(props.onInput, nextValue);
-    callTextHandler(props.onChange, nextValue);
-    callTextHandler(props.onCursorChange, nextValue);
-  };
+    callTextHandler(propsRef.current.onInput, nextValue);
+    callTextHandler(propsRef.current.onChange, nextValue);
+    callTextHandler(propsRef.current.onCursorChange, nextValue);
+  }, [propsRef, setValue]);
+  const syncElementValue = useSyncedEditableElement({
+    elementRef,
+    propsRef,
+    valueRef,
+    handleValueChange,
+    active: props.focused === true || domFocused,
+  });
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && !event.shiftKey && typeof props.onSubmit === "function") {
+    if (event.key === "Enter" && !event.shiftKey && typeof propsRef.current.onSubmit === "function") {
       event.preventDefault();
-      (props.onSubmit as (value: string) => void)(valueRef.current);
+      (propsRef.current.onSubmit as (value: string) => void)(syncElementValue());
     }
   };
 
@@ -296,7 +384,16 @@ export const WebTextarea = forwardRef<TextareaRenderable, Record<string, unknown
       autoComplete="off"
       spellCheck={false}
       placeholder={getStringProp(props, "placeholder")}
+      onInput={(event) => handleValueChange(event.currentTarget.value)}
       onChange={(event) => handleValueChange(event.currentTarget.value)}
+      onFocus={() => {
+        setDomFocused(true);
+        callTextHandler(propsRef.current.onFocus, elementRef.current?.value ?? valueRef.current);
+      }}
+      onBlur={() => {
+        setDomFocused(false);
+        callTextHandler(propsRef.current.onBlur, syncElementValue());
+      }}
       onKeyDown={handleKeyDown}
       onContextMenu={(event) => {
         if (!NATIVE_CONTEXT_MENU_SUPPORTED) return;
@@ -307,7 +404,7 @@ export const WebTextarea = forwardRef<TextareaRenderable, Record<string, unknown
       }}
       onSelect={() => {
         setCursorOffset(elementRef.current?.selectionStart ?? valueRef.current.length);
-        callTextHandler(props.onCursorChange, valueRef.current);
+        callTextHandler(propsRef.current.onCursorChange, valueRef.current);
       }}
       style={textInputStyle(props, true)}
     />

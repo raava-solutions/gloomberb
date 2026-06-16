@@ -12,6 +12,7 @@ export interface TextFieldProps {
   inputRef?: RefObject<InputRenderable | null>;
   onChange?: (value: string) => void;
   onSubmit?: (value: string) => void;
+  onBlur?: (value: string) => void;
   hint?: string;
   type?: "text" | "password";
   variant?: "default" | "plain";
@@ -36,6 +37,7 @@ export function TextField({
   inputRef,
   onChange,
   onSubmit,
+  onBlur,
   hint,
   type = "text",
   variant = "default",
@@ -56,6 +58,7 @@ export function TextField({
         inputRef={inputRef}
         onChange={onChange}
         onSubmit={onSubmit}
+        onBlur={onBlur}
         hint={hint}
         type={type}
         variant={variant}
@@ -118,17 +121,18 @@ export function TextField({
           selectionFg={isPassword ? backgroundColor : undefined}
           showCursor={!isPassword}
           onCursorChange={() => syncCursorOffset()}
-          onInput={(nextValue) => {
+          onInput={(nextValue: string) => {
             currentValueRef.current = nextValue;
             syncCursorOffset(nextValue);
             onChange?.(nextValue);
           }}
-          onChange={(nextValue) => {
+          onChange={(nextValue: string) => {
             currentValueRef.current = nextValue;
             syncCursorOffset(nextValue);
             onChange?.(nextValue);
           }}
           onSubmit={() => onSubmit?.(currentValueRef.current)}
+          onBlur={() => onBlur?.(currentValueRef.current)}
         />
         {isPassword && (
           <Box
@@ -178,11 +182,12 @@ function sanitizeNumberInput(value: string, allowDecimal: boolean, allowNegative
   return next;
 }
 
-export interface NumberFieldProps extends Omit<TextFieldProps, "onChange" | "onSubmit"> {
+export interface NumberFieldProps extends Omit<TextFieldProps, "onChange" | "onSubmit" | "onBlur"> {
   allowDecimal?: boolean;
   allowNegative?: boolean;
   onChange?: (value: string) => void;
   onSubmit?: (value: string) => void;
+  onBlur?: (value: string) => void;
 }
 
 export function NumberField({
@@ -190,6 +195,7 @@ export function NumberField({
   allowNegative = false,
   onChange,
   onSubmit,
+  onBlur,
   ...props
 }: NumberFieldProps) {
   return (
@@ -197,6 +203,7 @@ export function NumberField({
       {...props}
       onChange={(nextValue) => onChange?.(sanitizeNumberInput(nextValue, allowDecimal, allowNegative))}
       onSubmit={(nextValue) => onSubmit?.(sanitizeNumberInput(nextValue, allowDecimal, allowNegative))}
+      onBlur={(nextValue) => onBlur?.(sanitizeNumberInput(nextValue, allowDecimal, allowNegative))}
     />
   );
 }
