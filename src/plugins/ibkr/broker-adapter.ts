@@ -40,6 +40,25 @@ export const ibkrBroker: BrokerAdapter = {
     return importFlexPositions(normalized.flex);
   },
 
+  async importPortfolioSnapshot(instance) {
+    const normalized = normalizeIbkrConfig(instance.config);
+    if (normalized.connectionMode === "gateway") {
+      const service = ibkrGatewayManager.getService(instance.id);
+      await refreshGatewayData(instance);
+      const [accounts, positions] = await Promise.all([
+        service.getAccounts(normalized.gateway),
+        service.getPositions(normalized.gateway),
+      ]);
+      return { accounts, positions };
+    }
+
+    const xml = await loadFlexStatement(normalized.flex);
+    return {
+      accounts: parseFlexAccounts(xml),
+      positions: parseFlexPositions(xml),
+    };
+  },
+
   async connect(instance) {
     const normalized = normalizeIbkrConfig(instance.config);
     if (normalized.connectionMode !== "gateway") return;

@@ -124,7 +124,7 @@ export function loadPersistedBrokerAccountMap(
 
   for (const instance of brokerInstances) {
     const broker = brokers.get(instance.brokerType);
-    if (!broker?.listAccounts) continue;
+    if (!broker?.listAccounts && !broker?.importPortfolioSnapshot) continue;
     const accounts = loadPersistedBrokerAccounts(resources, instance, broker);
     if (!accounts || accounts.length === 0) continue;
     accountMap[instance.id] = accounts;

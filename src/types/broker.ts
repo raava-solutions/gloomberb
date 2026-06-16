@@ -85,6 +85,7 @@ export interface BrokerAdapter {
   readonly cachePolicy?: CachePolicyMap;
   validate(instance: BrokerInstanceConfig): Promise<boolean>;
   importPositions(instance: BrokerInstanceConfig): Promise<BrokerPosition[]>;
+  importPortfolioSnapshot?(instance: BrokerInstanceConfig): Promise<{ accounts: BrokerAccount[]; positions: BrokerPosition[] }>;
   configSchema: BrokerConfigField[];
   connect?(instance: BrokerInstanceConfig): Promise<void>;
   disconnect?(instance: BrokerInstanceConfig): Promise<void>;

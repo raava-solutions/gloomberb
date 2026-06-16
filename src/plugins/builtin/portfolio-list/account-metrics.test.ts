@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { BrokerAccount } from "../../../types/trading";
 import type { PortfolioSummaryTotals } from "./metrics";
-import { resolvePortfolioAccountMetrics } from "./account-metrics";
+import { resolvePortfolioAccountMetrics, resolvePortfolioMarketValue } from "./account-metrics";
 
 function createTotals(overrides: Partial<PortfolioSummaryTotals> = {}): PortfolioSummaryTotals {
   return {
@@ -46,5 +46,30 @@ describe("resolvePortfolioAccountMetrics", () => {
       unrealizedPnlPct: 25,
       realizedPnl: undefined,
     });
+  });
+});
+
+describe("resolvePortfolioMarketValue", () => {
+  test("uses explicit broker gross position value when available", () => {
+    const account: BrokerAccount = {
+      accountId: "DU12345",
+      name: "DU12345",
+      grossPositionValue: 12_345,
+      netLiquidation: 20_000,
+      totalCashValue: 7_000,
+    };
+
+    expect(resolvePortfolioMarketValue(createTotals({ totalMktValue: 10_000 }), account)).toBe(12_345);
+  });
+
+  test("does not derive market value from account cash and net liquidation", () => {
+    const account: BrokerAccount = {
+      accountId: "DU12345",
+      name: "DU12345",
+      netLiquidation: 20_000,
+      totalCashValue: 7_000,
+    };
+
+    expect(resolvePortfolioMarketValue(createTotals({ totalMktValue: 10_000 }), account)).toBe(10_000);
   });
 });

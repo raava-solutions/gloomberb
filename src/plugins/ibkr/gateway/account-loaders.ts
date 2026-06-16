@@ -96,7 +96,7 @@ export async function loadIbkrAccounts({
     const result = await firstValueFrom(
       api.getAccountSummary(
         "All",
-        "NetLiquidation,TotalCashValue,SettledCash,AvailableFunds,BuyingPower,ExcessLiquidity,InitMarginReq,MaintMarginReq,$LEDGER:ALL",
+        "NetLiquidation,GrossPositionValue,TotalCashValue,SettledCash,AvailableFunds,BuyingPower,ExcessLiquidity,InitMarginReq,MaintMarginReq,$LEDGER:ALL",
       )
         .pipe(take(1), timeout(10_000)),
     );

@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { buildIbkrConfigFromValues, normalizeIbkrConfig } from "./config";
+import {
+  buildIbkrConfigFromValues,
+  IBKR_STATEMENT_URL,
+  LEGACY_IBKR_STATEMENT_URL,
+  normalizeIbkrConfig,
+} from "./config";
 
 describe("ibkr config helpers", () => {
   test("builds nested manual gateway config from flat wizard values", () => {
@@ -45,6 +50,30 @@ describe("ibkr config helpers", () => {
     expect(config.gatewaySetupMode).toBe("auto");
     expect(config.flex.token).toBe("abc");
     expect(config.flex.queryId).toBe("123");
-    expect(config.flex.endpoint).toContain("FlexStatementService.SendRequest");
+    expect(config.flex.endpoint).toBe(IBKR_STATEMENT_URL);
+  });
+
+  test("migrates the legacy default Flex endpoint to the current IBKR endpoint", () => {
+    const config = normalizeIbkrConfig({
+      flex: {
+        token: "abc",
+        queryId: "123",
+        endpoint: LEGACY_IBKR_STATEMENT_URL,
+      },
+    });
+
+    expect(config.flex.endpoint).toBe(IBKR_STATEMENT_URL);
+  });
+
+  test("preserves custom non-default Flex endpoints", () => {
+    const config = normalizeIbkrConfig({
+      flex: {
+        token: "abc",
+        queryId: "123",
+        endpoint: "https://example.com/custom/SendRequest",
+      },
+    });
+
+    expect(config.flex.endpoint).toBe("https://example.com/custom/SendRequest");
   });
 });

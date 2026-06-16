@@ -294,6 +294,7 @@ export function PortfolioListPane({ focused, width, height }: PaneProps) {
 
   const summaryFooterInfo = useMemo(() => buildPortfolioFooterSegments({
     accountState: accountState ? { account: accountState.account, sourceLabel: accountState.sourceLabel } : null,
+    accountStatusText: isPortfolioTab && currentPortfolio?.brokerInstanceId && !accountState ? "Acct missing" : undefined,
     activeCollectionId,
     baseCurrency: config.baseCurrency,
     exchangeRates: effectiveExchangeRates,
@@ -306,6 +307,7 @@ export function PortfolioListPane({ focused, width, height }: PaneProps) {
   }), [
     accountState,
     activeCollectionId,
+    currentPortfolio?.brokerInstanceId,
     effectiveExchangeRates,
     financialsMap,
     isPortfolioTab,

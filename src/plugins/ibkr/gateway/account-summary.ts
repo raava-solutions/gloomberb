@@ -148,6 +148,7 @@ export function summarizeBrokerAccount(
     source: "gateway",
     updatedAt,
     netLiquidation: getAccountSummaryNumberWithAggregateFallback(tags, aggregateTags, "NetLiquidation", currency, allowAggregateCashBalances),
+    grossPositionValue: getAccountSummaryNumberWithAggregateFallback(tags, aggregateTags, "GrossPositionValue", currency, allowAggregateCashBalances),
     totalCashValue: getAccountSummaryNumberWithAggregateFallback(tags, aggregateTags, "TotalCashValue", currency, allowAggregateCashBalances),
     settledCash: getAccountSummaryNumberWithAggregateFallback(tags, aggregateTags, "SettledCash", currency, allowAggregateCashBalances),
     availableFunds: getAccountSummaryNumberWithAggregateFallback(tags, aggregateTags, "AvailableFunds", currency, allowAggregateCashBalances),
