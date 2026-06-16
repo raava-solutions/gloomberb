@@ -293,6 +293,7 @@ describe("PortfolioAnalyticsPane", () => {
               currency: "USD",
               source: "flex",
               updatedAt: new Date(2026, 2, 27).getTime(),
+              asOfDate: "2026-03-26",
               totalCashValue: -50000,
               settledCash: -45000,
               availableFunds: 15000,
@@ -326,8 +327,8 @@ describe("PortfolioAnalyticsPane", () => {
     expect(frame).toContain("Avail         15k");
     expect(frame).toContain("Excess        12k");
     expect(frame).toContain("BP            30k");
-    expect(frame).toContain("Synced        just now");
-    expect(frame).toContain("Source        Flex Mar 27");
+    expect(frame).toContain("As Of         Mar 26");
+    expect(frame).toContain("Source        Flex Mar 26");
   });
 
   test("falls back from a Gateway portfolio to a configured Flex profile for IBKR history", async () => {

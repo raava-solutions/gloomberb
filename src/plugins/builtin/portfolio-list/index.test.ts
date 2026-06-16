@@ -40,6 +40,7 @@ describe("buildPortfolioSummarySegments", () => {
     accountId: "DU12345",
     name: "DU12345",
     netLiquidation: 125000,
+    grossPositionValue: 175000,
     totalCashValue: -50000,
     settledCash: -45000,
     availableFunds: 12000,
@@ -55,6 +56,16 @@ describe("buildPortfolioSummarySegments", () => {
     });
 
     expect(segments.map((segment) => segment.id)).toEqual(["netliq", "val"]);
+  });
+
+  test("uses broker gross position value for broker portfolio value", () => {
+    const segments = buildPortfolioSummarySegments({
+      totals,
+      accountState: { account, sourceLabel: "Live" },
+      widthBudget: 80,
+    });
+
+    expect(segments.find((segment) => segment.id === "val")?.parts[1]?.text).toBe("175k");
   });
 
   test("drops low-priority broker segments before required ones", () => {
@@ -83,6 +94,18 @@ describe("buildPortfolioSummarySegments", () => {
     });
 
     expect(segments.map((segment) => segment.id)).toContain("source");
+  });
+
+  test("shows account status when a broker portfolio has positions but no account snapshot", () => {
+    const segments = buildPortfolioSummarySegments({
+      totals,
+      accountState: null,
+      accountStatusText: "Acct missing",
+      widthBudget: 80,
+    });
+
+    expect(segments.map((segment) => segment.id)).toContain("account-status");
+    expect(segments.find((segment) => segment.id === "account-status")?.parts[0]?.text).toBe("Acct missing");
   });
 
   test("treats c as the cash drawer shortcut only when the drawer is available", () => {

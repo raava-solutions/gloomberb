@@ -131,17 +131,30 @@ export async function syncBrokerInstance({
   const tickers = await loadTickerMap(tickerRepository, existingTickers);
 
   let brokerAccounts: BrokerAccount[] = [];
-  if (broker.listAccounts) {
-    try {
-      brokerAccounts = await broker.listAccounts(instance);
-      if (resources) {
-        try {
-          persistBrokerAccounts(resources, instance, broker, brokerAccounts);
-        } catch {}
-      }
-    } catch {
-      brokerAccounts = [];
+  let positions: BrokerPosition[];
+  if (broker.importPortfolioSnapshot) {
+    const snapshot = await broker.importPortfolioSnapshot(instance);
+    brokerAccounts = snapshot.accounts;
+    positions = snapshot.positions;
+    if (resources) {
+      try {
+        persistBrokerAccounts(resources, instance, broker, brokerAccounts);
+      } catch {}
     }
+  } else {
+    if (broker.listAccounts) {
+      try {
+        brokerAccounts = await broker.listAccounts(instance);
+        if (resources) {
+          try {
+            persistBrokerAccounts(resources, instance, broker, brokerAccounts);
+          } catch {}
+        }
+      } catch (error) {
+        throw error;
+      }
+    }
+    positions = await broker.importPositions(instance);
   }
 
   const accountMetadata = new Map(
@@ -154,7 +167,6 @@ export async function syncBrokerInstance({
     ]),
   );
 
-  const positions = await broker.importPositions(instance);
   const syncedAt = Date.now();
 
   let nextConfig = config;

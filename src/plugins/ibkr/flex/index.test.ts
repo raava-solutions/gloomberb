@@ -59,6 +59,10 @@ describe("parseFlexAccounts", () => {
               <FxPosition accountId="DU12345" assetCategory="CASH" functionalCurrency="USD" fxCurrency="USD" quantity="-303029.144938754" value="-303029.144938754" />
               <FxPosition accountId="DU12345" assetCategory="CASH" functionalCurrency="USD" fxCurrency="EUR" quantity="-351957.025" value="-405102.535775" />
             </FxPositions>
+            <OpenPositions>
+              <OpenPosition accountId="DU12345" symbol="AAPL" assetCategory="STK" position="100" currency="USD" positionValue="100000" fxRateToBase="1" />
+              <OpenPosition accountId="DU12345" symbol="ASML" assetCategory="STK" position="10" currency="EUR" positionValue="50000" fxRateToBase="1.2" />
+            </OpenPositions>
           </FlexStatement>
         </FlexStatements>
       </FlexQueryResponse>
@@ -71,7 +75,9 @@ describe("parseFlexAccounts", () => {
       name: "Main",
       currency: "USD",
       source: "flex",
+      asOfDate: "2026-03-27",
       netLiquidation: 764713.626876249,
+      grossPositionValue: 160000,
       totalCashValue: -1050953.720462251,
       settledCash: -917604.448220862,
       cashBalances: [
@@ -110,7 +116,9 @@ describe("parseFlexAccounts", () => {
         currency: "USD",
         source: "flex",
         updatedAt: new Date(2026, 2, 27).getTime(),
+        asOfDate: "2026-03-27",
         netLiquidation: 12345.67,
+        grossPositionValue: undefined,
         totalCashValue: undefined,
         settledCash: undefined,
         cashBalances: undefined,
@@ -190,9 +198,9 @@ describe("parseFlexPortfolioPerformance", () => {
 
 describe("requestFlexStatement", () => {
   test("uses the configured HTTP transport for statement requests", async () => {
-    const requests: string[] = [];
-    setHttpFetchTransport(async (url) => {
-      requests.push(url);
+    const requests: Array<{ url: string; init: RequestInit | undefined }> = [];
+    setHttpFetchTransport(async (url, init) => {
+      requests.push({ url, init });
       return new Response(
         "<FlexStatementResponse><ReferenceCode>987654</ReferenceCode></FlexStatementResponse>",
         { status: 200 },
@@ -202,16 +210,17 @@ describe("requestFlexStatement", () => {
     await expect(requestFlexStatement({
       token: "secret-flex-token",
       queryId: "12345",
-      endpoint: "https://gdcdyn.interactivebrokers.com/Universal/servlet/FlexStatementService.SendRequest",
+      endpoint: "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/SendRequest",
     })).resolves.toBe("987654");
 
     expect(requests).toHaveLength(1);
-    expect(requests[0]).toContain("q=12345");
+    expect(requests[0]?.url).toContain("q=12345");
+    expect((requests[0]?.init?.headers as Record<string, string> | undefined)?.["User-Agent"]).toBeTruthy();
   });
 
   test("adds request context to vague IBKR Flex errors without exposing the token", async () => {
     globalThis.fetch = (async () => new Response(
-      "<FlexStatementResponse><ErrorMessage>Load failed</ErrorMessage></FlexStatementResponse>",
+      "<FlexStatementResponse><ErrorCode>1001</ErrorCode><ErrorMessage>Load failed</ErrorMessage></FlexStatementResponse>",
       { status: 200 },
     )) as unknown as typeof fetch;
 
@@ -220,14 +229,14 @@ describe("requestFlexStatement", () => {
       await requestFlexStatement({
         token: "secret-flex-token",
         queryId: "12345",
-        endpoint: "https://gdcdyn.interactivebrokers.com/Universal/servlet/FlexStatementService.SendRequest",
+        endpoint: "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/SendRequest",
       });
     } catch (error) {
       message = error instanceof Error ? error.message : String(error);
     }
 
-    expect(message).toContain("IBKR Flex request failed while requesting the statement: Load failed.");
-    expect(message).toContain("Endpoint FlexStatementService.SendRequest");
+    expect(message).toContain("IBKR Flex request failed while requesting the statement: IBKR error 1001: Load failed.");
+    expect(message).toContain("Endpoint SendRequest");
     expect(message).toContain("query ID 12345");
     expect(message).toContain("token configured");
     expect(message).toContain("Flex Web Service is enabled");

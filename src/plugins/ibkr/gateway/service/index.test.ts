@@ -35,6 +35,7 @@ describe("summarizeBrokerAccount", () => {
   test("maps gateway account summary fields and ledger balances", () => {
     const tags = makeTags({
       NetLiquidation: { USD: "764713.62" },
+      GrossPositionValue: { USD: "1815667.34" },
       TotalCashValue: { USD: "-1050953.72" },
       SettledCash: { USD: "-917604.44" },
       AvailableFunds: { USD: "112345.67" },
@@ -52,6 +53,7 @@ describe("summarizeBrokerAccount", () => {
       source: "gateway",
       updatedAt: 1_717_000_000_000,
       netLiquidation: 764713.62,
+      grossPositionValue: 1815667.34,
       totalCashValue: -1050953.72,
       settledCash: -917604.44,
       availableFunds: 112345.67,
@@ -72,6 +74,7 @@ describe("summarizeBrokerAccount", () => {
   test("falls back to the aggregate cash summary for single-account gateways", () => {
     const accountTags = makeTags({
       NetLiquidation: { USD: "129360.15" },
+      GrossPositionValue: { USD: "1066.36" },
       TotalCashValue: { USD: "128293.79" },
       AvailableFunds: { USD: "129031.52" },
       BuyingPower: { USD: "860210.13" },
@@ -99,6 +102,7 @@ describe("summarizeBrokerAccount", () => {
       source: "gateway",
       updatedAt: 1_717_000_000_000,
       netLiquidation: 129360.15,
+      grossPositionValue: 1066.36,
       totalCashValue: 128293.79,
       settledCash: undefined,
       availableFunds: 129031.52,
@@ -119,6 +123,7 @@ describe("summarizeBrokerAccount", () => {
   test("falls back to aggregate summary metrics when a single-account gateway only returns the All row", () => {
     const aggregateTags = makeTags({
       NetLiquidation: { USD: "129360.15" },
+      GrossPositionValue: { USD: "1066.36" },
       TotalCashValue: { USD: "128293.79" },
       AvailableFunds: { USD: "129031.52" },
       BuyingPower: { USD: "860210.13" },
@@ -144,6 +149,7 @@ describe("summarizeBrokerAccount", () => {
       source: "gateway",
       updatedAt: 1_717_000_000_000,
       netLiquidation: 129360.15,
+      grossPositionValue: 1066.36,
       totalCashValue: 128293.79,
       settledCash: undefined,
       availableFunds: 129031.52,
@@ -164,6 +170,7 @@ describe("summarizeBrokerAccount", () => {
   test("maps account-level P&L into gateway account snapshots", () => {
     const tags = makeTags({
       NetLiquidation: { USD: "100000" },
+      GrossPositionValue: { USD: "75000" },
     });
 
     expect(summarizeBrokerAccount("DU12345", tags, 1_717_000_000_000, undefined, false, {
@@ -186,6 +193,7 @@ describe("summarizeBrokerAccount", () => {
       source: "gateway",
       updatedAt: 123,
       netLiquidation: undefined,
+      grossPositionValue: undefined,
       totalCashValue: undefined,
       settledCash: undefined,
       availableFunds: undefined,
