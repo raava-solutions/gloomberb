@@ -2,7 +2,8 @@ import { httpFetch } from "../../../utils/http-transport";
 import type { FlexQueryConfig } from "../config";
 import { IBKR_STATEMENT_URL } from "../config";
 
-const IBKR_STATEMENT_GET_URL = "https://gdcdyn.interactivebrokers.com/Universal/servlet/FlexStatementService.GetStatement";
+const IBKR_STATEMENT_GET_URL = "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/GetStatement";
+const FLEX_USER_AGENT = "Gloomberb/1.0 Flex";
 const FLEX_STATEMENT_CACHE_MS = 15 * 60_000;
 const FLEX_STATEMENT_INITIAL_WAIT_MS = 3_000;
 const FLEX_STATEMENT_POLL_DELAY_MS = 5_000;
@@ -29,10 +30,54 @@ function decodeXmlText(value: string): string {
     .replace(/&apos;/g, "'");
 }
 
+function extractXmlTag(text: string, tagName: string): string | null {
+  const match = text.match(new RegExp(`<${tagName}>\\s*([^<]*?)\\s*<\\/${tagName}>`, "i"));
+  return match?.[1] ? decodeXmlText(match[1].trim()) : null;
+}
+
 function extractFlexErrorMessage(text: string): string | null {
-  const errorMatch = text.match(/<ErrorMessage>([^<]+)<\/ErrorMessage>/);
-  if (errorMatch?.[1]) return decodeXmlText(errorMatch[1].trim());
-  return null;
+  const message = extractXmlTag(text, "ErrorMessage");
+  const code = extractXmlTag(text, "ErrorCode");
+  if (message && code) return `IBKR error ${code}: ${message}`;
+  return message;
+}
+
+function buildFlexUrl(endpoint: string, params: Record<string, string>): string {
+  const url = new URL(endpoint);
+  for (const [key, value] of Object.entries(params)) {
+    url.searchParams.set(key, value);
+  }
+  return url.toString();
+}
+
+function resolveFlexGetEndpoint(sendEndpoint: string | undefined): string {
+  if (!sendEndpoint || sendEndpoint === IBKR_STATEMENT_URL) return IBKR_STATEMENT_GET_URL;
+
+  try {
+    const url = new URL(sendEndpoint);
+    url.search = "";
+    if (url.pathname.endsWith("/SendRequest")) {
+      url.pathname = url.pathname.replace(/\/SendRequest$/, "/GetStatement");
+      return url.toString();
+    }
+    if (url.pathname.endsWith("FlexStatementService.SendRequest")) {
+      url.pathname = url.pathname.replace(/FlexStatementService\.SendRequest$/, "FlexStatementService.GetStatement");
+      return url.toString();
+    }
+  } catch {
+    return IBKR_STATEMENT_GET_URL;
+  }
+
+  return IBKR_STATEMENT_GET_URL;
+}
+
+function flexRequestInit(): RequestInit {
+  return {
+    headers: {
+      "User-Agent": FLEX_USER_AGENT,
+    },
+    signal: AbortSignal.timeout(30_000),
+  };
 }
 
 function endpointName(endpoint: string | undefined): string {
@@ -69,11 +114,15 @@ function flexError(providerMessage: string, context: FlexErrorContext): Error {
 
 export async function requestFlexStatement(config: FlexQueryConfig): Promise<string> {
   const endpoint = config.endpoint || IBKR_STATEMENT_URL;
-  const url = `${endpoint}?t=${config.token}&q=${config.queryId}&v=3`;
+  const url = buildFlexUrl(endpoint, {
+    t: config.token,
+    q: config.queryId,
+    v: "3",
+  });
   let resp: Response;
   let text: string;
   try {
-    resp = await httpFetch(url, { signal: AbortSignal.timeout(30_000) });
+    resp = await httpFetch(url, flexRequestInit());
     text = await resp.text();
   } catch (error) {
     throw flexError(error instanceof Error ? error.message : "Network request failed", {
@@ -84,8 +133,8 @@ export async function requestFlexStatement(config: FlexQueryConfig): Promise<str
     });
   }
 
-  const codeMatch = text.match(/<ReferenceCode>(\d+)<\/ReferenceCode>/);
-  if (!codeMatch) {
+  const referenceCode = extractXmlTag(text, "ReferenceCode");
+  if (!referenceCode) {
     throw flexError(extractFlexErrorMessage(text) || "No reference code returned", {
       phase: "request",
       endpoint,
@@ -95,7 +144,7 @@ export async function requestFlexStatement(config: FlexQueryConfig): Promise<str
     });
   }
 
-  return codeMatch[1]!;
+  return referenceCode;
 }
 
 async function getFlexStatement(
@@ -105,17 +154,22 @@ async function getFlexStatement(
 ): Promise<string> {
   await new Promise((resolve) => setTimeout(resolve, FLEX_STATEMENT_INITIAL_WAIT_MS));
 
-  const url = `${IBKR_STATEMENT_GET_URL}?t=${token}&q=${referenceCode}&v=3`;
+  const endpoint = resolveFlexGetEndpoint(context.endpoint);
+  const url = buildFlexUrl(endpoint, {
+    t: token,
+    q: referenceCode,
+    v: "3",
+  });
   for (let attempt = 0; attempt < FLEX_STATEMENT_MAX_DOWNLOAD_ATTEMPTS; attempt += 1) {
     let resp: Response;
     let text: string;
     try {
-      resp = await httpFetch(url, { signal: AbortSignal.timeout(30_000) });
+      resp = await httpFetch(url, flexRequestInit());
       text = await resp.text();
     } catch (error) {
       throw flexError(error instanceof Error ? error.message : "Network request failed", {
         phase: "download",
-        endpoint: context.endpoint,
+        endpoint,
         queryId: context.queryId,
         token,
         referenceCode,
@@ -135,7 +189,7 @@ async function getFlexStatement(
     if (providerMessage) {
       throw flexError(providerMessage, {
         phase: "download",
-        endpoint: context.endpoint,
+        endpoint,
         queryId: context.queryId,
         token,
         referenceCode,
@@ -146,7 +200,7 @@ async function getFlexStatement(
 
   throw flexError("statement generation timed out", {
     phase: "download",
-    endpoint: context.endpoint,
+    endpoint,
     queryId: context.queryId,
     token,
     referenceCode,

@@ -16,7 +16,9 @@ export interface BrokerAccount {
   currency?: string;
   source?: "gateway" | "flex";
   updatedAt?: number;
+  asOfDate?: string;
   netLiquidation?: number;
+  grossPositionValue?: number;
   totalCashValue?: number;
   settledCash?: number;
   buyingPower?: number;

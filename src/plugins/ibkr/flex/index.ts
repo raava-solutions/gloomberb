@@ -63,6 +63,34 @@ function parseFlexDate(raw: string | undefined): string | null {
   return new Date(parsed).toISOString().slice(0, 10);
 }
 
+function parseFlexGrossPositionValue(
+  body: string,
+  statementAccountId: string,
+  baseCurrency: string | undefined,
+): number | undefined {
+  let total = 0;
+  let hasValue = false;
+
+  for (const entry of body.matchAll(/<OpenPosition\b([^>]*)\/?>/g)) {
+    const attributes = parseAttributes(entry[1] ?? "");
+    const accountId = attributes.accountId || statementAccountId;
+    if (!accountId || (statementAccountId && accountId !== statementAccountId)) continue;
+
+    const marketValue = parseNumber(attributes.positionValue);
+    if (marketValue == null) continue;
+
+    const positionCurrency = attributes.currency || baseCurrency;
+    const fxRateToBase = parseNumber(attributes.fxRateToBase)
+      ?? (baseCurrency && positionCurrency === baseCurrency ? 1 : undefined);
+    if (fxRateToBase == null) continue;
+
+    total += Math.abs(marketValue * fxRateToBase);
+    hasValue = true;
+  }
+
+  return hasValue ? total : undefined;
+}
+
 function buildContractRef(attributes: Record<string, string>, symbol: string, assetCategory: string): BrokerContractRef | undefined {
   const conIdRaw = attributes.conid || attributes.conId;
   const strikeRaw = attributes.strike;
@@ -211,7 +239,9 @@ export function parseFlexAccounts(xml: string): BrokerAccount[] {
       currency: accountCurrency,
       source: "flex",
       updatedAt: parseFlexTimestamp(statementAttrs.whenGenerated, statementAttrs.toDate || statementAttrs.fromDate),
+      asOfDate: parseFlexDate(statementAttrs.toDate || statementAttrs.fromDate) ?? undefined,
       netLiquidation: parseNumber(changeInNavAttrs?.endingValue),
+      grossPositionValue: parseFlexGrossPositionValue(body, accountId, accountCurrency),
       totalCashValue: parseNumber(baseCashAttrs?.endingCash),
       settledCash: parseNumber(baseCashAttrs?.endingSettledCash),
       cashBalances: cashBalances.length > 0 ? cashBalances : undefined,

@@ -1,7 +1,8 @@
 import type { BrokerConfigField } from "../../types/broker";
 import type { IbkrGatewayConfig, ResolvedIbkrGatewayConnection } from "./gateway/service";
 
-export const IBKR_STATEMENT_URL = "https://gdcdyn.interactivebrokers.com/Universal/servlet/FlexStatementService.SendRequest";
+export const LEGACY_IBKR_STATEMENT_URL = "https://gdcdyn.interactivebrokers.com/Universal/servlet/FlexStatementService.SendRequest";
+export const IBKR_STATEMENT_URL = "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/SendRequest";
 
 type IbkrConnectionMode = "flex" | "gateway";
 type IbkrGatewaySetupMode = "auto" | "manual";
@@ -119,6 +120,12 @@ function coerceString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
 
+function normalizeFlexEndpoint(value: unknown): string {
+  const endpoint = coerceString(value, DEFAULT_FLEX_CONFIG.endpoint).trim();
+  if (!endpoint || endpoint === LEGACY_IBKR_STATEMENT_URL) return IBKR_STATEMENT_URL;
+  return endpoint;
+}
+
 function getMode(value: unknown): IbkrConnectionMode {
   return value === "gateway" ? "gateway" : "flex";
 }
@@ -166,7 +173,7 @@ export function normalizeIbkrConfig(raw?: Record<string, unknown>): IbkrConfig {
     flex: {
       token: coerceString(nestedFlex.token ?? input.token),
       queryId: coerceString(nestedFlex.queryId ?? input.queryId),
-      endpoint: coerceString(nestedFlex.endpoint ?? input.endpoint, DEFAULT_FLEX_CONFIG.endpoint),
+      endpoint: normalizeFlexEndpoint(nestedFlex.endpoint ?? input.endpoint),
     },
     gateway: {
       host,

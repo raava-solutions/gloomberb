@@ -17,6 +17,20 @@ function percentChange(value: number, previousValue: number): number {
   return previousValue !== 0 ? (value / previousValue) * 100 : 0;
 }
 
+export function resolveBrokerPortfolioMarketValue(account?: BrokerAccount | null): number | null {
+  if (finiteNumber(account?.grossPositionValue)) {
+    return account.grossPositionValue;
+  }
+  return null;
+}
+
+export function resolvePortfolioMarketValue(
+  totals: PortfolioSummaryTotals,
+  account?: BrokerAccount | null,
+): number {
+  return resolveBrokerPortfolioMarketValue(account) ?? totals.totalMktValue;
+}
+
 export function resolvePortfolioAccountMetrics(
   totals: PortfolioSummaryTotals,
   account?: BrokerAccount | null,

@@ -9,7 +9,7 @@ import type { Portfolio, TickerRecord } from "../../../../types/ticker";
 import type { BrokerAccount, BrokerCashBalance } from "../../../../types/trading";
 import { formatCompact, formatPercentRaw } from "../../../../utils/format";
 import { getBrokerInstance } from "../../../../utils/broker-instances";
-import { resolvePortfolioAccountMetrics } from "../account-metrics";
+import { resolvePortfolioAccountMetrics, resolvePortfolioMarketValue } from "../account-metrics";
 import { calculatePortfolioSummaryTotals, type PortfolioSummaryTotals } from "./totals";
 import { getMostRecentQuoteUpdate } from "../../../../market-data/quotes/time";
 
@@ -54,6 +54,22 @@ function formatSignedCompact(value: number): string {
   return `${value >= 0 ? "+" : ""}${formatCompact(value)}`;
 }
 
+function formatMonthDay(date: Date): string {
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function parseIsoDateAsLocalDate(value: string): Date | null {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const [, year, month, day] = match;
+  return new Date(Number(year), Number(month) - 1, Number(day));
+}
+
+function getAccountFreshnessTime(account: BrokerAccount): number {
+  const asOfDate = account.asOfDate ? parseIsoDateAsLocalDate(account.asOfDate) : null;
+  return asOfDate?.getTime() ?? account.updatedAt ?? 0;
+}
+
 function fitSummarySegments(candidates: PortfolioSummarySegment[], widthBudget: number): PortfolioSummarySegment[] {
   const fitted: PortfolioSummarySegment[] = [];
   let used = 0;
@@ -71,9 +87,12 @@ function formatSourceBadge(account: BrokerAccount, liveGateway: boolean): { labe
     return { label: "Live", kind: "live" };
   }
   if (account.source === "flex") {
+    const asOfDate = account.asOfDate ? parseIsoDateAsLocalDate(account.asOfDate) : null;
     return {
-      label: account.updatedAt
-        ? `Flex ${new Date(account.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+      label: asOfDate
+        ? `Flex ${formatMonthDay(asOfDate)}`
+        : account.updatedAt
+          ? `Flex ${formatMonthDay(new Date(account.updatedAt))}`
         : "Flex",
       kind: "flex",
     };
@@ -120,7 +139,7 @@ function findPortfolioAccount(
 }
 
 function sortAccountsByFreshness(accounts: BrokerAccount[]): BrokerAccount[] {
-  return [...accounts].sort((left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0));
+  return [...accounts].sort((left, right) => getAccountFreshnessTime(right) - getAccountFreshnessTime(left));
 }
 
 export function resolvePortfolioAccountState(
@@ -165,16 +184,19 @@ export function resolvePortfolioAccountState(
 export function buildPortfolioSummarySegments({
   totals,
   accountState,
+  accountStatusText,
   widthBudget,
   refreshText,
 }: {
   totals: PortfolioSummaryTotals;
   accountState: PortfolioSummaryAccountState | null;
+  accountStatusText?: string;
   widthBudget: number;
   refreshText?: string;
 }): PortfolioSummarySegment[] {
   const candidates: PortfolioSummarySegment[] = [];
   const accountMetrics = resolvePortfolioAccountMetrics(totals, accountState?.account);
+  const totalMarketValue = resolvePortfolioMarketValue(totals, accountState?.account);
 
   if (accountState?.account.netLiquidation != null) {
     candidates.push(createSummarySegment("netliq", [
@@ -185,7 +207,7 @@ export function buildPortfolioSummarySegments({
 
   candidates.push(createSummarySegment("val", [
     { text: "Val", tone: "label" },
-    { text: formatCompact(totals.totalMktValue), tone: "value", bold: true },
+    { text: formatCompact(totalMarketValue), tone: "value", bold: true },
   ]));
 
   if (accountState?.account.totalCashValue != null) {
@@ -247,6 +269,12 @@ export function buildPortfolioSummarySegments({
     return fitSummarySegments([...candidates, ...brokerSegments], widthBudget);
   }
 
+  if (accountStatusText) {
+    candidates.push(createSummarySegment("account-status", [
+      { text: accountStatusText, tone: "muted" },
+    ]));
+  }
+
   if (refreshText) {
     candidates.push(createSummarySegment("refresh", [
       { text: refreshText, tone: "muted" },
@@ -258,6 +286,7 @@ export function buildPortfolioSummarySegments({
 
 export function buildPortfolioFooterSegments({
   accountState,
+  accountStatusText,
   activeCollectionId,
   baseCurrency,
   exchangeRates,
@@ -269,6 +298,7 @@ export function buildPortfolioFooterSegments({
   width,
 }: {
   accountState: PortfolioSummaryAccountState | null;
+  accountStatusText?: string;
   activeCollectionId: string | null;
   baseCurrency: string;
   exchangeRates: Map<string, number>;
@@ -319,6 +349,7 @@ export function buildPortfolioFooterSegments({
   return buildPortfolioSummarySegments({
     totals,
     accountState,
+    accountStatusText,
     widthBudget: Math.max(16, width - 14),
     refreshText,
   }).map((segment) => ({

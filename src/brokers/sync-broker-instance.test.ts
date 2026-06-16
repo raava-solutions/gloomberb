@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { createDefaultConfig, type BrokerInstanceConfig } from "../types/config";
 import type { BrokerAdapter } from "../types/broker";
 import type { TickerRecord } from "../types/ticker";
+import { AppPersistence } from "../data/app-persistence";
+import { loadPersistedBrokerAccounts, persistBrokerAccounts } from "./account-cache";
 import {
   restoreBrokerPortfoliosFromTickerPositions,
   syncBrokerInstance,
@@ -162,6 +164,111 @@ describe("syncBrokerInstance", () => {
         brokerAccountId: "ACC-1",
       }),
     ]);
+  });
+
+  test("imports account and position data from one broker portfolio snapshot", async () => {
+    const instance = createBrokerInstance();
+    const config = {
+      ...createDefaultConfig("/tmp/gloomberb-sync-broker-snapshot"),
+      portfolios: [],
+      brokerInstances: [instance],
+    };
+    const tickerRepository = createTickerRepository();
+    const persistence = new AppPersistence(":memory:");
+    let listAccountsCalled = false;
+    let importPositionsCalled = false;
+    const broker: BrokerAdapter = {
+      ...createDemoBroker(),
+      listAccounts: async () => {
+        listAccountsCalled = true;
+        return [];
+      },
+      importPositions: async () => {
+        importPositionsCalled = true;
+        return [];
+      },
+      importPortfolioSnapshot: async () => ({
+        accounts: [{
+          accountId: "ACC-1",
+          name: "Snapshot Account",
+          currency: "USD",
+          netLiquidation: 125_000,
+          grossPositionValue: 175_000,
+          totalCashValue: -50_000,
+        }],
+        positions: [{
+          ticker: "AAPL",
+          exchange: "NASDAQ",
+          shares: 12,
+          avgCost: 180,
+          currency: "USD",
+          accountId: "ACC-1",
+          name: "Apple Inc.",
+          assetCategory: "STK",
+        }],
+      }),
+    };
+
+    try {
+      const result = await syncBrokerInstance({
+        config,
+        instanceId: "demo-broker",
+        brokers: new Map([["demo", broker]]),
+        tickerRepository: tickerRepository as any,
+        resources: persistence.resources,
+      });
+
+      expect(listAccountsCalled).toBe(false);
+      expect(importPositionsCalled).toBe(false);
+      expect(result.brokerAccounts[0]?.netLiquidation).toBe(125_000);
+      expect(result.positions).toHaveLength(1);
+      expect(loadPersistedBrokerAccounts(persistence.resources, instance, broker)).toEqual(result.brokerAccounts);
+    } finally {
+      persistence.close();
+    }
+  });
+
+  test("preserves the last account snapshot when a broker portfolio snapshot fails", async () => {
+    const instance = createBrokerInstance();
+    const config = {
+      ...createDefaultConfig("/tmp/gloomberb-sync-broker-snapshot-failure"),
+      portfolios: [],
+      brokerInstances: [instance],
+    };
+    const tickerRepository = createTickerRepository();
+    const persistence = new AppPersistence(":memory:");
+    const broker: BrokerAdapter = {
+      ...createDemoBroker(),
+      importPortfolioSnapshot: async () => {
+        throw new Error("account snapshot unavailable");
+      },
+    };
+
+    try {
+      persistBrokerAccounts(persistence.resources, instance, broker, [{
+        accountId: "ACC-1",
+        name: "Stale Account",
+        currency: "USD",
+        netLiquidation: 99_000,
+      }]);
+
+      await expect(syncBrokerInstance({
+        config,
+        instanceId: "demo-broker",
+        brokers: new Map([["demo", broker]]),
+        tickerRepository: tickerRepository as any,
+        resources: persistence.resources,
+      })).rejects.toThrow("account snapshot unavailable");
+
+      expect(loadPersistedBrokerAccounts(persistence.resources, instance, broker)).toEqual([{
+        accountId: "ACC-1",
+        name: "Stale Account",
+        currency: "USD",
+        netLiquidation: 99_000,
+      }]);
+    } finally {
+      persistence.close();
+    }
   });
 
   test("preserves broker portfolios across sequential profile syncs", async () => {
