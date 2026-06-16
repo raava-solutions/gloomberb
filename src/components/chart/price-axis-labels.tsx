@@ -12,6 +12,7 @@ interface PriceAxisLabelsProps {
   cursorPixelY?: number | null;
   cursorLabel: string | null;
   cursorColor: string;
+  axisColor?: string;
 }
 
 interface CursorPriceAxisOverlay {
@@ -61,6 +62,7 @@ export function PriceAxisLabels({
   cursorPixelY = null,
   cursorLabel,
   cursorColor,
+  axisColor = colors.textDim,
 }: PriceAxisLabelsProps) {
   const { cellHeightPx = 18, fractionalViewport = false } = useUiCapabilities();
   const overlay = useMemo(() => buildCursorPriceAxisOverlay({
@@ -100,7 +102,7 @@ export function PriceAxisLabels({
         const label = isCursorRow ? cursorLabel : (axisLabels.get(row) ?? null);
         return (
           <Box key={row} height={1}>
-            {renderAxisLabel(label, isCursorRow ? cursorColor : colors.textDim)}
+            {renderAxisLabel(label, isCursorRow ? cursorColor : axisColor)}
           </Box>
         );
       })}

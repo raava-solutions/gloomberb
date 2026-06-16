@@ -60,6 +60,7 @@ Open command mode with `Ctrl+P`, then type a command. Press `` ` `` to open tick
 | `TOP` | Ranked market stories |
 | `MOST` | Market movers |
 | `PF` | Portfolios and watchlists |
+| `KELLY AAPL` | Position sizing |
 | `HELP` | Full in-app shortcut list |
 
 ## What It Does

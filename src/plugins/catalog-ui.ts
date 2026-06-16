@@ -12,6 +12,7 @@ import { layoutManagerPlugin } from "./builtin/layout-manager";
 import { predictionMarketsPlugin } from "./prediction-markets";
 import { analyticsPlugin } from "./builtin/analytics";
 import { alertsPlugin } from "./builtin/alerts";
+import { kellySizerPlugin } from "./builtin/kelly-sizer";
 import {
   brokerPlugin,
   macroPlugin,
@@ -36,6 +37,7 @@ export const uiBuiltinPlugins: GloomPlugin[] = [
   marketOverviewPlugin,
   macroPlugin,
   analyticsPlugin,
+  kellySizerPlugin,
   alertsPlugin,
 ];
 
