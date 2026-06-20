@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { cloneLayout, createBlankLayout, createDefaultConfig } from "../../../types/config";
 import { appReducer, createInitialState } from "./index";
+import { removePane } from "../../../plugins/pane-manager";
 
 describe("appReducer command bar state", () => {
   test("opens the command bar with an explicit query", () => {
@@ -172,6 +173,25 @@ describe("appReducer command bar state", () => {
     const secondUndone = appReducer(backToSecond, { type: "UNDO_LAYOUT" });
     expect(secondUndone.config.activeLayoutIndex).toBe(newLayoutIndex);
     expect(secondUndone.config.layout).toEqual(createBlankLayout());
+  });
+
+  test("restores an explicit focus target after a layout removes the focused pane", () => {
+    const config = createDefaultConfig("/tmp/gloomberb-test-focus-restore");
+    const nextLayout = removePane(config.layout, "ticker-detail:main");
+    const state = {
+      ...createInitialState(config),
+      focusedPaneId: "ticker-detail:main",
+      previousFocusedPaneId: "portfolio-list:main",
+    };
+
+    const next = appReducer(state, {
+      type: "UPDATE_LAYOUT",
+      layout: nextLayout,
+      focusedPaneId: "portfolio-list:main",
+    });
+
+    expect(next.focusedPaneId).toBe("portfolio-list:main");
+    expect(next.config.layouts[next.config.activeLayoutIndex]?.focusedPaneId).toBe("portfolio-list:main");
   });
 
   test("tracks manual update-check feedback", () => {

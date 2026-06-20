@@ -73,17 +73,20 @@ export function useAppPaneRuntime({
     return resolvePaneTargetInLayout(layout, paneId);
   }, [state.config.layout]);
 
-  const persistLayout = useCallback((layout: LayoutConfig, options?: { pushHistory?: boolean }) => {
+  const persistLayout = useCallback((layout: LayoutConfig, options?: { pushHistory?: boolean; focusedPaneId?: string | null }) => {
     const currentState = stateRef.current;
     const normalizedLayout = normalizePaneLayout(layout);
     if (options?.pushHistory !== false) {
       dispatch({ type: "PUSH_LAYOUT_HISTORY" });
     }
-    dispatch({ type: "UPDATE_LAYOUT", layout: normalizedLayout });
+    const hasFocusTarget = !!options && Object.prototype.hasOwnProperty.call(options, "focusedPaneId");
+    dispatch(hasFocusTarget
+      ? { type: "UPDATE_LAYOUT", layout: normalizedLayout, focusedPaneId: options.focusedPaneId ?? null }
+      : { type: "UPDATE_LAYOUT", layout: normalizedLayout });
     scheduleConfigSave(syncConfigActiveLayoutState(
       { ...currentState.config, layout: normalizedLayout },
       currentState.paneState,
-      currentState.focusedPaneId,
+      hasFocusTarget ? (options.focusedPaneId ?? null) : currentState.focusedPaneId,
       currentState.activePanel,
     ));
   }, [dispatch, stateRef]);

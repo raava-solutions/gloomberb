@@ -1271,6 +1271,7 @@ describe("Shell", () => {
         layouts: [{ name: "Default", layout: cloneLayout(mixedLayout) }],
       }),
       focusedPaneId: "ticker-detail:main",
+      previousFocusedPaneId: "portfolio-list:main",
     };
     const actions: Array<any> = [];
 
@@ -1294,6 +1295,7 @@ describe("Shell", () => {
     expect(updateLayout?.layout.instances.map((instance: { instanceId: string }) => instance.instanceId)).toEqual(["portfolio-list:main"]);
     expect(updateLayout?.layout.floating).toEqual([]);
     expect(updateLayout?.layout.dockRoot).toEqual({ kind: "pane", instanceId: "portfolio-list:main" });
+    expect(updateLayout?.focusedPaneId).toBe("portfolio-list:main");
   });
 
   test("closes the focused floating pane with Cmd+W", async () => {

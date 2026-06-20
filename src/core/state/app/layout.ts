@@ -351,6 +351,9 @@ export function focusPaneState(state: AppState, paneId: string): AppState {
     ...state,
     config: syncConfigActiveLayoutState(config, state.paneState, paneId, state.activePanel),
     focusedPaneId: paneId,
+    previousFocusedPaneId: state.focusedPaneId && state.focusedPaneId !== paneId
+      ? state.focusedPaneId
+      : state.previousFocusedPaneId,
     recentTickers,
   };
 }
@@ -386,6 +389,9 @@ export function withFocusedPane(
     paneState: nextPaneState,
     brokerAccounts: reconcileBrokerAccounts(syncedConfig, state.brokerAccounts),
     focusedPaneId,
+    previousFocusedPaneId: state.focusedPaneId && state.focusedPaneId !== focusedPaneId
+      ? state.focusedPaneId
+      : state.previousFocusedPaneId,
     activePanel,
   };
 }

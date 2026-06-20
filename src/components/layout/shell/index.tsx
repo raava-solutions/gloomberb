@@ -95,6 +95,7 @@ export function Shell({
   const config = useAppSelector((state) => state.config);
   const paneState = useAppSelector((state) => state.paneState);
   const focusedPaneId = useAppSelector(selectFocusedPaneId);
+  const previousFocusedPaneId = useAppSelector((state) => state.previousFocusedPaneId);
   const activePanel = useAppSelector((state) => state.activePanel);
   const commandBarOpen = useAppSelector(selectCommandBarOpen);
   const inputCaptured = useAppSelector((state) => state.inputCaptured);
@@ -154,15 +155,18 @@ export function Shell({
   ), [nativePaneChrome]);
   const bounds = useMemo<LayoutBounds>(() => ({ x: 0, y: 0, width, height: contentHeight }), [contentHeight, width]);
 
-  const persistLayout = useCallback((nextLayout: LayoutConfig, options?: { pushHistory?: boolean }) => {
+  const persistLayout = useCallback((nextLayout: LayoutConfig, options?: { pushHistory?: boolean; focusedPaneId?: string | null }) => {
     if (options?.pushHistory !== false) {
       dispatch({ type: "PUSH_LAYOUT_HISTORY" });
     }
-    dispatch({ type: "UPDATE_LAYOUT", layout: nextLayout });
+    const hasFocusTarget = !!options && Object.prototype.hasOwnProperty.call(options, "focusedPaneId");
+    dispatch(hasFocusTarget
+      ? { type: "UPDATE_LAYOUT", layout: nextLayout, focusedPaneId: options.focusedPaneId ?? null }
+      : { type: "UPDATE_LAYOUT", layout: nextLayout });
     scheduleConfigSave(syncConfigActiveLayoutState(
       { ...config, layout: nextLayout },
       paneState,
-      focusedPaneId,
+      hasFocusTarget ? (options.focusedPaneId ?? null) : focusedPaneId,
       activePanel,
     ));
   }, [activePanel, config, dispatch, focusedPaneId, paneState]);
@@ -261,6 +265,7 @@ export function Shell({
     nativePaneChrome,
     paneMap,
     persistLayout,
+    previousFocusedPaneId,
     pluginRegistry,
     rendererHost,
     visibleLayout,
