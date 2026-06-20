@@ -15,7 +15,7 @@ interface UseAppPaneSettingsRuntimeOptions {
   dataProvider: DataProvider;
   dialog: DialogApi;
   dispatch: Dispatch<AppAction>;
-  persistLayout: (layout: LayoutConfig, options?: { pushHistory?: boolean }) => void;
+  persistLayout: (layout: LayoutConfig, options?: { pushHistory?: boolean; focusedPaneId?: string | null }) => void;
   pluginRegistry: PluginRegistry;
   resolvePaneTarget: (paneId: string, layout?: LayoutConfig) => string | null;
   stateRef: { current: AppState };
