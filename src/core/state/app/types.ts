@@ -48,6 +48,7 @@ export interface AppState {
   brokerAccounts: Record<string, BrokerAccount[]>;
   activePanel: "left" | "right";
   focusedPaneId: string | null;
+  previousFocusedPaneId: string | null;
   paneState: Record<string, PaneRuntimeState>;
   recentTickers: string[];
   commandBarOpen: boolean;
@@ -104,7 +105,7 @@ export type AppAction =
   | { type: "PUSH_LAYOUT_HISTORY" }
   | { type: "UNDO_LAYOUT" }
   | { type: "REDO_LAYOUT" }
-  | { type: "UPDATE_LAYOUT"; layout: LayoutConfig }
+  | { type: "UPDATE_LAYOUT"; layout: LayoutConfig; focusedPaneId?: string | null }
   | { type: "SWITCH_LAYOUT"; index: number }
   | { type: "NEW_LAYOUT"; name: string }
   | { type: "DELETE_LAYOUT"; index: number }
