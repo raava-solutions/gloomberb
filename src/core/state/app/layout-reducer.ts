@@ -64,7 +64,13 @@ export function reduceLayoutAction(state: AppState, action: AppAction): AppState
     }
 
     case "UPDATE_LAYOUT":
-      return withFocusedPane(state, { ...state.config, layout: action.layout });
+      return withFocusedPane(
+        state,
+        { ...state.config, layout: action.layout },
+        Object.prototype.hasOwnProperty.call(action, "focusedPaneId")
+          ? { focusedPaneId: action.focusedPaneId ?? null }
+          : {},
+      );
 
     case "SWITCH_LAYOUT": {
       if (action.index < 0 || action.index >= state.config.layouts.length) return state;

@@ -14,6 +14,15 @@ import type { LayoutConfig } from "../../../../types/config";
 import type { RendererHost } from "../../../../ui";
 import { capturePaneScreenshotPngBase64 } from "../../../../utils/dom-screenshot";
 
+function removedFocusRestoreOptions(
+  layout: LayoutConfig,
+  currentFocusedPaneId: string | null,
+  paneId: string | null,
+): { focusedPaneId: string } | undefined {
+  if (currentFocusedPaneId && isPaneInLayout(layout, currentFocusedPaneId)) return undefined;
+  return paneId && isPaneInLayout(layout, paneId) ? { focusedPaneId: paneId } : undefined;
+}
+
 interface UseShellPaneActionsOptions {
   closePaneMenu: () => void;
   contentHeight: number;
@@ -22,7 +31,8 @@ interface UseShellPaneActionsOptions {
   focusPane: (paneId: string) => void;
   nativePaneChrome: boolean;
   paneMap: Map<string, ResolvedPane>;
-  persistLayout: (nextLayout: LayoutConfig, options?: { pushHistory?: boolean }) => void;
+  persistLayout: (nextLayout: LayoutConfig, options?: { pushHistory?: boolean; focusedPaneId?: string | null }) => void;
+  previousFocusedPaneId: string | null;
   pluginRegistry: PluginRegistry;
   rendererHost: RendererHost;
   visibleLayout: LayoutConfig;
@@ -38,6 +48,7 @@ export function useShellPaneActions({
   nativePaneChrome,
   paneMap,
   persistLayout,
+  previousFocusedPaneId,
   pluginRegistry,
   rendererHost,
   visibleLayout,
@@ -70,15 +81,17 @@ export function useShellPaneActions({
 
   const closeFocusedPane = useCallback(() => {
     if (!focusedPaneId || !isPaneInLayout(visibleLayout, focusedPaneId)) return false;
-    persistLayout(removePane(visibleLayout, focusedPaneId));
+    const nextLayout = removePane(visibleLayout, focusedPaneId);
+    persistLayout(nextLayout, removedFocusRestoreOptions(nextLayout, focusedPaneId, previousFocusedPaneId));
     return true;
-  }, [focusedPaneId, persistLayout, visibleLayout]);
+  }, [focusedPaneId, persistLayout, previousFocusedPaneId, visibleLayout]);
 
   const closeAllFloatingPanes = useCallback(() => {
     if (visibleLayout.floating.length === 0) return false;
-    persistLayout(removeFloatingPanes(visibleLayout));
+    const nextLayout = removeFloatingPanes(visibleLayout);
+    persistLayout(nextLayout, removedFocusRestoreOptions(nextLayout, focusedPaneId, previousFocusedPaneId));
     return true;
-  }, [persistLayout, visibleLayout]);
+  }, [focusedPaneId, persistLayout, previousFocusedPaneId, visibleLayout]);
 
   const copyFocusedPaneScreenshot = useCallback(() => {
     if (!focusedPaneId || !nativePaneChrome || !rendererHost.copyPngImage) return false;
@@ -118,8 +131,9 @@ export function useShellPaneActions({
   }, [contentHeight, persistLayout, visibleLayout, width]);
 
   const handleFloatingClose = useCallback((paneId: string) => {
-    persistLayout(removePane(visibleLayout, paneId));
-  }, [persistLayout, visibleLayout]);
+    const nextLayout = removePane(visibleLayout, paneId);
+    persistLayout(nextLayout, removedFocusRestoreOptions(nextLayout, focusedPaneId, previousFocusedPaneId));
+  }, [focusedPaneId, persistLayout, previousFocusedPaneId, visibleLayout]);
 
   return {
     closeAllFloatingPanes,

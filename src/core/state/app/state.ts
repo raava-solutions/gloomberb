@@ -319,6 +319,7 @@ export function createInitialState(config: AppConfig, sessionSnapshot: AppSessio
     brokerAccounts: {},
     activePanel,
     focusedPaneId,
+    previousFocusedPaneId: null,
     paneState,
     recentTickers: config.recentTickers,
     commandBarOpen: false,
