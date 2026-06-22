@@ -5,7 +5,6 @@ import { Box, Span, Text, TextAttributes, useUiCapabilities } from "../../../ui"
 import { usePluginAppActions } from "../../runtime";
 import { InlineAuthActions } from "../cloud/auth-actions";
 import {
-  findChatPaneInstanceForChannel,
   getPreferredChatOpenChannelId,
 } from "./channels";
 import { chatController, type ChatController } from "./controller";
@@ -53,7 +52,7 @@ function CloudStatusIcon() {
 }
 
 export function ChatStatusWidget({ controller = chatController }: ChatStatusWidgetProps) {
-  const { createPaneFromTemplate, focusPane } = usePluginAppActions();
+  const { createPaneFromTemplate } = usePluginAppActions();
   const config = useAppSelector((state) => state.config);
   const cloudPluginDisabled = config.disabledPlugins.includes("gloomberb-cloud");
   const initialSnapshot = controller.getSnapshot();
@@ -67,11 +66,6 @@ export function ChatStatusWidget({ controller = chatController }: ChatStatusWidg
     event?.preventDefault?.();
     event?.stopPropagation?.();
     const channelId = getPreferredChatOpenChannelId(config, snapshot);
-    const existingInstance = findChatPaneInstanceForChannel(config, channelId);
-    if (existingInstance) {
-      focusPane(existingInstance.instanceId);
-      return;
-    }
     createPaneFromTemplate("new-chat-pane", { arg: channelId });
   };
 
