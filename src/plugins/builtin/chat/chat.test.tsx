@@ -1178,16 +1178,12 @@ describe("ChatContent", () => {
       user: { id: "u1", username: "vince", emailVerified: true },
     });
     const openedTemplates: Array<{ templateId: string; options?: { arg?: string } }> = [];
-    const focusedPanes: string[] = [];
     const state = createInitialState(createDefaultConfig("/tmp/gloomberb-chat"));
     state.config.disabledPlugins = [];
 
     const runtime = createTestPluginRuntime({
       createPaneFromTemplate(templateId: string, options?: { arg?: string }) {
         openedTemplates.push({ templateId, options });
-      },
-      focusPane(paneId: string) {
-        focusedPanes.push(paneId);
       },
     });
 
@@ -1230,9 +1226,7 @@ describe("ChatContent", () => {
       await setup().renderOnce();
     });
 
-    expect(openedTemplates).toEqual([]);
-    expect(focusedPanes).toHaveLength(1);
-    expect(focusedPanes[0]?.startsWith("chat:")).toBe(true);
+    expect(openedTemplates).toEqual([{ templateId: "new-chat-pane", options: { arg: "everyone" } }]);
   });
 
   test("opens an unread direct-message channel from the status widget", async () => {

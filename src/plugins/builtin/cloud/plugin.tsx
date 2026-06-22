@@ -14,10 +14,9 @@ import { registerTwitterFeedFeature } from "../cloud-tweets";
 import {
   buildDmCommandResults,
   formatChatPaneTitle,
-  getLastVisitedChatChannelId,
+  getPreferredChatOpenChannelId,
   hasOnlyDmUsernameArgs,
   normalizeShortcutChannelId,
-  openDefaultChatFromCommand,
   openDmTargetFromCommand,
   parseDmUsernames,
 } from "../chat/channels";
@@ -50,7 +49,9 @@ export function createGloomberbCloudPlugin({
         createInstance: async (context, options) => {
           const channelId = options?.arg
             ? await chatController.resolveRequiredChannelId(normalizeShortcutChannelId(options.arg))
-            : await chatController.resolvePreferredChannelId(getLastVisitedChatChannelId(context.config));
+            : await chatController.resolvePreferredChannelId(
+              getPreferredChatOpenChannelId(context.config, chatController.getSnapshot()),
+            );
           const channel = chatController.getChannels().find((entry) => entry.id === channelId);
           return {
             placement: "floating",
@@ -143,16 +144,6 @@ export function createGloomberbCloudPlugin({
       });
 
       registerTwitterFeedFeature(ctx);
-
-      ctx.registerCommand({
-        id: "open-chat",
-        label: "Chat",
-        description: "Open chat",
-        keywords: ["chat", "message", "messages"],
-        category: "navigation",
-        shortcut: "CHAT",
-        execute: () => openDefaultChatFromCommand(ctx),
-      });
 
       ctx.registerCommand({
         id: "direct-message",
