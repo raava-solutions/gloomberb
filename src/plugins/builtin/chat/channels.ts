@@ -1,6 +1,6 @@
 import type { CommandResultDef, GloomPluginContext } from "../../../types/plugin";
 import type { ChatChannel, ChatChannelState } from "../../../api-client";
-import type { AppConfig, PaneInstanceConfig } from "../../../types/config";
+import type { AppConfig } from "../../../types/config";
 import { chatController } from "./controller";
 import { formatChannelLabel } from "./channel-labels";
 
@@ -23,14 +23,6 @@ export function normalizeShortcutChannelId(channelId: string | null | undefined)
 
 export function getLastVisitedChatChannelId(config: { pluginConfig: Record<string, Record<string, unknown>> }) {
   return normalizeChannelId(config.pluginConfig["gloomberb-cloud"]?.[LAST_VISITED_CHAT_CHANNEL_KEY] as string | undefined);
-}
-
-export function findChatPaneInstanceForChannel(config: AppConfig, channelId: string): PaneInstanceConfig | undefined {
-  const normalizedChannelId = normalizeChannelId(channelId);
-  return config.layout.instances.find((instance) => (
-    instance.paneId === "chat"
-    && normalizeChannelId(typeof instance.settings?.channelId === "string" ? instance.settings.channelId : null) === normalizedChannelId
-  ));
 }
 
 export function getPreferredChatOpenChannelId(
@@ -80,17 +72,12 @@ export function hasOnlyDmUsernameArgs(value: string): boolean {
   return parts.length > 0 && parts.every((part) => CHAT_USERNAME_ARG.test(part));
 }
 
-function openChatChannelFromCommand(ctx: Pick<GloomPluginContext, "createPaneFromTemplate" | "focusPane" | "getConfig">, channelId: string): void {
-  const existingInstance = findChatPaneInstanceForChannel(ctx.getConfig(), channelId);
-  if (existingInstance) {
-    ctx.focusPane(existingInstance.instanceId);
-    return;
-  }
+function openChatChannelFromCommand(ctx: Pick<GloomPluginContext, "createPaneFromTemplate">, channelId: string): void {
   ctx.createPaneFromTemplate("new-chat-pane", { arg: channelId });
 }
 
-export function openDefaultChatFromCommand(
-  ctx: Pick<GloomPluginContext, "createPaneFromTemplate" | "focusPane" | "getConfig">,
+function openDefaultChatPane(
+  ctx: Pick<GloomPluginContext, "createPaneFromTemplate" | "getConfig">,
 ): void {
   const config = ctx.getConfig();
   openChatChannelFromCommand(ctx, getPreferredChatOpenChannelId(config, chatController.getSnapshot()));
@@ -98,7 +85,7 @@ export function openDefaultChatFromCommand(
 
 export async function openDmTargetFromCommand(ctx: GloomPluginContext, usernames: string[]): Promise<void> {
   if (usernames.length === 0) {
-    openDefaultChatFromCommand(ctx);
+    openDefaultChatPane(ctx);
     return;
   }
   const channel = usernames.length === 1
