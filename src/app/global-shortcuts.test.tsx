@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { createTestRenderer } from "@opentui/core/testing";
 import { act } from "react";
 import { createOpenTuiTestRoot as createRoot, TestDialogProvider } from "../renderers/opentui/test-utils";
-import { createDefaultConfig } from "../types/config";
+import { cloneLayout, createDefaultConfig } from "../types/config";
 import { createInitialState, type AppAction, type AppState } from "../state/app/context";
 import type { PluginRegistry } from "../plugins/registry";
 import { useAppGlobalShortcuts } from "./global-shortcuts";
@@ -160,6 +160,25 @@ describe("useAppGlobalShortcuts", () => {
       query: "",
       launch: { kind: "ticker-search", query: "" },
     }]);
+    expect(event.defaultPrevented).toBe(true);
+    expect(event.propagationStopped).toBe(true);
+  });
+
+  test("switches saved layouts with Ctrl-number and consumes the shortcut", async () => {
+    const actions: AppAction[] = [];
+    const config = createDefaultConfig("/tmp/gloomberb-global-shortcuts-layouts");
+    config.layouts = [
+      { name: "One", layout: cloneLayout(config.layout) },
+      { name: "Two", layout: cloneLayout(config.layout) },
+      { name: "Three", layout: cloneLayout(config.layout) },
+    ];
+    config.activeLayoutIndex = 0;
+    const state = createInitialState(config);
+    await renderHarness(state, createRegistry(), (action) => actions.push(action));
+
+    const event = await emitKeypress({ name: "2", ctrl: true });
+
+    expect(actions).toEqual([{ type: "SWITCH_LAYOUT", index: 1 }]);
     expect(event.defaultPrevented).toBe(true);
     expect(event.propagationStopped).toBe(true);
   });

@@ -76,6 +76,8 @@ export function useAppGlobalShortcuts({
       if (idx < layouts.length && idx !== state.config.activeLayoutIndex) {
         dispatch({ type: "SWITCH_LAYOUT", index: idx });
       }
+      event.preventDefault();
+      event.stopPropagation();
       return;
     }
 
