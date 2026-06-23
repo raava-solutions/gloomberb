@@ -159,6 +159,13 @@ describe("stock chart keyboard helpers", () => {
     expect(resolveChartKeyboardKey({ name: "minus" })).toBe("zoom-out");
     expect(resolveChartKeyboardKey({ name: "A" })).toBe("a");
   });
+
+  test("ignores shortcut-modified keys so app shortcuts can handle them", () => {
+    expect(resolveChartKeyboardKey({ name: "1", ctrl: true })).toBe("");
+    expect(resolveChartKeyboardKey({ name: "2", meta: true })).toBe("");
+    expect(resolveChartKeyboardKey({ name: "3", super: true })).toBe("");
+    expect(resolveChartKeyboardKey({ name: "4", alt: true })).toBe("");
+  });
 });
 
 describe("stock chart viewport helpers", () => {
