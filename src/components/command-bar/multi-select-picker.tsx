@@ -197,6 +197,13 @@ export function CommandBarMultiSelectBody({
         onSelect={onSelect}
         onToggle={onToggle}
         bgColor={nativePaneChrome ? panelBg : paletteBg}
+        remoteLabel={route.title}
+        remoteScope="command-bar"
+        remoteMetadata={{
+          surface: "multi-select-picker",
+          routeKind: route.kind,
+          pickerId: route.pickerId,
+        }}
       />
       <Box flexDirection="row" gap={1}>
         <Button label="Done" variant="primary" onPress={onCommit} />

@@ -122,4 +122,5 @@ export type AppAction =
       key: string;
       value: unknown;
     }
+  | { type: "REPLACE_PANE_STATE"; paneId: string; state: PaneRuntimeState }
   | { type: "UPDATE_PANE_STATE"; paneId: string; patch: Partial<PaneRuntimeState> };

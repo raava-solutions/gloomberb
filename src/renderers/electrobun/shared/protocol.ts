@@ -4,6 +4,7 @@ import type { DesktopApplicationMenuCommand } from "../../../types/desktop-menu"
 import type { AppConfig } from "../../../types/config";
 import type { UpdateProgress } from "../../../updater";
 import type { CapabilityManifest } from "../../../capabilities";
+import type { RemoteControlRequest, RemoteControlResponse } from "../../../remote/types";
 
 export const ELECTROBUN_CONTEXT_MENU_ACTION = "gloom.context-menu.select";
 
@@ -59,6 +60,10 @@ export interface DesktopRestartMessage {
   source?: string;
 }
 
+export interface RemoteControlRequestMessage {
+  request: RemoteControlRequest;
+}
+
 export interface ElectrobunDesktopRpcSchema {
   bun: {
     requests: {
@@ -72,7 +77,12 @@ export interface ElectrobunDesktopRpcSchema {
     };
   };
   webview: {
-    requests: {};
+    requests: {
+      "remote.request": {
+        params: RemoteControlRequestMessage;
+        response: RemoteControlResponse;
+      };
+    };
     messages: {
       "context-menu.select": ContextMenuSelectMessage;
       "application-menu.select": ApplicationMenuSelectMessage;

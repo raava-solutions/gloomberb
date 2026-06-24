@@ -4,13 +4,14 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-import { Box, ScrollBox, Text } from "../../ui";
-import { TextAttributes, type ScrollBoxRenderable } from "../../ui";
+import { Box, Text } from "../../ui";
+import { TextAttributes } from "../../ui";
+import { ListView, type ListViewItem } from "../ui";
+import type { ListRowState } from "../ui/list-view";
 import { getThemeIds, themes as themeRegistry } from "../../theme/themes";
 import { truncateText } from "./view-model";
 
@@ -75,7 +76,6 @@ export const ThemePicker = memo(forwardRef<ThemePickerHandle, ThemePickerProps>(
   onPreview,
   onCommit,
 }: ThemePickerProps, ref) {
-  const scrollRef = useRef<ScrollBoxRenderable | null>(null);
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingPreviewIdRef = useRef<string | null>(null);
   const committedThemeIdRef = useRef(committedThemeId);
@@ -92,9 +92,20 @@ export const ThemePicker = memo(forwardRef<ThemePickerHandle, ThemePickerProps>(
   const [selectedIndex, setSelectedIndex] = useState(() => (
     Math.max(0, themes.findIndex((theme) => theme.id === committedThemeId))
   ));
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const themesRef = useRef(themes);
   const selectedIndexRef = useRef(selectedIndex);
+  const items = useMemo<ListViewItem[]>(() => themes.map((theme) => {
+    const current = theme.id === committedThemeId;
+    return {
+      id: theme.id,
+      label: theme.name,
+      detail: current ? "current" : "",
+      category: "Themes",
+      kind: "theme",
+      right: current ? "current" : "",
+      current,
+    };
+  }), [committedThemeId, themes]);
 
   themesRef.current = themes;
   selectedIndexRef.current = selectedIndex;
@@ -131,7 +142,6 @@ export const ThemePicker = memo(forwardRef<ThemePickerHandle, ThemePickerProps>(
     if (nextIndex === selectedIndexRef.current) return false;
     selectedIndexRef.current = nextIndex;
     setSelectedIndex(nextIndex);
-    setHoveredIndex(null);
     requestPreview(options[nextIndex]!.id);
     return true;
   }, [requestPreview]);
@@ -155,23 +165,9 @@ export const ThemePicker = memo(forwardRef<ThemePickerHandle, ThemePickerProps>(
     const nextIndex = preferredIndex >= 0 ? preferredIndex : 0;
     selectedIndexRef.current = nextIndex;
     setSelectedIndex(nextIndex);
-    setHoveredIndex(null);
   }, [committedThemeId, themes]);
 
   useEffect(() => cancelPreview, [cancelPreview]);
-
-  useLayoutEffect(() => {
-    const scrollBox = scrollRef.current;
-    if (!scrollBox) return;
-    if (scrollBox.verticalScrollBar) scrollBox.verticalScrollBar.visible = false;
-    if (themes.length === 0) return;
-    const viewportHeight = Math.max(1, scrollBox.viewport?.height ?? height);
-    if (selectedIndex < scrollBox.scrollTop) {
-      scrollBox.scrollTo(selectedIndex);
-    } else if (selectedIndex >= scrollBox.scrollTop + viewportHeight) {
-      scrollBox.scrollTo(selectedIndex - viewportHeight + 1);
-    }
-  }, [height, selectedIndex, themes.length]);
 
   const handleScroll = useCallback((event: ThemePickerScrollEvent) => {
     event.stopPropagation();
@@ -185,70 +181,86 @@ export const ThemePicker = memo(forwardRef<ThemePickerHandle, ThemePickerProps>(
     }
   }, [move]);
 
-  if (themes.length === 0) {
+  const handleSelect = useCallback((index: number) => {
+    const selected = themesRef.current[index];
+    if (!selected) return;
+    selectedIndexRef.current = index;
+    setSelectedIndex(index);
+    requestPreview(selected.id);
+  }, [requestPreview]);
+
+  const handleActivate = useCallback((item: ListViewItem, index: number) => {
+    const selected = themesRef.current[index] ?? themesRef.current.find((theme) => theme.id === item.id);
+    if (!selected) return;
+    selectedIndexRef.current = index;
+    setSelectedIndex(index);
+    cancelPreview();
+    onCommitRef.current(selected.id);
+  }, [cancelPreview]);
+
+  const renderRow = useCallback((item: ListViewItem, state: ListRowState) => {
+    const label = truncateText(item.label, labelWidth);
+    const trailing = item.current ? "current" : "";
     return (
-      <Box height={height} paddingX={contentPadding}>
-        <Text fg={paletteSubtleText}>{truncateText("No themes match", queryDisplayWidth)}</Text>
+      <Box
+        flexDirection="row"
+        height={1}
+        paddingX={contentPadding}
+        width="100%"
+        data-command-bar-row-selected={nativePaneChrome && state.selected ? "true" : undefined}
+        style={nativePaneChrome ? { borderRadius: 6 } : undefined}
+      >
+        <Box width={labelWidth}>
+          <Text
+            fg={state.selected ? paletteSelectedText : paletteText}
+            attributes={item.current ? TextAttributes.BOLD : undefined}
+          >
+            {label}
+          </Text>
+        </Box>
+        <Box width={trailingWidth}>
+          <Text fg={state.selected ? paletteSelectedText : paletteSubtleText}>
+            {truncateText(trailing, trailingWidth)}
+          </Text>
+        </Box>
       </Box>
     );
-  }
+  }, [
+    contentPadding,
+    labelWidth,
+    nativePaneChrome,
+    paletteSelectedText,
+    paletteSubtleText,
+    paletteText,
+    trailingWidth,
+  ]);
 
   return (
-    <ScrollBox
-      ref={scrollRef}
-      flexDirection="column"
+    <ListView
+      items={items}
+      selectedIndex={selectedIndex}
       height={height}
-      scrollY
-      focusable={false}
-      {...(!nativePaneChrome ? { onMouseScroll: handleScroll } : {})}
-    >
-      {themes.map((theme, index) => {
-        const selected = index === selectedIndex;
-        const hovered = index === hoveredIndex && !selected;
-        const current = theme.id === committedThemeId;
-        const label = truncateText(theme.name, labelWidth);
-        const trailing = current ? "current" : "";
-        return (
-          <Box
-            key={theme.id}
-            flexDirection="row"
-            height={1}
-            paddingX={contentPadding}
-            backgroundColor={selected
-              ? paletteSelectedBg
-              : hovered
-                ? paletteHoverBg
-                : (nativePaneChrome ? panelBg : paletteBg)}
-            onMouseOver={() => setHoveredIndex(index)}
-            onMouseOut={() => setHoveredIndex(null)}
-            onMouseDown={(event: any) => {
-              event.stopPropagation?.();
-              event.preventDefault?.();
-              selectedIndexRef.current = index;
-              setSelectedIndex(index);
-              cancelPreview();
-              onCommitRef.current(theme.id);
-            }}
-            {...(!nativePaneChrome ? { onMouseScroll: handleScroll } : {})}
-            data-command-bar-row-selected={nativePaneChrome && selected ? "true" : undefined}
-            style={nativePaneChrome ? { borderRadius: 6 } : undefined}
-          >
-            <Box width={labelWidth}>
-              <Text
-                fg={selected ? paletteSelectedText : paletteText}
-                attributes={current ? TextAttributes.BOLD : undefined}
-              >
-                {label}
-              </Text>
-            </Box>
-            <Box width={trailingWidth}>
-              <Text fg={selected ? paletteSelectedText : paletteSubtleText}>
-                {truncateText(trailing, trailingWidth)}
-              </Text>
-            </Box>
-          </Box>
-        );
-      })}
-    </ScrollBox>
+      scrollable
+      rowGap={0}
+      rowHeight={1}
+      surface="plain"
+      bgColor={nativePaneChrome ? panelBg : paletteBg}
+      selectedBgColor={paletteSelectedBg}
+      hoverBgColor={paletteHoverBg}
+      emptyMessage={truncateText("No themes match", queryDisplayWidth)}
+      showSelectedDescription={false}
+      onSelect={handleSelect}
+      onActivate={handleActivate}
+      onMouseScroll={!nativePaneChrome ? handleScroll : undefined}
+      renderRow={renderRow}
+      remoteLabel="Theme picker"
+      remoteScope="command-bar"
+      remoteItemKind="theme"
+      remoteItemCategory="Themes"
+      remoteMetadata={{
+        surface: "theme-picker",
+        filter: normalizedFilter,
+      }}
+    />
   );
 }));

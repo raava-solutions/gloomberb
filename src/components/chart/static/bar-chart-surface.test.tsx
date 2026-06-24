@@ -47,6 +47,8 @@ describe("StaticBarChartSurface", () => {
 
     await act(async () => {
       await testSetup!.mockMouse.moveTo(14, 4);
+    });
+    await act(async () => {
       await testSetup!.renderOnce();
       await testSetup!.renderOnce();
     });
@@ -86,6 +88,8 @@ describe("StaticBarChartSurface", () => {
       await testSetup!.renderOnce();
       await testSetup!.renderOnce();
       await testSetup!.mockMouse.moveTo(14, 4);
+    });
+    await act(async () => {
       await testSetup!.renderOnce();
       await testSetup!.renderOnce();
     });

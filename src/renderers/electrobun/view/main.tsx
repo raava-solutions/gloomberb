@@ -5,7 +5,7 @@ import { App } from "../../../app";
 import { UiHostProvider } from "../../../ui/host";
 import { debugLog } from "../../../utils/debug-log";
 import { measurePerfAsync } from "../../../utils/perf-marks";
-import { backendRequest, initElectrobunBackend } from "./backend-rpc";
+import { backendRequest, initElectrobunBackend, setElectrobunRemoteRequestHandler } from "./backend-rpc";
 import { installElectrobunAiHost } from "./ai-host";
 import { installElectrobunBrokerRemoteClient } from "./broker-remote-client";
 import { installElectrobunConfigStoreHost } from "./config-host";
@@ -89,6 +89,9 @@ async function boot() {
   const desktopWindowBridge = createDesktopWindowBridge(init.windowKind, init.paneId);
   const desktopApplicationMenuBridge = createApplicationMenuBridge();
   const webUiHost = createWebUiHost(init.desktopPlatform);
+  const remoteControlAdapter = init.windowKind === "main"
+    ? { registerHandler: setElectrobunRemoteRequestHandler }
+    : undefined;
   measurePerfAsync("startup.electrobun.root-render", async () => {
     root.render(
       <ElectrobunErrorBoundary>
@@ -102,6 +105,7 @@ async function boot() {
                   desktopApplicationMenuBridge={desktopApplicationMenuBridge}
                   desktopSnapshot={desktopSnapshot}
                   desktopThemePreview={init.desktopThemePreview}
+                  remoteControlAdapter={remoteControlAdapter}
                 />
               </WebDialogHostProvider>
             </WebToastHostProvider>

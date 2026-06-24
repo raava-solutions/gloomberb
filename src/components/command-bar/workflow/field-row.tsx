@@ -15,6 +15,7 @@ import {
   isWorkflowTextField,
   summarizeWorkflowFieldValue,
 } from "../helpers";
+import { useRemoteUiNode } from "../../../remote/semantic-tree";
 import type {
   CommandBarFieldValue,
   CommandBarWorkflowField,
@@ -84,6 +85,34 @@ export function CommandBarWorkflowFieldRow({
       onMoveFieldFocus(1);
     }
   };
+  const focusOrOpenField = () => {
+    onActiveTextareaSync(route);
+    onFieldFocus(field.id);
+    if (!isWorkflowTextField(field) && !useNativeSelect) {
+      onFieldPickerOpen(route, field);
+    }
+  };
+
+  useRemoteUiNode({
+    role: "command-bar-field",
+    label: field.label,
+    disabled: route.pending,
+    actions: {
+      focus: focusOrOpenField,
+      open: !isWorkflowTextField(field) && !useNativeSelect ? focusOrOpenField : undefined,
+      submit: () => void onSubmit(route),
+    },
+    metadata: {
+      scope: "command-bar",
+      surface: "workflow",
+      routeTitle: route.title,
+      fieldId: field.id,
+      fieldType: field.type,
+      active,
+      value: summarizeWorkflowFieldValue(field, value),
+      description: fieldDescription,
+    },
+  });
 
   return (
     <Box
@@ -93,11 +122,7 @@ export function CommandBarWorkflowFieldRow({
       backgroundColor={fieldBg}
       onMouseDown={(event: any) => {
         event.stopPropagation?.();
-        onActiveTextareaSync(route);
-        onFieldFocus(field.id);
-        if (!isWorkflowTextField(field) && !useNativeSelect) {
-          onFieldPickerOpen(route, field);
-        }
+        focusOrOpenField();
       }}
       style={nativePaneChrome ? {
         marginBottom: isLastField ? 8 : 10,
