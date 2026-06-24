@@ -253,6 +253,10 @@ export function StaticChartSurface({
             flexDirection="column"
             bitmaps={bitmap ? [bitmap] : null}
             crosshair={canvasCrosshair}
+            onMouseMove={handleCursorEvent}
+            onMouseDown={handleCursorEvent}
+            onMouseOut={clearCursor}
+            data-gloom-remote-kind="static-chart"
           >
             {textResult.lines.map((line, index) => (
               <Text key={index} content={line} />

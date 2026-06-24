@@ -55,6 +55,8 @@ import {
   desktopWindowStyleMask,
 } from "./desktop/window-style";
 import { applyDesktopWindowControl, type DesktopWindowControlAction } from "./desktop/window-controls";
+import { startRemoteControlServer, type RemoteControlServer } from "../../../remote/server";
+import type { RemoteControlRequest, RemoteControlResponse } from "../../../remote/types";
 
 type DesktopRpc = ReturnType<typeof BrowserView.defineRPC<ElectrobunDesktopRpcSchema>>;
 
@@ -70,6 +72,7 @@ let services: AppServices | null = null;
 let mainWindow: BrowserWindow | null = null;
 let desktopWorkspace: DesktopWorkspace | null = null;
 let desktopRestartInProgress = false;
+let desktopRemoteControlServer: RemoteControlServer | null = null;
 
 const windowRpcRegistry = createDesktopRpcRegistry<DesktopRpc>();
 const contextMenuRequestRpcs = new Map<string, DesktopRpc>();
@@ -98,6 +101,10 @@ function registerCoreCapabilities(): void {
 function requireDesktopWorkspace(): DesktopWorkspace {
   if (!desktopWorkspace) throw new Error("Desktop workspace has not been initialized.");
   return desktopWorkspace;
+}
+
+function remoteFailure(code: string, message: string): RemoteControlResponse {
+  return { ok: false, error: { code, message } };
 }
 
 const {
@@ -129,6 +136,46 @@ const detachedWindowManager = new DesktopDetachedWindowManager<DesktopRpc>({
   unregisterWindowRpc,
   stateBroadcaster: desktopStateBroadcaster,
 });
+
+async function forwardRemoteControlRequest(request: RemoteControlRequest): Promise<RemoteControlResponse> {
+  const rpc = getWindowRpc(MAIN_WINDOW_RPC_KEY);
+  if (!rpc || !isWindowRpcReady(MAIN_WINDOW_RPC_KEY)) {
+    return remoteFailure("remote_unavailable", "The main desktop window is not ready for remote control requests.");
+  }
+  try {
+    const response = await rpc.request["remote.request"]({
+      request: encodeRpcValue(request) as RemoteControlRequest,
+    });
+    return decodeRpcValue<RemoteControlResponse>(response);
+  } catch (error) {
+    return remoteFailure(
+      "remote_forward_error",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+
+async function ensureDesktopRemoteControlServer(): Promise<void> {
+  if (desktopRemoteControlServer) return;
+  const config = requireConfig();
+  desktopRemoteControlServer = await startRemoteControlServer({
+    dataDir: config.dataDir,
+    appKind: "desktop",
+    handle: forwardRemoteControlRequest,
+  });
+  console.error("[remote] desktop control endpoint started", {
+    port: desktopRemoteControlServer.endpoint.port,
+  });
+}
+
+function stopDesktopRemoteControlServer(): void {
+  const server = desktopRemoteControlServer;
+  desktopRemoteControlServer = null;
+  if (!server) return;
+  void server.close().catch((error) => {
+    console.error("[remote] desktop control endpoint cleanup failed", summarizeError(error));
+  });
+}
 
 function openMainWindowDevTools(): void {
   mainWindow?.webview.openDevTools();
@@ -228,6 +275,7 @@ function disposeWindowScopedResources(windowKey: string): void {
 }
 
 function teardownServices(): void {
+  stopDesktopRemoteControlServer();
   capabilityBridge.disposeAll();
   services?.destroy();
   services = null;
@@ -306,7 +354,7 @@ async function initialize(
   rpc: DesktopRpc,
   payload: Record<string, unknown>,
 ) {
-  return initializeDesktopBackend({
+  const init = await initializeDesktopBackend({
     getCurrentConfig: () => currentConfig,
     getCurrentServices: () => services,
     getDesktopSnapshot,
@@ -328,6 +376,12 @@ async function initialize(
     },
     syncConfigAccessors,
   });
+  if (init.windowKind === "main") {
+    void ensureDesktopRemoteControlServer().catch((error) => {
+      console.error("[remote] desktop control endpoint failed", summarizeError(error));
+    });
+  }
+  return init;
 }
 
 async function handleBackendRequest(

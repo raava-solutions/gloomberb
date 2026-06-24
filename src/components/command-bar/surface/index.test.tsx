@@ -129,6 +129,20 @@ describe("CommandBar", () => {
     expect(testSetup.captureCharFrame()).not.toContain("Commands");
   });
 
+  test("shows theme picker rows and commits a filtered light theme", async () => {
+    testSetup = await testRender(<CommandBarHarness query="TH light" live />, {
+      width: 80,
+      height: 24,
+    });
+
+    await testSetup.renderOnce();
+    expect(testSetup.captureCharFrame()).toContain("GitHub Light");
+
+    await clickFrameText("GitHub Light");
+    await waitForFrameToContain("theme:github-light");
+    expect(testSetup.captureCharFrame()).not.toContain("GitHub Light");
+  });
+
   test("runs plugin command shortcuts from the root query", async () => {
     const calls: string[] = [];
 

@@ -9,10 +9,12 @@ import {
   type DesktopStateMessage,
   type DesktopThemePreviewMessage,
   type ElectrobunBackendInit,
+  type RemoteControlRequestMessage,
   type ElectrobunDesktopRpcSchema,
   type UpdateProgressMessage,
 } from "../shared/protocol";
 import { decodeRpcValue, encodeRpcValue } from "./rpc-codec";
+import type { RemoteControlRequest, RemoteControlResponse } from "../../../remote/types";
 
 type ContextMenuSelectListener = (message: ContextMenuSelectMessage) => void;
 type ApplicationMenuSelectListener = (message: ApplicationMenuSelectMessage) => void;
@@ -21,8 +23,10 @@ type DesktopDockPreviewListener = (message: DesktopDockPreviewMessage) => void;
 type DesktopThemePreviewListener = (message: DesktopThemePreviewMessage) => void;
 type UpdateProgressListener = (message: UpdateProgressMessage) => void;
 type CapabilityEventListener = (message: CapabilityEventMessage) => void;
+type RemoteControlRequestHandler = (request: RemoteControlRequest) => Promise<RemoteControlResponse>;
 
 let initSnapshot: ElectrobunBackendInit | null = null;
+let remoteControlRequestHandler: RemoteControlRequestHandler | null = null;
 const contextMenuSelectListeners = new Map<string, Set<ContextMenuSelectListener>>();
 const applicationMenuSelectListeners = new Set<ApplicationMenuSelectListener>();
 const desktopStateListeners = new Set<DesktopStateListener>();
@@ -63,7 +67,21 @@ function subscribe<T>(
 const rpc = Electroview.defineRPC<ElectrobunDesktopRpcSchema>({
   maxRequestTime: 120_000,
   handlers: {
-    requests: {},
+    requests: {
+      "remote.request": async (message: RemoteControlRequestMessage) => {
+        if (!remoteControlRequestHandler) {
+          return {
+            ok: false,
+            error: {
+              code: "remote_unavailable",
+              message: "The desktop app has not installed a remote control handler yet.",
+            },
+          };
+        }
+        const decoded = decodeRpcValue<RemoteControlRequest>(message.request);
+        return encodeRpcValue(await remoteControlRequestHandler(decoded)) as RemoteControlResponse;
+      },
+    },
     messages: {
       "context-menu.select": (message) => {
         dispatch(contextMenuSelectListeners, message.requestId, message);
@@ -138,6 +156,15 @@ export function requestElectrobunRestart(message: DesktopRestartMessage = {}): v
 
 export function getElectrobunBackendInitSnapshot(): ElectrobunBackendInit | null {
   return initSnapshot;
+}
+
+export function setElectrobunRemoteRequestHandler(handler: RemoteControlRequestHandler | null): () => void {
+  remoteControlRequestHandler = handler;
+  return () => {
+    if (remoteControlRequestHandler === handler) {
+      remoteControlRequestHandler = null;
+    }
+  };
 }
 
 export function onCapabilityEvent(

@@ -2,7 +2,13 @@ import { existsSync } from "fs";
 import { join } from "path";
 
 const rootDir = join(import.meta.dir, "..");
-const electrobunBin = join(rootDir, "node_modules", "electrobun", "bin", process.platform === "win32" ? "electrobun.exe" : "electrobun");
+const electrobunBinCandidates = process.platform === "win32"
+  ? [join(rootDir, "node_modules", "electrobun", "bin", "electrobun.exe")]
+  : [
+    join(rootDir, "node_modules", "electrobun", "bin", "electrobun"),
+    join(rootDir, "node_modules", "electrobun", "bin", "electrobun.cjs"),
+  ];
+const electrobunBin = electrobunBinCandidates.find((path) => existsSync(path));
 
 async function run(command: string[], options: { allowFailure?: boolean; stdout?: "inherit" | "ignore"; stderr?: "inherit" | "ignore" } = {}) {
   const proc = Bun.spawn(command, {
@@ -22,8 +28,8 @@ async function ensureMacExecutableSignature(path: string) {
   await run(["codesign", "--force", "--sign", "-", path]);
 }
 
-if (!existsSync(electrobunBin)) {
-  throw new Error(`Electrobun CLI not found at ${electrobunBin}. Run bun install first.`);
+if (!electrobunBin) {
+  throw new Error(`Electrobun CLI not found. Checked: ${electrobunBinCandidates.join(", ")}. Run bun install first.`);
 }
 
 await ensureMacExecutableSignature(electrobunBin);

@@ -2,12 +2,19 @@ import { Box, ScrollBox, Text, useUiHost } from "../../ui";
 import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { TextAttributes, type ScrollBoxRenderable } from "../../ui";
 import { colors, hoverBg } from "../../theme/colors";
+import { useRemoteUiNode } from "../../remote/semantic-tree";
+import { resolveRemoteItemIndex } from "../../remote/semantic-helpers";
 
 export interface ListViewItem {
   id: string;
   label: string;
   description?: string;
   detail?: string;
+  category?: string;
+  kind?: string;
+  right?: string;
+  checked?: boolean;
+  current?: boolean;
   disabled?: boolean;
 }
 
@@ -38,6 +45,13 @@ export interface ListViewProps {
   scrollable?: boolean;
   selectOnHover?: boolean;
   autoScrollToIndex?: boolean;
+  onMouseScroll?: (event: any) => void;
+  remoteRole?: string;
+  remoteLabel?: string;
+  remoteScope?: string;
+  remoteItemKind?: string;
+  remoteItemCategory?: string;
+  remoteMetadata?: Record<string, unknown>;
 }
 
 function DefaultRow({
@@ -88,7 +102,49 @@ export function ListView({
   scrollable = false,
   selectOnHover = false,
   autoScrollToIndex = true,
+  onMouseScroll,
+  remoteRole = "list",
+  remoteLabel,
+  remoteScope,
+  remoteItemKind,
+  remoteItemCategory,
+  remoteMetadata,
 }: ListViewProps) {
+  useRemoteUiNode({
+    role: remoteRole,
+    label: remoteLabel ?? emptyMessage,
+    actions: {
+      select: (input) => {
+        const index = resolveListIndex(input, items);
+        if (index >= 0 && !items[index]?.disabled) onSelect?.(index);
+      },
+      activate: (input) => {
+        const index = resolveListIndex(input, items);
+        const item = index >= 0 ? items[index] : undefined;
+        if (item && !item.disabled) {
+          onSelect?.(index);
+          onActivate?.(item, index);
+        }
+      },
+    },
+    metadata: {
+      ...remoteMetadata,
+      scope: remoteScope,
+      selectedIndex,
+      items: items.map((item, index) => ({
+        index,
+        id: item.id,
+        label: item.label,
+        detail: item.detail,
+        category: item.category ?? remoteItemCategory,
+        kind: item.kind ?? remoteItemKind,
+        right: item.right,
+        checked: item.checked,
+        current: item.current,
+        disabled: item.disabled === true,
+      })),
+    },
+  });
   const HostListView = useUiHost().ListView as ComponentType<ListViewProps> | undefined;
   if (HostListView) {
     return (
@@ -113,6 +169,13 @@ export function ListView({
         scrollable={scrollable}
         selectOnHover={selectOnHover}
         autoScrollToIndex={autoScrollToIndex}
+        onMouseScroll={onMouseScroll}
+        remoteRole={remoteRole}
+        remoteLabel={remoteLabel}
+        remoteScope={remoteScope}
+        remoteItemKind={remoteItemKind}
+        remoteItemCategory={remoteItemCategory}
+        remoteMetadata={remoteMetadata}
       />
     );
   }
@@ -130,7 +193,7 @@ export function ListView({
     const sb = scrollRef.current;
     if (!sb) return;
     const safeIndex = Math.min(activeScrollIndex, items.length - 1);
-    const viewportH = Math.max(sb.viewport.height, 1);
+    const viewportH = Math.max(sb.viewport?.height ?? 1, 1);
     if (safeIndex < sb.scrollTop) {
       sb.scrollTo(safeIndex);
     } else if (safeIndex >= sb.scrollTop + viewportH) {
@@ -142,7 +205,9 @@ export function ListView({
     if (!scrollable) return;
     const sb = scrollRef.current;
     if (!sb) return;
-    sb.verticalScrollBar.visible = items.length > sb.viewport.height;
+    if (sb.verticalScrollBar) {
+      sb.verticalScrollBar.visible = items.length > (sb.viewport?.height ?? 0);
+    }
   }, [items.length, height, flexGrow, scrollable]);
 
   if (items.length === 0) {
@@ -172,6 +237,7 @@ export function ListView({
             if (selectOnHover) onSelect?.(index);
           }
         }}
+        {...(onMouseScroll ? { onMouseScroll } : {})}
         onMouseDown={() => {
           if (disabled) return;
           onSelect?.(index);
@@ -188,7 +254,14 @@ export function ListView({
   return (
     <Box flexDirection="column" height={height} flexGrow={flexGrow}>
       {scrollable ? (
-        <ScrollBox ref={scrollRef} height={height} flexGrow={flexGrow} scrollY focusable={false}>
+        <ScrollBox
+          ref={scrollRef}
+          height={height}
+          flexGrow={flexGrow}
+          scrollY
+          focusable={false}
+          {...(onMouseScroll ? { onMouseScroll } : {})}
+        >
           {rows}
         </ScrollBox>
       ) : rows}
@@ -203,4 +276,11 @@ export function ListView({
       )}
     </Box>
   );
+}
+
+function resolveListIndex(input: unknown, items: ListViewItem[]): number {
+  return resolveRemoteItemIndex(input, items, {
+    id: (item) => item.id,
+    label: (item) => item.label,
+  });
 }

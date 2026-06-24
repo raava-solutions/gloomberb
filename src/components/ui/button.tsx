@@ -2,6 +2,7 @@ import { Box, Text, useUiHost } from "../../ui";
 import { TextAttributes } from "../../ui";
 import { type ComponentType } from "react";
 import { colors } from "../../theme/colors";
+import { useRemoteUiNode } from "../../remote/semantic-tree";
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 
@@ -45,6 +46,17 @@ export function Button({
   shortcut,
   width,
 }: ButtonProps) {
+  useRemoteUiNode({
+    role: "button",
+    label,
+    disabled,
+    actions: {
+      press: () => {
+        if (!disabled) onPress?.();
+      },
+    },
+    metadata: { variant, active, shortcut },
+  });
   const HostButton = useUiHost().Button as ComponentType<ButtonProps> | undefined;
   if (HostButton) {
     return (

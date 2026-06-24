@@ -2,6 +2,8 @@ import { Box, Input, Span, Text, useUiHost } from "../../ui";
 import { useEffect, useRef, useState, type ComponentType, type RefObject } from "react";
 import { type InputRenderable } from "../../ui";
 import { colors } from "../../theme/colors";
+import { useRemoteUiNode } from "../../remote/semantic-tree";
+import { remoteStringValue } from "../../remote/semantic-helpers";
 
 export interface TextFieldProps {
   label?: string;
@@ -46,6 +48,22 @@ export function TextField({
   placeholderColor = colors.textDim,
   onMouseDown,
 }: TextFieldProps) {
+  useRemoteUiNode({
+    role: "text-field",
+    label: label ?? placeholder,
+    actions: {
+      setValue: (input) => {
+        const nextValue = remoteStringValue(input);
+        onChange?.(nextValue);
+      },
+      submit: (input) => {
+        const nextValue = remoteStringValue(input, value ?? "");
+        onSubmit?.(nextValue);
+      },
+      blur: () => onBlur?.(value ?? ""),
+    },
+    metadata: { value, placeholder, focused, type, variant },
+  });
   const HostTextField = useUiHost().TextField as ComponentType<TextFieldProps> | undefined;
   if (HostTextField) {
     return (

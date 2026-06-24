@@ -1,19 +1,23 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { act } from "react";
+import { act, useEffect } from "react";
 import { testRender } from "../../../../renderers/opentui/test-utils";
 import { colors } from "../../../../theme/colors";
+import { RemoteUiRegistryProvider, useRemoteUiRegistry, type RemoteUiRegistry } from "../../../../remote/semantic-tree";
 import { resolveChartPalette } from "../../core/renderer";
 import { StaticChartSurface } from "./surface";
 import type { ProjectedChartPoint } from "../../core/data";
 
 let testSetup: Awaited<ReturnType<typeof testRender>> | undefined;
+let remoteRegistry: RemoteUiRegistry | null = null;
 
 afterEach(async () => {
-  if (!testSetup) return;
-  await act(async () => {
-    testSetup!.renderer.destroy();
-  });
+  const setup = testSetup;
   testSetup = undefined;
+  remoteRegistry = null;
+  if (!setup) return;
+  await act(async () => {
+    setup.renderer.destroy();
+  });
 });
 
 const points: ProjectedChartPoint[] = [
@@ -21,6 +25,14 @@ const points: ProjectedChartPoint[] = [
   { date: new Date("2026-01-02"), open: 4.1, high: 4.1, low: 4.1, close: 4.1, volume: 0 },
   { date: new Date("2026-01-03"), open: 4.9, high: 4.9, low: 4.9, close: 4.9, volume: 0 },
 ];
+
+function RemoteRegistryProbe() {
+  const registry = useRemoteUiRegistry();
+  useEffect(() => {
+    remoteRegistry = registry;
+  }, [registry]);
+  return null;
+}
 
 describe("StaticChartSurface", () => {
   test("renders unit and custom y-axis labels", async () => {
@@ -132,6 +144,49 @@ describe("StaticChartSurface", () => {
 
     await act(async () => {
       await testSetup!.mockMouse.moveTo(20, 4);
+    });
+    await act(async () => {
+      await testSetup!.renderOnce();
+      await testSetup!.renderOnce();
+    });
+
+    expect(testSetup.captureCharFrame()).not.toBe(initialFrame);
+    expect(testSetup.captureCharFrame()).toContain("X49");
+    expect(testSetup.captureCharFrame()).toContain("Y3.97");
+  });
+
+  test("exposes semantic remote cursor control", async () => {
+    testSetup = await testRender(
+      <RemoteUiRegistryProvider>
+        <RemoteRegistryProbe />
+        <StaticChartSurface
+          points={points}
+          width={48}
+          height={10}
+          mode="line"
+          colors={resolveChartPalette(colors, "positive")}
+          xAxisLabels={["0%", "50%", "100%"]}
+          formatXAxisCursorValue={(ratio) => `X${Math.round(ratio * 100)}`}
+          formatYAxisValue={(value) => `Y${value.toFixed(2)}`}
+        />
+      </RemoteUiRegistryProvider>,
+      { width: 50, height: 12 },
+    );
+
+    await act(async () => {
+      await testSetup!.renderOnce();
+      await testSetup!.renderOnce();
+    });
+    const initialFrame = testSetup.captureCharFrame();
+    const chartNode = remoteRegistry?.snapshot().find((node) => (
+      node.role === "chart" && node.metadata?.kind === "static-chart"
+    ));
+    expect(chartNode?.actions).toContain("moveCursor");
+
+    await act(async () => {
+      await remoteRegistry!.invoke(chartNode!.id, "moveCursor", { x: 20, y: 4 });
+    });
+    await act(async () => {
       await testSetup!.renderOnce();
       await testSetup!.renderOnce();
     });
