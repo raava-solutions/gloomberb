@@ -17,6 +17,8 @@ import { colors } from "../../theme/colors";
 import { startMainThreadMonitor } from "../../utils/main-thread-monitor";
 import { measurePerfAsync } from "../../utils/perf-marks";
 import type { CliLaunchRequest } from "../../types/plugin";
+import type { RemoteControlAdapter } from "../../remote/app-host";
+import { startRemoteControlServer, type RemoteControlServer } from "../../remote/server";
 
 export interface StartOpenTuiAppOptions {
   externalPlugins?: Awaited<ReturnType<typeof loadExternalPlugins>>;
@@ -31,6 +33,35 @@ export async function startOpenTuiApp(options: StartOpenTuiAppOptions = {}): Pro
 
   const appLog = debugLog.createLogger("app");
   appLog.info("Gloomberb starting");
+  const remoteControlAdapter: RemoteControlAdapter = {
+    startServer: ({ dataDir, handle }) => {
+      let closed = false;
+      const serverPromise: Promise<RemoteControlServer> = startRemoteControlServer({
+        dataDir,
+        appKind: "tui",
+        handle,
+      });
+      void serverPromise.then((server) => {
+        if (closed) {
+          void server.close();
+          return;
+        }
+        appLog.info("Remote control endpoint started", {
+          appKind: server.endpoint.appKind,
+          port: server.endpoint.port,
+        });
+      }).catch((error) => {
+        appLog.error("Remote control endpoint failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+
+      return () => {
+        closed = true;
+        void serverPromise.then((server) => server.close()).catch(() => {});
+      };
+    },
+  };
 
   const cliArgs = options.cliArgs ?? process.argv.slice(2);
   const externalPlugins = options.externalPlugins ?? await measurePerfAsync("startup.opentui.load-external-plugins", () => loadExternalPlugins());
@@ -81,6 +112,7 @@ export async function startOpenTuiApp(options: StartOpenTuiAppOptions = {}): Pro
                 config={config}
                 externalPlugins={externalPlugins}
                 cliLaunchRequest={cliLaunchRequest}
+                remoteControlAdapter={remoteControlAdapter}
               />
             </OpenTuiDialogHostProvider>
           </ToastHostProvider>

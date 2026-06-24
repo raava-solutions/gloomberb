@@ -3,6 +3,7 @@ import { useShortcut } from "../../react/input";
 import { Box, ScrollBox, Text, useUiHost } from "../../ui";
 import { TextAttributes, type ScrollBoxRenderable } from "../../ui";
 import { colors, hoverBg } from "../../theme/colors";
+import { useRemoteUiNode } from "../../remote/semantic-tree";
 
 type TabPointerEvent = {
   button?: number;
@@ -76,6 +77,36 @@ export function Tabs({
     navigationValueRef.current = value;
     onSelect(value);
   }, [onSelect]);
+  useRemoteUiNode({
+    role: "tabs",
+    label: "Tabs",
+    actions: {
+      select: (input) => {
+        const value = resolveTabValue(input, tabs);
+        if (!value) return;
+        const tab = tabs.find((entry) => entry.value === value);
+        if (!tab || tab.disabled) return;
+        handleSelect(value);
+      },
+      add: onAdd ? () => onAdd() : undefined,
+      close: (input) => {
+        const value = resolveTabValue(input, tabs);
+        if (!value) return;
+        const tab = tabs.find((entry) => entry.value === value);
+        if (!tab || tab.disabled) return;
+        tab.onClose?.(value);
+      },
+    },
+    metadata: {
+      activeValue,
+      tabs: tabs.map((tab) => ({
+        label: tab.label,
+        value: tab.value,
+        disabled: tab.disabled === true,
+        closeable: !!tab.onClose,
+      })),
+    },
+  });
 
   const selectAdjacentTab = useCallback((direction: -1 | 1) => {
     const enabledTabs = tabs.filter((tab) => !tab.disabled);
@@ -142,6 +173,20 @@ export function Tabs({
       palette={palette}
     />
   );
+}
+
+function resolveTabValue(input: unknown, tabs: TabItem[]): string | null {
+  if (typeof input === "string") return input;
+  if (typeof input === "number") return tabs[input]?.value ?? null;
+  if (input && typeof input === "object") {
+    const value = input as { value?: unknown; label?: unknown; index?: unknown };
+    if (typeof value.value === "string") return value.value;
+    if (typeof value.label === "string") {
+      return tabs.find((tab) => tab.label === value.label)?.value ?? null;
+    }
+    if (typeof value.index === "number") return tabs[value.index]?.value ?? null;
+  }
+  return null;
 }
 
 function tabWidth(

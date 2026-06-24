@@ -39,6 +39,8 @@ import { bindPluginRegistryRuntimeAccess } from "./app/runtime/plugin-bindings";
 import { useAppStartupRuntime } from "./app/runtime/startup";
 import { useTickerRefreshRuntime } from "./app/runtime/ticker-refresh";
 import { useAppUpdateRuntime } from "./app/runtime/update";
+import { RemoteControlHost, type RemoteControlAdapter } from "./remote/app-host";
+import { RemoteUiRegistryProvider } from "./remote/semantic-tree";
 import {
   resolveAppSessionSnapshot,
   resolveCliLaunchConfig,
@@ -55,6 +57,7 @@ interface AppInnerProps {
   sessionSnapshot?: AppSessionSnapshot | null;
   desktopWindowBridge?: DesktopWindowBridge;
   desktopApplicationMenuBridge?: DesktopApplicationMenuBridge;
+  remoteControlAdapter?: RemoteControlAdapter;
 }
 
 function ThemedAppRoot({ children }: { children: ReactNode }) {
@@ -83,9 +86,11 @@ function AppInner({
   sessionSnapshot = null,
   desktopWindowBridge,
   desktopApplicationMenuBridge,
+  remoteControlAdapter,
 }: AppInnerProps) {
   const dispatch = useAppDispatch();
   const stateRef = useAppStateRef();
+  const getRemoteState = useCallback(() => stateRef.current, [stateRef]);
   const config = useAppSelector((state) => state.config);
   const tickers = useAppSelector((state) => state.tickers);
   const paneState = useAppSelector((state) => state.paneState);
@@ -288,6 +293,13 @@ function AppInner({
   if (desktopWindowBridge?.kind === "detached" && desktopWindowBridge.paneId) {
     return (
       <ContextMenuProvider pluginRegistry={pluginRegistry}>
+        <RemoteControlHost
+          adapter={remoteControlAdapter}
+          dispatch={dispatch}
+          getState={getRemoteState}
+          pluginRegistry={pluginRegistry}
+          desktopWindowBridge={desktopWindowBridge}
+        />
         <ThemedAppRoot>
           <DetachedPaneShell
             pluginRegistry={pluginRegistry}
@@ -301,6 +313,13 @@ function AppInner({
 
   return (
     <ContextMenuProvider pluginRegistry={pluginRegistry}>
+      <RemoteControlHost
+        adapter={remoteControlAdapter}
+        dispatch={dispatch}
+        getState={getRemoteState}
+        pluginRegistry={pluginRegistry}
+        desktopWindowBridge={desktopWindowBridge}
+      />
       <ThemedAppRoot>
         <Header />
         <TransientLayoutProvider>
@@ -336,6 +355,7 @@ interface AppProps {
   desktopApplicationMenuBridge?: DesktopApplicationMenuBridge;
   desktopSnapshot?: DesktopSharedStateSnapshot | null;
   desktopThemePreview?: DesktopThemePreviewState | null;
+  remoteControlAdapter?: RemoteControlAdapter;
 }
 
 export function App({
@@ -346,6 +366,7 @@ export function App({
   desktopApplicationMenuBridge,
   desktopSnapshot = null,
   desktopThemePreview = null,
+  remoteControlAdapter,
 }: AppProps) {
   const renderer = useNativeRenderer();
   const effectiveInitialConfig = useMemo(() => {
@@ -413,23 +434,26 @@ export function App({
   }
 
   return (
-    <AppProvider
-      config={config}
-      sessionStore={desktopWindowBridge?.kind === "detached" ? undefined : services.persistence.sessions}
-      sessionSnapshot={sessionSnapshot}
-      desktopBridge={desktopWindowBridge}
-      desktopSnapshot={desktopSnapshot}
-      initialThemePreview={desktopThemePreview}
-    >
-      <AppInner
-        pluginRegistry={services.pluginRegistry}
-        tickerRepository={services.tickerRepository}
-        dataProvider={services.dataProvider}
-        marketData={services.marketData}
+    <RemoteUiRegistryProvider>
+      <AppProvider
+        config={config}
+        sessionStore={desktopWindowBridge?.kind === "detached" ? undefined : services.persistence.sessions}
         sessionSnapshot={sessionSnapshot}
-        desktopWindowBridge={desktopWindowBridge}
-        desktopApplicationMenuBridge={desktopApplicationMenuBridge}
-      />
-    </AppProvider>
+        desktopBridge={desktopWindowBridge}
+        desktopSnapshot={desktopSnapshot}
+        initialThemePreview={desktopThemePreview}
+      >
+        <AppInner
+          pluginRegistry={services.pluginRegistry}
+          tickerRepository={services.tickerRepository}
+          dataProvider={services.dataProvider}
+          marketData={services.marketData}
+          sessionSnapshot={sessionSnapshot}
+          desktopWindowBridge={desktopWindowBridge}
+          desktopApplicationMenuBridge={desktopApplicationMenuBridge}
+          remoteControlAdapter={remoteControlAdapter}
+        />
+      </AppProvider>
+    </RemoteUiRegistryProvider>
   );
 }

@@ -2,6 +2,7 @@ import { Box, Span, Text, TextAttributes, useUiCapabilities } from "../../../../
 import { useRef } from "react";
 import { colors, blendHex } from "../../../../theme/colors";
 import { getShortcutHintWidth, ShortcutHint } from "../../../ui/shortcut-hint";
+import { useRemoteUiNode } from "../../../../remote/semantic-tree";
 import {
   EMPTY_FOOTER,
   hasPaneFooterContent,
@@ -50,6 +51,15 @@ function stopMouseEvent(event?: { stopPropagation?: () => void; preventDefault?:
 
 function SegmentView({ segment }: { segment: PaneFooterSegment }) {
   const interactive = !!segment.onPress && !segment.disabled;
+  useRemoteUiNode(interactive ? {
+    role: "pane-footer-segment",
+    label: segment.parts.map((part) => part.text).join(" "),
+    disabled: segment.disabled,
+    actions: {
+      press: () => segment.onPress?.(),
+    },
+    metadata: { id: segment.id },
+  } : null);
   const attributes = segment.parts.some((part) => part.bold) || interactive ? TextAttributes.BOLD : 0;
   const triggerMouseDownRef = useRef(false);
   const startSegmentPress = (event?: { stopPropagation?: () => void; preventDefault?: () => void }) => {
@@ -93,6 +103,19 @@ function totalHintsWidth(hints: PaneHint[]): number {
 }
 
 function HintView({ hint, prefixSpace }: { hint: PaneHint; prefixSpace: boolean }) {
+  useRemoteUiNode({
+    role: "pane-hint",
+    label: `${hint.key}${hint.label}`,
+    disabled: hint.disabled,
+    actions: {
+      press: hint.onPress ? () => hint.onPress?.() : undefined,
+    },
+    metadata: {
+      id: hint.id,
+      key: hint.key,
+      label: hint.label,
+    },
+  });
   return (
     <ShortcutHint
       hotkey={hint.key}
