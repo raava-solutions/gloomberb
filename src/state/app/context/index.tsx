@@ -342,27 +342,24 @@ export function AppProvider({
   stateRef.current = state;
 
   const dispatch = useCallback((action: AppAction) => {
-    if (desktopBridge) {
-      rawDispatch(action);
-      return;
-    }
-
-    switch (action.type) {
-      case "SET_CONFIG":
-        rawDispatch({
+    const dispatchedAction = desktopBridge
+      ? action
+      : action.type === "SET_CONFIG"
+        ? {
           ...action,
           config: materializeDetachedConfig(action.config),
-        });
-        return;
-      case "UPDATE_LAYOUT":
-        rawDispatch({
-          ...action,
-          layout: materializeDetachedPanesAsFloating(action.layout),
-        });
-        return;
-      default:
-        rawDispatch(action);
+        } as AppAction
+        : action.type === "UPDATE_LAYOUT"
+          ? {
+            ...action,
+            layout: materializeDetachedPanesAsFloating(action.layout),
+          } as AppAction
+          : action;
+    stateRef.current = appReducer(stateRef.current, dispatchedAction);
+    for (const listener of listenersRef.current) {
+      listener();
     }
+    rawDispatch(dispatchedAction);
   }, [desktopBridge, rawDispatch]);
 
   const buildDesktopSnapshot = useCallback((currentState: AppState): DesktopSharedStateSnapshot => ({

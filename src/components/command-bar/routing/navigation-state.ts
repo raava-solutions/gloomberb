@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
+import { useCallback, useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
 import type { AppAction } from "../../../state/app/context";
 import type { Command } from "../commands/registry";
 import { resolveCommandBarMode } from "../view-model";
@@ -62,6 +62,15 @@ export function useCommandBarNavigationState({
   const currentRoute = routeStack[routeStack.length - 1] ?? null;
   const currentRouteRef = useRef<CommandBarRoute | null>(currentRoute);
   currentRouteRef.current = currentRoute;
+
+  useEffect(() => {
+    if (currentRouteRef.current) return;
+    if (initialQuery === rootQueryRef.current) return;
+    rootQueryRef.current = initialQuery;
+    setRootQueryValue(initialQuery);
+    setRootSelectedIdx(0);
+    setRootHoveredIdx(null);
+  }, [initialQuery]);
 
   const closeAll = useCallback((options?: CloseCommandBarOptions) => {
     if (options?.revertThemePreview !== false) {

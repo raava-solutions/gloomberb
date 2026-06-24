@@ -10,6 +10,7 @@ import {
 import { Spinner } from "../../ui";
 import type { CommandBarListRow, ListScreenState, ResultItem } from "./model";
 import { getRowPresentation, truncateText } from "../view-model";
+import { useRemoteUiNode } from "../../../remote/semantic-tree";
 
 export type CommandBarListScrollEvent = {
   stopPropagation: () => void;
@@ -70,6 +71,8 @@ export const CommandBarListHeader = memo(function CommandBarListHeader({
             onChange={onQueryChange}
             placeholder={kind === "root" ? "Search commands" : title === "Security Description" ? "Search tickers" : "Filter"}
             focused
+            data-gloom-remote-scope="command-bar"
+            data-gloom-remote-surface="command-bar"
             width={nativePaneChrome ? "100%" : queryDisplayWidth}
             backgroundColor={nativePaneChrome ? "transparent" : paletteBg}
             focusedBackgroundColor={nativePaneChrome ? "transparent" : paletteBg}
@@ -114,6 +117,9 @@ interface CommandBarListItemRowProps {
   globalIdx: number;
   isSelected: boolean;
   isHovered: boolean;
+  listKind: ListScreenState["kind"];
+  listTitle: string;
+  listQuery: string;
   contentPadding: number;
   labelWidth: number;
   trailingWidth: number;
@@ -135,6 +141,9 @@ const CommandBarListItemRow = memo(function CommandBarListItemRow({
   globalIdx,
   isSelected,
   isHovered,
+  listKind,
+  listTitle,
+  listQuery,
   contentPadding,
   labelWidth,
   trailingWidth,
@@ -153,6 +162,41 @@ const CommandBarListItemRow = memo(function CommandBarListItemRow({
   const presentation = getRowPresentation(item, isSelected, trailingWidth > 0);
   const label = truncateText(presentation.label, labelWidth);
   const trailing = truncateText(presentation.trailing, trailingWidth);
+  const activate = () => onRowMouseDown({
+    preventDefault() {},
+    stopPropagation() {},
+  }, item, globalIdx);
+  useRemoteUiNode({
+    role: "command-bar-result",
+    label: item.label,
+    disabled: item.disabled === true,
+    actions: {
+      activate,
+      press: activate,
+      secondary: item.secondaryAction ? () => item.secondaryAction?.() : undefined,
+    },
+    metadata: {
+      index: globalIdx,
+      selected: isSelected,
+      hovered: isHovered,
+      listKind,
+      listTitle,
+      listQuery,
+      item: {
+        id: item.id,
+        label: item.label,
+        detail: item.detail,
+        category: item.category,
+        kind: item.kind,
+        right: item.right,
+        shortcutQuery: item.shortcutQuery,
+        searchText: item.searchText,
+        checked: item.checked,
+        current: item.current,
+        disabled: item.disabled === true,
+      },
+    },
+  });
 
   return (
     <Box
@@ -283,6 +327,9 @@ export const CommandBarListBody = memo(function CommandBarListBody({
             globalIdx={row.globalIdx}
             isSelected={isSelected}
             isHovered={isHovered}
+            listKind={visibleListState.kind}
+            listTitle={visibleListState.title}
+            listQuery={visibleListState.query}
             contentPadding={contentPadding}
             labelWidth={labelWidth}
             trailingWidth={trailingWidth}

@@ -26,6 +26,9 @@ export interface ToggleListProps {
   rowGap?: number;
   rowHeight?: number;
   surface?: "framed" | "plain";
+  remoteLabel?: string;
+  remoteScope?: string;
+  remoteMetadata?: Record<string, unknown>;
 }
 
 function DesktopToggleRow({
@@ -124,6 +127,9 @@ export function ToggleList({
   rowGap,
   rowHeight,
   surface,
+  remoteLabel,
+  remoteScope,
+  remoteMetadata,
 }: ToggleListProps) {
   const isDesktopWeb = useUiHost().kind === "desktop-web";
   const listItems: ListViewItem[] = items.map((item) => ({
@@ -145,6 +151,10 @@ export function ToggleList({
       rowGap={rowGap ?? (isDesktopWeb ? 0 : undefined)}
       rowHeight={rowHeight}
       surface={surface}
+      remoteLabel={remoteLabel}
+      remoteScope={remoteScope}
+      remoteMetadata={remoteMetadata}
+      remoteItemKind="toggle"
       onSelect={onSelect}
       onActivate={(item) => {
         onToggle?.(item.id);

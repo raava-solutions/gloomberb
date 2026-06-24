@@ -262,6 +262,25 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       };
     }
 
+    case "REPLACE_PANE_STATE": {
+      const current = state.paneState[action.paneId] ?? {};
+      const nextState = action.state;
+      if (Object.is(current, nextState)) return state;
+      const paneState = {
+        ...state.paneState,
+        [action.paneId]: nextState,
+      };
+      const recentTickers = current.cursorSymbol !== nextState.cursorSymbol
+        ? nextRecentTickers(state.recentTickers, typeof nextState.cursorSymbol === "string" ? nextState.cursorSymbol : null)
+        : state.recentTickers;
+      return {
+        ...state,
+        config: syncConfigActiveLayoutState(state.config, paneState, state.focusedPaneId, state.activePanel),
+        paneState,
+        recentTickers,
+      };
+    }
+
     case "UPDATE_PLUGIN_PANE_STATE": {
       const current = state.paneState[action.paneId] ?? {};
       const currentPluginState = current.pluginState ?? {};
