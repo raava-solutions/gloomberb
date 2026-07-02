@@ -1,12 +1,7 @@
 import type { ChoiceDialogChoice } from "../../../components";
 import type { AccountProfile, PublicPortfolioAnalytics } from "../../../api-client";
-import { calculatePortfolioSummaryTotals } from "../portfolio-list/metrics";
-import { resolvePortfolioAccountMetrics, resolvePortfolioMarketValue } from "../portfolio-list/account-metrics";
-import type { ResolvedPortfolioAccountState } from "../portfolio-list/summary";
-import type { AppConfig } from "../../../types/config";
-import type { TickerFinancials } from "../../../types/financials";
 import type { Portfolio, TickerRecord } from "../../../types/ticker";
-import { formatCompact, formatNumber, formatPercentRaw } from "../../../utils/format";
+import { formatNumber } from "../../../utils/format";
 
 export type AccountFieldKey =
   | "username"
@@ -142,10 +137,6 @@ export function selectedPortfolioLabel(portfolios: Portfolio[], value: string): 
   return portfolios.find((portfolio) => portfolio.id === value)?.name ?? value;
 }
 
-function signedCompact(value: number): string {
-  return `${value >= 0 ? "+" : ""}${formatCompact(value)}`;
-}
-
 function signedReturn(value: number): string {
   const percent = value * 100;
   return `${percent >= 0 ? "+" : ""}${formatNumber(percent, 2)}%`;
@@ -186,23 +177,13 @@ export function computeCumulativeReturn(
 }
 
 export function buildProfileAnalyticsPreview({
-  accountState,
-  baseCurrency,
   beta,
-  config,
-  exchangeRates,
-  financials,
   portfolio,
   portfolioTickers,
   selectedPortfolioId,
   oneYearReturn,
 }: {
-  accountState: ResolvedPortfolioAccountState | null;
-  baseCurrency: string;
   beta: number | null;
-  config: AppConfig;
-  exchangeRates: Map<string, number>;
-  financials: Map<string, TickerFinancials>;
   portfolio: Portfolio | null;
   portfolioTickers: TickerRecord[];
   selectedPortfolioId: string;
@@ -238,34 +219,17 @@ export function buildProfileAnalyticsPreview({
     };
   }
 
-  const totals = calculatePortfolioSummaryTotals(
-    portfolioTickers,
-    financials,
-    baseCurrency,
-    exchangeRates,
-    true,
-    portfolio.id,
-  );
-  const accountMetrics = resolvePortfolioAccountMetrics(totals, accountState?.account);
-  const marketValue = resolvePortfolioMarketValue(totals, accountState?.account);
-  const currency = portfolio.currency || config.baseCurrency;
-  const sourceLabel = accountState?.sourceLabel ?? null;
   const publicAnalytics: PublicPortfolioAnalytics = {
-    portfolioName: portfolio.name,
-    holdingsCount: portfolioTickers.length,
     oneYearReturn: finiteMetric(oneYearReturn),
     spyBeta: finiteMetric(beta),
-    marketValue: finiteMetric(marketValue),
-    currency,
-    sourceLabel,
-    asOf: new Date().toISOString(),
   };
+  const hasSharedMetric = publicAnalytics.oneYearReturn != null || publicAnalytics.spyBeta != null;
 
   return {
     status: "ready",
     title: portfolio.name,
-    subtitle: `${portfolioTickers.length} holdings${sourceLabel ? ` · ${sourceLabel}` : ""}`,
-    publicAnalytics,
+    subtitle: "",
+    publicAnalytics: hasSharedMetric ? publicAnalytics : null,
     metrics: [
       {
         id: "one-year",
@@ -280,25 +244,6 @@ export function buildProfileAnalyticsPreview({
         value: beta == null ? "Pending" : formatNumber(beta, 2),
         detail: beta == null ? "needs SPY overlap" : undefined,
         tone: beta == null ? "muted" : undefined,
-      },
-      {
-        id: "value",
-        label: "Value",
-        value: `${formatCompact(marketValue)} ${currency}`,
-      },
-      {
-        id: "day",
-        label: "Day",
-        value: signedCompact(accountMetrics.dailyPnl),
-        detail: formatPercentRaw(accountMetrics.dailyPnlPct),
-        tone: signedTone(accountMetrics.dailyPnl),
-      },
-      {
-        id: "pnl",
-        label: "P&L",
-        value: signedCompact(accountMetrics.unrealizedPnl),
-        detail: formatPercentRaw(accountMetrics.unrealizedPnlPct),
-        tone: signedTone(accountMetrics.unrealizedPnl),
       },
     ],
   };

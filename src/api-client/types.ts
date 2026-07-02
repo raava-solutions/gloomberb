@@ -122,14 +122,8 @@ export interface AccountProfile {
 }
 
 export interface PublicPortfolioAnalytics {
-  portfolioName?: string | null;
-  holdingsCount?: number | null;
   oneYearReturn?: number | null;
   spyBeta?: number | null;
-  marketValue?: number | null;
-  currency?: string | null;
-  sourceLabel?: string | null;
-  asOf?: string | null;
 }
 
 export interface BuildoutAccountResponse {

@@ -1,6 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import type { TickerFinancials } from "../../../types/financials";
-import type { AppConfig } from "../../../types/config";
 import type { Portfolio, TickerRecord } from "../../../types/ticker";
 import {
   buildPortfolioChoices,
@@ -30,23 +28,6 @@ function makeTicker(symbol: string, portfolios: string[], positionedPortfolios: 
       custom: {},
       tags: [],
     },
-  };
-}
-
-function makeFinancials(symbol: string): TickerFinancials {
-  return {
-    quote: {
-      symbol,
-      price: 100,
-      currency: "USD",
-      change: 2,
-      changePercent: 2,
-      previousClose: 98,
-      lastUpdated: Date.now(),
-    },
-    annualStatements: [],
-    quarterlyStatements: [],
-    priceHistory: [],
   };
 }
 
@@ -106,12 +87,7 @@ describe("account management model", () => {
     const portfolio: Portfolio = { id: "main", name: "Main Portfolio", currency: "USD" };
     const ticker = makeTicker("AAPL", ["main"], ["main"]);
     const preview = buildProfileAnalyticsPreview({
-      accountState: null,
-      baseCurrency: "USD",
       beta: 1.1,
-      config: { baseCurrency: "USD" } as AppConfig,
-      exchangeRates: new Map(),
-      financials: new Map([["AAPL", makeFinancials("AAPL")]]),
       portfolio,
       portfolioTickers: [ticker],
       selectedPortfolioId: "main",
@@ -119,16 +95,13 @@ describe("account management model", () => {
     });
 
     expect(preview.status).toBe("ready");
+    expect(preview.subtitle).toBe("");
+    expect(preview.metrics).toHaveLength(2);
     expect(preview.metrics[0]).toMatchObject({ label: "1Y", value: "+10.00%", tone: "positive" });
     expect(preview.metrics[1]).toMatchObject({ label: "SPY Beta", value: "1.10" });
-    expect(preview.metrics[2]).toMatchObject({ label: "Value", value: "1k USD" });
-    expect(preview.publicAnalytics).toMatchObject({
-      portfolioName: "Main Portfolio",
-      holdingsCount: 1,
+    expect(preview.publicAnalytics).toEqual({
       oneYearReturn: 0.1,
       spyBeta: 1.1,
-      marketValue: 1000,
-      currency: "USD",
     });
   });
 });

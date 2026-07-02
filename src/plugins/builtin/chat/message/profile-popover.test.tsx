@@ -19,12 +19,8 @@ describe("profile popover", () => {
       company: null,
       title: null,
       portfolioAnalytics: {
-        portfolioName: "Main Portfolio",
-        holdingsCount: 12,
         oneYearReturn: 0.14,
         spyBeta: 1.05,
-        marketValue: 125000,
-        currency: "USD",
       },
     }))).toBe(true);
   });

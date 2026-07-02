@@ -1,14 +1,30 @@
 import { describe, expect, test } from "bun:test";
 import { createInitialState } from "../core/state/app/state";
 import { createDefaultConfig } from "../types/config";
+import type { PricePoint } from "../types/financials";
 import type { TickerRecord } from "../types/ticker";
 import {
   __syncContributorInternalsForTests,
   coreCollectionsSyncContributor,
   coreConfigSyncContributor,
 } from "./core-contributors";
+import { setSyncedProfileAnalytics } from "./profile-analytics";
 
 describe("core sync contributors", () => {
+  function priceHistoryFromReturns(returns: number[]): PricePoint[] {
+    let close = 100;
+    return [
+      { date: new Date("2026-06-01T20:00:00.000Z"), close },
+      ...returns.map((value, index) => {
+        close *= 1 + value;
+        return {
+          date: new Date(Date.UTC(2026, 5, index + 2, 20)),
+          close,
+        };
+      }),
+    ];
+  }
+
   test("redacts local paths and credential-like config keys", async () => {
     const config = createDefaultConfig("/Users/vince/private-data");
     config.brokerInstances = [{
@@ -112,7 +128,7 @@ describe("core sync contributors", () => {
     expect((payload as any).analyticsByPortfolio.main.oneYearReturn).toBe(0.42);
   });
 
-  test("syncs portfolio analytics in base currency and uses broker account market value", async () => {
+  test("syncs only public return and beta analytics", async () => {
     const config = createDefaultConfig("/tmp/gloomberb-sync-test");
     config.baseCurrency = "USD";
     config.portfolios = [
@@ -162,12 +178,20 @@ describe("core sync contributors", () => {
       ["7203.T", {
         quote: { symbol: "7203.T", price: 1000, currency: "JPY", change: 0, changePercent: 0, lastUpdated: 1 },
         fundamentals: { return1Y: 0.1 },
+        priceHistory: priceHistoryFromReturns([0.015, -0.0045, 0.018, 0.009, -0.006, 0.012, 0.0045, -0.003, 0.0105, 0.006, -0.0015]),
         annualStatements: [],
         quarterlyStatements: [],
       }],
       ["6758.T", {
         quote: { symbol: "6758.T", price: 1000, currency: "JPY", change: 0, changePercent: 0, lastUpdated: 1 },
         fundamentals: { return1Y: 0.2 },
+        priceHistory: priceHistoryFromReturns([0.03, -0.009, 0.036, 0.018, -0.012, 0.024, 0.009, -0.006, 0.021, 0.012, -0.003]),
+        annualStatements: [],
+        quarterlyStatements: [],
+      }],
+      ["SPY", {
+        quote: { symbol: "SPY", price: 100, currency: "USD", change: 0, changePercent: 0, lastUpdated: 1 },
+        priceHistory: priceHistoryFromReturns([0.01, -0.003, 0.012, 0.006, -0.004, 0.008, 0.003, -0.002, 0.007, 0.004, -0.001]),
         annualStatements: [],
         quarterlyStatements: [],
       }],
@@ -184,10 +208,14 @@ describe("core sync contributors", () => {
 
     const payload = await coreCollectionsSyncContributor.collect({ state }) as any;
 
-    expect(payload.analyticsByPortfolio.main.marketValue).toBeCloseTo(67);
     expect(payload.analyticsByPortfolio.main.oneYearReturn).toBe(0.1);
-    expect(payload.analyticsByPortfolio["broker:ibkr:U123"].marketValue).toBe(1234);
-    expect(payload.analyticsByPortfolio["broker:ibkr:U123"].sourceLabel).toBe("Flex");
+    expect(payload.analyticsByPortfolio.main.spyBeta).toBeCloseTo(1.5, 5);
+    expect(payload.analyticsByPortfolio["broker:ibkr:U123"].oneYearReturn).toBe(0.2);
+    expect(payload.analyticsByPortfolio["broker:ibkr:U123"].spyBeta).toBeCloseTo(3, 5);
+    expect(payload.analyticsByPortfolio.main).not.toHaveProperty("marketValue");
+    expect(payload.analyticsByPortfolio.main).not.toHaveProperty("holdingsCount");
+    expect(payload.analyticsByPortfolio.main).not.toHaveProperty("currency");
+    expect(payload.analyticsByPortfolio.main).not.toHaveProperty("sourceLabel");
   });
 
   test("redaction removes nested credential-shaped fields", () => {
@@ -199,5 +227,21 @@ describe("core sync contributors", () => {
     });
 
     expect(sanitized).toEqual({ nested: { publicValue: "ok" } });
+  });
+
+  test("uses preview-computed profile analytics without exposing values", async () => {
+    const config = createDefaultConfig("/tmp/gloomberb-sync-test");
+    config.portfolios = [{ id: "preview", name: "Preview", currency: "USD" }];
+    const state = createInitialState(config);
+
+    setSyncedProfileAnalytics("preview", { oneYearReturn: 0.25, spyBeta: 1.4 });
+    const payload = await coreCollectionsSyncContributor.collect({ state }) as any;
+    setSyncedProfileAnalytics("preview", null);
+
+    expect(payload.analyticsByPortfolio.preview).toEqual({
+      oneYearReturn: 0.25,
+      spyBeta: 1.4,
+    });
+    expect(payload.analyticsByPortfolio.preview).not.toHaveProperty("marketValue");
   });
 });
