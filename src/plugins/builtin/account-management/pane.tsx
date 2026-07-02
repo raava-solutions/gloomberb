@@ -35,7 +35,6 @@ import {
 import { PasswordChangeDialog } from "./password-dialog";
 import { useAccountManagementFooter } from "./footer";
 import { useAccountManagementKeyboard } from "./keyboard";
-import { usePortfolioAccountState } from "../portfolio-list/header";
 import { buildTrackedCurrencies } from "../analytics/sector-model";
 import {
   buildBenchmarkReturnSeries,
@@ -44,6 +43,8 @@ import {
 } from "../analytics/pane-model";
 import { computeDatedBeta } from "../analytics/metrics";
 import { useCloudSyncStatus } from "../../../sync/react";
+import { cloudSyncController } from "../../../sync/controller";
+import { setSyncedProfileAnalytics } from "../../../sync/profile-analytics";
 
 type AccountBusy = "profile" | "password" | "alerts" | null;
 
@@ -65,7 +66,6 @@ export function AccountManagementPane({ focused, width, height }: PaneProps) {
   const tickers = useAppSelector((state) => state.tickers);
   const cachedFinancials = useAppSelector((state) => state.financials);
   const cachedExchangeRates = useAppSelector((state) => state.exchangeRates);
-  const brokerAccounts = useAppSelector((state) => state.brokerAccounts);
   const [sessionMarker, setSessionMarker] = useState(() => {
     const snapshot = chatController.getSnapshot();
     return `${apiClient.getSessionToken() ?? ""}:${snapshot.user?.id ?? ""}:${snapshot.user?.username ?? ""}`;
@@ -115,8 +115,6 @@ export function AccountManagementPane({ focused, width, height }: PaneProps) {
   );
   const fetchedExchangeRates = useFxRatesMap(trackedCurrencies);
   const effectiveExchangeRates = selectEffectiveExchangeRates(fetchedExchangeRates, cachedExchangeRates);
-  const accountStateInput = useMemo(() => ({ brokerAccounts, config }), [brokerAccounts, config]);
-  const accountState = usePortfolioAccountState(selectedAnalyticsPortfolio, accountStateInput);
   const chartTargets = useMemo(
     () => buildPortfolioChartTargets(portfolioTickers),
     [portfolioTickers],
@@ -168,30 +166,30 @@ export function AccountManagementPane({ focused, width, height }: PaneProps) {
   );
   const analyticsPreview = useMemo(
     () => buildProfileAnalyticsPreview({
-      accountState,
-      baseCurrency,
       beta,
-      config,
-      exchangeRates: effectiveExchangeRates,
-      financials,
       portfolio: selectedAnalyticsPortfolio,
       portfolioTickers,
       selectedPortfolioId: draft.sharedPortfolioId,
       oneYearReturn,
     }),
     [
-      accountState,
-      baseCurrency,
       beta,
-      config,
       draft.sharedPortfolioId,
-      effectiveExchangeRates,
-      financials,
       portfolioTickers,
       selectedAnalyticsPortfolio,
       oneYearReturn,
     ],
   );
+  useEffect(() => {
+    const portfolioId = selectedAnalyticsPortfolio?.id;
+    if (!portfolioId) return;
+    const changed = setSyncedProfileAnalytics(portfolioId, analyticsPreview.publicAnalytics);
+    if (changed) cloudSyncController.schedulePush("profile-analytics");
+  }, [
+    analyticsPreview.publicAnalytics?.oneYearReturn,
+    analyticsPreview.publicAnalytics?.spyBeta,
+    selectedAnalyticsPortfolio?.id,
+  ]);
 
   useEffect(() => {
     const unsubscribe = chatController.subscribe((snapshot) => {

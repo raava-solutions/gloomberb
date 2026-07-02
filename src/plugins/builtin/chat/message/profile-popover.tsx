@@ -2,7 +2,7 @@ import { Box, Text } from "../../../../ui";
 import { TextAttributes } from "../../../../ui";
 import { colors } from "../../../../theme/colors";
 import type { ChatUserSummary, PublicPortfolioAnalytics } from "../../../../api-client";
-import { formatCompact, formatNumber } from "../../../../utils/format";
+import { formatNumber } from "../../../../utils/format";
 import { truncateChannelLabel } from "../channels";
 import { ChatActionChip } from "./action-chip";
 
@@ -12,10 +12,8 @@ function hasPortfolioAnalytics(analytics: PublicPortfolioAnalytics | null | unde
   return Boolean(
     analytics
     && (
-      analytics.portfolioName?.trim()
-      || analytics.oneYearReturn != null
+      analytics.oneYearReturn != null
       || analytics.spyBeta != null
-      || analytics.marketValue != null
     ),
   );
 }
@@ -34,7 +32,6 @@ function analyticsLine(analytics: PublicPortfolioAnalytics): string | null {
   const parts = [
     analytics.oneYearReturn != null ? `1Y ${formatSignedPercent(analytics.oneYearReturn)}` : null,
     analytics.spyBeta != null ? `Beta ${formatNumber(analytics.spyBeta, 2)}` : null,
-    analytics.marketValue != null ? `Value ${formatCompact(analytics.marketValue)}${analytics.currency ? ` ${analytics.currency}` : ""}` : null,
   ].filter((part): part is string => !!part);
   return parts.length > 0 ? parts.join(" · ") : null;
 }
@@ -58,7 +55,6 @@ export function UserProfilePopover({
   const meta = [user.title, user.company].filter(Boolean).join(" · ");
   const bio = user.bio?.trim();
   const analytics = user.portfolioAnalytics;
-  const analyticsTitle = analytics?.portfolioName?.trim();
   const analyticsDetail = analytics && hasPortfolioAnalytics(analytics) ? analyticsLine(analytics) : null;
   const canDm = user.id === currentUserId || user.acceptUnknownDms !== false;
 
@@ -99,9 +95,6 @@ export function UserProfilePopover({
       ) : null}
       {analytics && hasPortfolioAnalytics(analytics) ? (
         <Box flexDirection="column">
-          {analyticsTitle ? (
-            <Text fg={colors.textDim}>{truncateChannelLabel(analyticsTitle, popoverWidth - 2)}</Text>
-          ) : null}
           {analyticsDetail ? (
             <Text fg={colors.text}>{truncateChannelLabel(analyticsDetail, popoverWidth - 2)}</Text>
           ) : null}
