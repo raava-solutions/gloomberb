@@ -278,6 +278,16 @@ function collectCoreCollectionsPayload(
     ));
 
   return {
+    baseCurrency: config.baseCurrency,
+    exchangeRates: Object.fromEntries(
+      [...exchangeRates.entries()]
+        .filter(([currency, rate]) => (
+          typeof currency === "string" &&
+          Number.isFinite(rate) &&
+          rate > 0
+        ))
+        .map(([currency, rate]) => [currency.trim().toUpperCase(), rate]),
+    ),
     portfolios: config.portfolios.map(sanitizePortfolio),
     watchlists: config.watchlists.map(sanitizeWatchlist),
     analyticsByPortfolio: collectAnalyticsByPortfolio(config, tickers, financials, exchangeRates),

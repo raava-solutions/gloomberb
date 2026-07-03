@@ -122,6 +122,8 @@ describe("core sync contributors", () => {
     expect(serialized).not.toContain("broker-id");
     expect(serialized).not.toContain("hidden");
     expect(serialized).not.toContain("brokerContractId");
+    expect((payload as any).baseCurrency).toBe("USD");
+    expect((payload as any).exchangeRates).toEqual({ USD: 1 });
     expect((payload as any).tickers[0].quote.price).toBe(150);
     expect((payload as any).tickers[0].quote.weekReferencePrice).toBe(125);
     expect((payload as any).tickers[0].quote.weekChangePercent).toBe(20);
@@ -208,6 +210,8 @@ describe("core sync contributors", () => {
 
     const payload = await coreCollectionsSyncContributor.collect({ state }) as any;
 
+    expect(payload.baseCurrency).toBe("USD");
+    expect(payload.exchangeRates).toEqual({ USD: 1, JPY: 0.0067 });
     expect(payload.analyticsByPortfolio.main.oneYearReturn).toBe(0.1);
     expect(payload.analyticsByPortfolio.main.spyBeta).toBeCloseTo(1.5, 5);
     expect(payload.analyticsByPortfolio["broker:ibkr:U123"].oneYearReturn).toBe(0.2);
