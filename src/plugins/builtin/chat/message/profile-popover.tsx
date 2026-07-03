@@ -66,21 +66,22 @@ function PortfolioAnalyticsBand({
 }) {
   const metrics = analyticsMetrics(analytics);
   if (metrics.length === 0) return null;
-  const metricWidth = Math.max(9, Math.floor((width - 5) / metrics.length));
+  const metricWidth = Math.max(11, Math.floor((width - 2) / metrics.length));
 
   return (
-    <Box flexDirection="column" width={width} backgroundColor={colors.commandBg} paddingX={1}>
-      <Text fg={colors.textDim}>Portfolio Stats</Text>
-      <Box flexDirection="row" gap={1}>
-        {metrics.map((metric) => (
-          <Box key={metric.id} width={metricWidth} flexDirection="column">
-            <Text fg={colors.textMuted}>{truncateChannelLabel(metric.label, metricWidth)}</Text>
+    <Box flexDirection="row" flexWrap="wrap" gap={2} width={width} backgroundColor={colors.commandBg}>
+      {metrics.map((metric) => {
+        const labelWidth = Math.max(1, Math.min(metric.label.length, metricWidth - 2));
+        const valueWidth = Math.max(1, metricWidth - labelWidth - 1);
+        return (
+          <Box key={metric.id} width={metricWidth} height={1} flexDirection="row" gap={1}>
+            <Text fg={colors.textMuted}>{truncateChannelLabel(metric.label, labelWidth)}</Text>
             <Text fg={analyticsValueColor(metric.id, metric.rawValue)} attributes={TextAttributes.BOLD}>
-              {truncateChannelLabel(metric.value, metricWidth)}
+              {truncateChannelLabel(metric.value, valueWidth)}
             </Text>
           </Box>
-        ))}
-      </Box>
+        );
+      })}
     </Box>
   );
 }
@@ -142,7 +143,7 @@ export function UserProfilePopover({
         </Text>
       ) : null}
       {analytics && hasPortfolioAnalytics(analytics) ? (
-        <PortfolioAnalyticsBand analytics={analytics} width={popoverWidth - 2} />
+        <PortfolioAnalyticsBand analytics={analytics} width={Math.max(1, popoverWidth - 4)} />
       ) : null}
     </Box>
   );
