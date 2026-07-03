@@ -222,7 +222,7 @@ export function ChannelSidebar({
                     }}
                     style={{ cursor: "pointer" }}
                   >
-                    <Text fg={colors.text} attributes={TextAttributes.BOLD}>+</Text>
+                    <Text fg={hoveredChannelId === "direct-header:create" ? colors.textMuted : colors.textDim}>+</Text>
                   </Box>
                 ) : null}
               </Box>
