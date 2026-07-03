@@ -578,12 +578,11 @@ export function AccountManagementPane({ focused, width, height }: PaneProps) {
             onOpen={() => { void openPortfolioDialog(); }}
           />
 
-          <AccountAnalyticsPreview preview={publicAnalyticsPreview} width={formWidth} />
-          {draft.sharedPortfolioId ? (
-            <Text fg={colors.textMuted} wrapText width={Math.max(24, formWidth - 2)}>
-              Only 1Y return and SPY Beta are shared. Positions are not shared.
-            </Text>
-          ) : null}
+          <AccountAnalyticsPreview
+            preview={publicAnalyticsPreview}
+            width={formWidth}
+            disclaimer={draft.sharedPortfolioId ? "Only 1Y return and SPY Beta are shared. Positions are not shared." : null}
+          />
 
           <Box flexDirection="column" gap={1}>
             <Text fg={colors.textBright} attributes={TextAttributes.BOLD}>

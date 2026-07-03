@@ -167,18 +167,21 @@ function metricColor(tone: ProfileAnalyticsPreview["metrics"][number]["tone"]): 
 export function AccountAnalyticsPreview({
   preview,
   width,
+  disclaimer,
 }: {
   preview: ProfileAnalyticsPreview;
   width: number;
+  disclaimer?: string | null;
 }) {
-  const metricWidth = Math.max(14, Math.min(24, Math.floor((width - 2) / 2)));
-  const subtitleWidth = Math.max(1, width - preview.title.length - 4);
+  const contentWidth = Math.max(1, width - 2);
+  const metricWidth = Math.max(14, Math.min(28, Math.floor((contentWidth - 2) / 2)));
+  const subtitleWidth = Math.max(1, contentWidth - preview.title.length - 2);
 
   return (
     <Box flexDirection="column" width={width} backgroundColor={colors.panel} paddingX={1}>
       <Box height={1} flexDirection="row">
         <Text fg={colors.textBright} attributes={TextAttributes.BOLD}>
-          {truncate(preview.title, Math.max(1, width - 2))}
+          {truncate(preview.title, contentWidth)}
         </Text>
         {preview.subtitle ? (
           <>
@@ -188,31 +191,36 @@ export function AccountAnalyticsPreview({
         ) : null}
       </Box>
       {preview.metrics.length > 0 ? (
-        <Box flexDirection="row" flexWrap="wrap" gap={1}>
-          {preview.metrics.map((metric) => (
-            <Box key={metric.id} width={metricWidth} flexDirection="column">
-              <Text fg={colors.textDim}>{truncate(metric.label, metricWidth)}</Text>
-              <Box height={1} flexDirection="row">
+        <Box flexDirection="row" flexWrap="wrap" gap={2}>
+          {preview.metrics.map((metric) => {
+            const labelWidth = Math.max(1, Math.min(metric.label.length, metricWidth - 2));
+            const valueWidth = Math.max(1, metricWidth - labelWidth - 1);
+            const detailWidth = Math.max(0, metricWidth - labelWidth - metric.value.length - 2);
+            return (
+              <Box key={metric.id} width={metricWidth} height={1} flexDirection="row" gap={1}>
+                <Text fg={colors.textDim}>{truncate(metric.label, labelWidth)}</Text>
                 <Text fg={metricColor(metric.tone)} attributes={TextAttributes.BOLD}>
-                  {truncate(metric.value, metricWidth)}
+                  {truncate(metric.value, valueWidth)}
                 </Text>
                 {metric.detail ? (
-                  <>
-                    <Text fg={colors.textDim}>{" "}</Text>
-                    <Text fg={colors.textMuted}>
-                      {truncate(metric.detail, Math.max(0, metricWidth - metric.value.length - 1))}
-                    </Text>
-                  </>
+                  <Text fg={colors.textMuted}>
+                    {truncate(metric.detail, detailWidth)}
+                  </Text>
                 ) : null}
               </Box>
-            </Box>
-          ))}
+            );
+          })}
         </Box>
       ) : (
-        <Text fg={colors.textMuted} wrapText width={Math.max(1, width - 2)}>
+        <Text fg={colors.textMuted} wrapText width={contentWidth}>
           {preview.subtitle}
         </Text>
       )}
+      {disclaimer ? (
+        <Text fg={colors.textMuted} wrapText width={contentWidth}>
+          {disclaimer}
+        </Text>
+      ) : null}
     </Box>
   );
 }
