@@ -81,13 +81,15 @@ export function ChoiceDialog({
   });
 
   return (
-    <DialogFrame title={title} footer={footer}>
+    <DialogFrame title={title} footer={footer} showTitleDivider={false}>
       <Box flexDirection="column">
         <ListView
           items={items}
           selectedIndex={selectedIndex}
           bgColor={bgColor}
           emptyMessage="No choices."
+          rowGap={0}
+          surface="framed"
           selectOnHover
           onSelect={setIndex}
           onActivate={(_, nextIndex) => activateChoice(choices[nextIndex])}
