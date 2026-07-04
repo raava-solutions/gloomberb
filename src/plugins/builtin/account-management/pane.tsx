@@ -86,7 +86,6 @@ const PRO_BENEFITS = [
   "Real-time financial data",
   "Real-time news wire",
   "X data",
-  "Chat",
   "AI Screener soon",
 ];
 
