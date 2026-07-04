@@ -266,6 +266,7 @@ export interface HostTabsProps {
 
 export interface HostCheckboxProps {
   label: string;
+  displayLabel?: string;
   checked: boolean;
   onChange?: (checked: boolean) => void;
   disabled?: boolean;

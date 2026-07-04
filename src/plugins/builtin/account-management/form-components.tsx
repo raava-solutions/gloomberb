@@ -65,7 +65,7 @@ export function AccountTextField({
 }
 
 export function accountFieldLabelWidth(width: number) {
-  const preferred = Math.min(16, Math.max(14, Math.floor(width * 0.42)));
+  const preferred = width >= 28 ? 16 : Math.max(10, Math.floor(width * 0.42));
   return Math.max(8, Math.min(preferred, width - 9));
 }
 
@@ -148,20 +148,50 @@ export function CheckboxRow({
   onFocus: () => void;
   onChange: (checked: boolean) => void;
 }) {
+  const labelWidth = accountFieldLabelWidth(width);
+  const controlWidth = Math.max(8, width - labelWidth - 1);
+  const labelText = `${active ? "> " : "  "}${label}`;
   return (
-    <Box onMouseOver={onFocus}>
-      <Checkbox
-        label={label}
-        checked={checked}
-        active={active}
-        description={description}
-        width={width}
-        variant="desktop"
-        onChange={(nextChecked) => {
-          onFocus();
-          onChange(nextChecked);
-        }}
-      />
+    <Box
+      flexDirection="column"
+      width={width}
+      onMouseOver={onFocus}
+      onMouseDown={(event?: { preventDefault?: () => void; stopPropagation?: () => void }) => {
+        event?.preventDefault?.();
+        event?.stopPropagation?.();
+        onFocus();
+        onChange(!checked);
+      }}
+    >
+      <Box height={1} flexDirection="row" alignItems="center" gap={1}>
+        <Text
+          width={labelWidth}
+          fg={active ? colors.textBright : colors.textDim}
+          attributes={active ? TextAttributes.BOLD : 0}
+        >
+          {truncate(labelText, labelWidth)}
+        </Text>
+        <Checkbox
+          label={label}
+          displayLabel={checked ? "On" : "Off"}
+          checked={checked}
+          active={false}
+          width={controlWidth}
+          variant="desktop"
+          onChange={(nextChecked) => {
+            onFocus();
+            onChange(nextChecked);
+          }}
+        />
+      </Box>
+      {description ? (
+        <Box height={1} flexDirection="row" gap={1}>
+          <Box width={labelWidth} />
+          <Text fg={colors.textMuted} wrapText width={controlWidth}>
+            {description}
+          </Text>
+        </Box>
+      ) : null}
     </Box>
   );
 }
@@ -266,8 +296,9 @@ export function PublicAnalyticsGroup({
 }) {
   const contentWidth = Math.max(1, width - 2);
   const labelText = active ? "> Public Stats:" : "  Public Stats:";
-  const labelWidth = Math.min(labelText.length, Math.max(1, contentWidth));
-  const buttonWidth = Math.max(12, Math.min(22, Math.floor(contentWidth * 0.28)));
+  const labelWidth = Math.min(accountFieldLabelWidth(width), Math.max(1, contentWidth));
+  const buttonWidth = Math.max(14, Math.min(24, Math.floor(contentWidth * 0.3)));
+  const selectLabel = `${label} v`;
   const normalizedDetail = (detail ?? "").replace(/\.+$/, "");
   const displayPreview = (
     preview.metrics.length === 0
@@ -289,8 +320,8 @@ export function PublicAnalyticsGroup({
           {truncate(labelText, labelWidth)}
         </Text>
         <Button
-          label={truncate(label, Math.max(1, buttonWidth - 2))}
-          variant="primary"
+          label={truncate(selectLabel, Math.max(1, buttonWidth - 2))}
+          variant="secondary"
           width={buttonWidth}
           active={active}
           onPress={() => {
