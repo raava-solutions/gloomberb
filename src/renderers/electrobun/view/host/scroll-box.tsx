@@ -14,7 +14,7 @@ import {
 } from "react";
 import type { ScrollBoxRenderable } from "../../../../ui/host";
 import { WEB_CELL_HEIGHT, WEB_CELL_WIDTH } from "../input-host";
-import { callMouseHandler, hasDirectMouseHandler } from "./mouse";
+import { callMouseHandler } from "./mouse";
 import { cleanDomProps, commonStyle } from "./style";
 import { useScrollbarActivity } from "../scrollbar-activity";
 
@@ -254,7 +254,6 @@ export const WebScrollBox = forwardRef<ScrollBoxRenderable, Record<string, unkno
         data-gloom-scrollbar-x={props.scrollX === true ? (horizontalScrollBarVisible ? "visible" : "hidden") : undefined}
         data-gloom-scrollbar-y={props.scrollY === true ? (verticalScrollBarVisible ? "visible" : "hidden") : undefined}
         data-gloom-scrollbar-active={scrollbarActive ? "true" : undefined}
-        data-gloom-interactive={hasDirectMouseHandler(props) ? "true" : undefined}
         onMouseDown={(event) => callMouseHandler(props.onMouseDown, event, "down")}
         onMouseMove={(event) => callMouseHandler(props.onMouseMove, event, "move")}
         onMouseUp={(event) => callMouseHandler(props.onMouseUp, event, "up")}
