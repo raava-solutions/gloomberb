@@ -15,6 +15,7 @@ import {
   CheckboxRow,
   FieldRow,
   PublicAnalyticsGroup,
+  accountFieldLabelWidth,
 } from "./form-components";
 import {
   NO_PORTFOLIO_VALUE,
@@ -157,7 +158,7 @@ export function AccountManagementPane({ focused, width, height }: PaneProps) {
   const formWidth = Math.max(24, Math.min(70, width - 2));
   const twoColumns = formWidth >= 60;
   const fieldWidth = twoColumns ? Math.max(22, Math.floor((formWidth - 3) / 2)) : Math.max(18, Math.min(46, formWidth - 2));
-  const fullFieldWidth = Math.max(18, Math.min(54, formWidth - 2));
+  const formLabelWidth = accountFieldLabelWidth(formWidth);
   const bodyHeight = Math.max(5, height);
   const benefitColumnWidth = twoColumns ? Math.max(22, Math.floor((formWidth - 3) / 2)) : formWidth;
   const fieldOrder = ACCOUNT_TAB_FIELD_ORDER[activeTab];
@@ -407,7 +408,7 @@ export function AccountManagementPane({ focused, width, height }: PaneProps) {
       content: (context: PromptContext<string>) => (
         <ChoiceDialog
           {...context}
-          title="Shared Portfolio"
+          title="Public Stats"
           choices={portfolioChoices}
           selectedChoiceId={currentPortfolioChoiceId}
         />
@@ -701,11 +702,26 @@ export function AccountManagementPane({ focused, width, height }: PaneProps) {
                 />
               </FieldRow>
 
-              <Box flexDirection="column" onMouseDown={() => setActiveField("bio")}>
-                <Text fg={activeField === "bio" ? colors.textBright : colors.textDim} attributes={activeField === "bio" ? TextAttributes.BOLD : 0}>
+              <Box
+                flexDirection="row"
+                width={formWidth}
+                gap={1}
+                onMouseDown={() => setActiveField("bio")}
+              >
+                <Text
+                  width={formLabelWidth}
+                  fg={activeField === "bio" ? colors.textBright : colors.textDim}
+                  attributes={activeField === "bio" ? TextAttributes.BOLD : 0}
+                >
                   {activeField === "bio" ? "> Bio" : "  Bio"}
                 </Text>
-                <Box height={3} width={fullFieldWidth} border borderColor={activeField === "bio" ? colors.borderFocused : colors.border} backgroundColor={colors.panel}>
+                <Box
+                  height={3}
+                  width={Math.max(18, formWidth - formLabelWidth - 1)}
+                  border
+                  borderColor={activeField === "bio" ? colors.borderFocused : colors.border}
+                  backgroundColor={colors.panel}
+                >
                   <Textarea
                     key={`bio:${profile?.updatedAt ?? "empty"}`}
                     ref={bioRef}

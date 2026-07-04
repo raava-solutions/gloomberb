@@ -31,14 +31,30 @@ export function AccountTextField({
   onSubmit?: () => void;
 }) {
   const active = activeField === fieldKey;
+  const labelWidth = accountFieldLabelWidth(width);
+  const inputWidth = Math.max(8, width - labelWidth - 1);
+  const labelText = `${active ? "> " : "  "}${label}`;
   return (
-    <Box onMouseDown={() => onFocus(fieldKey)}>
+    <Box
+      height={1}
+      width={width}
+      flexDirection="row"
+      alignItems="center"
+      gap={1}
+      onMouseDown={() => onFocus(fieldKey)}
+    >
+      <Text
+        width={labelWidth}
+        fg={active ? colors.textBright : colors.textDim}
+        attributes={active ? TextAttributes.BOLD : 0}
+      >
+        {truncate(labelText, labelWidth)}
+      </Text>
       <TextField
-        label={`${active ? "> " : "  "}${label}`}
         value={value}
         placeholder={placeholder}
         focused={focused && active}
-        width={width}
+        width={inputWidth}
         type={type}
         onChange={onChange}
         onSubmit={onSubmit}
@@ -46,6 +62,11 @@ export function AccountTextField({
       />
     </Box>
   );
+}
+
+export function accountFieldLabelWidth(width: number) {
+  const preferred = Math.min(16, Math.max(14, Math.floor(width * 0.42)));
+  return Math.max(8, Math.min(preferred, width - 9));
 }
 
 export function FieldRow({
@@ -244,22 +265,23 @@ export function PublicAnalyticsGroup({
   onOpen: () => void;
 }) {
   const contentWidth = Math.max(1, width - 2);
-  const labelText = active ? "> Shared Portfolio:" : "  Shared Portfolio:";
+  const labelText = active ? "> Public Stats:" : "  Public Stats:";
   const labelWidth = Math.min(labelText.length, Math.max(1, contentWidth));
-  const buttonWidth = Math.max(12, Math.min(24, Math.floor(contentWidth * 0.3)));
-  const detailWidth = Math.max(0, contentWidth - labelWidth - buttonWidth - 2);
+  const buttonWidth = Math.max(12, Math.min(22, Math.floor(contentWidth * 0.28)));
   const normalizedDetail = (detail ?? "").replace(/\.+$/, "");
   const displayPreview = (
     preview.metrics.length === 0
     && normalizedDetail
     && preview.subtitle.replace(/\.+$/, "") === normalizedDetail
   ) ? { ...preview, subtitle: "" } : preview;
+  const metrics = displayPreview.metrics.slice(0, 2);
+  const metricAreaWidth = Math.max(0, contentWidth - labelWidth - buttonWidth - 2);
+  const metricWidth = metrics.length > 0 ? Math.max(8, Math.floor((metricAreaWidth - (metrics.length - 1)) / metrics.length)) : 0;
+  const detailWidth = Math.max(0, metricAreaWidth);
   return (
     <Box
       flexDirection="column"
       width={width}
-      backgroundColor={colors.panel}
-      paddingX={1}
       onMouseOver={onFocus}
     >
       <Box height={1} flexDirection="row" gap={1}>
@@ -276,18 +298,33 @@ export function PublicAnalyticsGroup({
             onOpen();
           }}
         />
-        {detail ? (
+        {metrics.length > 0 ? metrics.map((metric) => {
+          const labelTextWidth = Math.max(1, Math.min(metric.label.length, metricWidth - 2));
+          const valueWidth = Math.max(1, metricWidth - labelTextWidth - 1);
+          return (
+            <Box key={metric.id} width={metricWidth} height={1} flexDirection="row" gap={1}>
+              <Text fg={colors.textDim}>{truncate(metric.label, labelTextWidth)}</Text>
+              <Text fg={metricColor(metric.tone)} attributes={TextAttributes.BOLD}>
+                {truncate(metric.value, valueWidth)}
+              </Text>
+            </Box>
+          );
+        }) : detail ? (
           <Text fg={colors.textMuted}>
             {truncate(detail, detailWidth)}
           </Text>
         ) : null}
       </Box>
-      <AccountAnalyticsPreview
-        preview={displayPreview}
-        width={contentWidth}
-        disclaimer={disclaimer}
-        surface="plain"
-      />
+      {metrics.length === 0 && displayPreview.subtitle ? (
+        <Text fg={colors.textMuted} wrapText width={contentWidth}>
+          {displayPreview.subtitle}
+        </Text>
+      ) : null}
+      {disclaimer ? (
+        <Text fg={colors.textMuted} wrapText width={contentWidth}>
+          {disclaimer}
+        </Text>
+      ) : null}
     </Box>
   );
 }
