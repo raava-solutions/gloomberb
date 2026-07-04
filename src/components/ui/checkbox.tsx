@@ -7,6 +7,7 @@ export type CheckboxProps = HostCheckboxProps;
 
 export function Checkbox({
   label,
+  displayLabel,
   checked,
   onChange,
   disabled = false,
@@ -35,6 +36,7 @@ export function Checkbox({
     return (
       <HostCheckbox
         label={label}
+        displayLabel={displayLabel}
         checked={checked}
         onChange={onChange}
         disabled={disabled}
@@ -47,6 +49,7 @@ export function Checkbox({
   }
 
   const marker = checked ? "\u2713" : " ";
+  const visibleLabel = displayLabel ?? label;
   const fg = disabled ? colors.textMuted : active ? colors.textBright : colors.text;
   const descriptionWidth = typeof width === "number" ? Math.max(20, width - 2) : 28;
   return (
@@ -61,7 +64,7 @@ export function Checkbox({
       }}
     >
       <Text fg={fg} attributes={active ? TextAttributes.BOLD : 0}>
-        {`${active ? "> " : "  "}[${marker}] ${label}`}
+        {`${active ? "> " : "  "}[${marker}] ${visibleLabel}`}
       </Text>
       {description ? (
         <Text fg={colors.textMuted} wrapText width={descriptionWidth}>

@@ -4,6 +4,7 @@ import { Box, Input, Text, Textarea, editableTextContextMenuItems, useRendererHo
 import { TextAttributes, type InputRenderable } from "../../../../ui";
 import { useShortcut } from "../../../../react/input";
 import { blendHex, colors } from "../../../../theme/colors";
+import { blendForContrast, higherContrast } from "../../../../theme/color-utils";
 import { useThemeColors } from "../../../../theme/theme-context";
 import { isDetailBackNavigationKey } from "../../../../utils/back-navigation";
 import type { ButtonProps } from "../../../../components/ui/button";
@@ -78,6 +79,7 @@ export function WebButton({
 
 export function WebCheckbox({
   label,
+  displayLabel,
   checked,
   onChange,
   disabled = false,
@@ -91,6 +93,21 @@ export function WebCheckbox({
     : active
     ? colors.textBright
     : colors.text;
+  const visibleLabel = displayLabel ?? label;
+  const accentColor = blendForContrast(
+    higherContrast(colors.borderFocused, colors.selected, colors.panel),
+    colors.panel,
+    colors.textBright,
+    3.8,
+  );
+  const outlineColor = checked
+    ? blendForContrast(
+      higherContrast(colors.textBright, colors.bg, accentColor),
+      accentColor,
+      colors.bg,
+      3.2,
+    )
+    : controlBorderColor(active, false);
   return (
     <Box
       flexDirection="column"
@@ -131,9 +148,11 @@ export function WebCheckbox({
             width: 14,
             height: 14,
             margin: 0,
-            accentColor: colors.borderFocused,
+            accentColor,
             flexShrink: 0,
             cursor: disabled ? "default" : "pointer",
+            outline: `1px solid ${outlineColor}`,
+            outlineOffset: 1,
           }}
         />
         <span
@@ -143,7 +162,7 @@ export function WebCheckbox({
             whiteSpace: "nowrap",
           }}
         >
-          {label}
+          {visibleLabel}
         </span>
       </label>
       {description ? (
