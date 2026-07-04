@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { Checkbox, TextField } from "../../../components";
+import { Button, Checkbox, TextField } from "../../../components";
 import { Box, Text, TextAttributes } from "../../../ui";
 import { colors } from "../../../theme/colors";
 import type { AccountFieldKey, ProfileAnalyticsPreview } from "./model";
@@ -244,8 +244,10 @@ export function PublicAnalyticsGroup({
   onOpen: () => void;
 }) {
   const contentWidth = Math.max(1, width - 2);
-  const buttonWidth = Math.max(12, Math.min(34, Math.floor(contentWidth * 0.44)));
-  const detailWidth = Math.max(0, contentWidth - buttonWidth - 12);
+  const labelText = active ? "> Shared Portfolio:" : "  Shared Portfolio:";
+  const labelWidth = Math.min(labelText.length, Math.max(1, contentWidth));
+  const buttonWidth = Math.max(12, Math.min(24, Math.floor(contentWidth * 0.3)));
+  const detailWidth = Math.max(0, contentWidth - labelWidth - buttonWidth - 2);
   const normalizedDetail = (detail ?? "").replace(/\.+$/, "");
   const displayPreview = (
     preview.metrics.length === 0
@@ -262,22 +264,18 @@ export function PublicAnalyticsGroup({
     >
       <Box height={1} flexDirection="row" gap={1}>
         <Text fg={active ? colors.textBright : colors.textDim} attributes={active ? TextAttributes.BOLD : 0}>
-          {active ? "> Analytics" : "  Analytics"}
+          {truncate(labelText, labelWidth)}
         </Text>
-        <Box
+        <Button
+          label={truncate(label, Math.max(1, buttonWidth - 2))}
+          variant="primary"
           width={buttonWidth}
-          backgroundColor={active ? colors.selected : colors.bg}
-          onMouseDown={(event?: { preventDefault?: () => void; stopPropagation?: () => void }) => {
-            event?.preventDefault?.();
-            event?.stopPropagation?.();
+          active={active}
+          onPress={() => {
             onFocus();
             onOpen();
           }}
-        >
-          <Text fg={active ? colors.selectedText : colors.text}>
-            {` ${truncate(label, Math.max(1, buttonWidth - 2))} `}
-          </Text>
-        </Box>
+        />
         {detail ? (
           <Text fg={colors.textMuted}>
             {truncate(detail, detailWidth)}

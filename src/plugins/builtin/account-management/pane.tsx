@@ -3,7 +3,7 @@ import { Button, ChoiceDialog, ConfirmDialog, Tabs } from "../../../components";
 import { useAppSelector } from "../../../state/app/context";
 import { useChartQueries, useFxRatesMap, useTickerFinancialsMap } from "../../../market-data/hooks";
 import { selectEffectiveExchangeRates } from "../../../utils/exchange-rate-map";
-import { colors } from "../../../theme/colors";
+import { blendHex, colors } from "../../../theme/colors";
 import type { PaneProps } from "../../../types/plugin";
 import { Box, ScrollBox, Text, Textarea, TextAttributes, type TextareaRenderable, useRendererHost } from "../../../ui";
 import { useDialog, type AlertContext, type PromptContext } from "../../../ui/dialog";
@@ -93,22 +93,36 @@ function BenefitList({
   title,
   benefits,
   active,
+  featured = false,
   width,
 }: {
   title: string;
   benefits: string[];
   active: boolean;
+  featured?: boolean;
   width: number;
 }) {
+  const contentWidth = Math.max(12, width - 2);
+  const backgroundColor = featured
+    ? blendHex(colors.panel, colors.selected, active ? 0.48 : 0.34)
+    : active
+    ? colors.panel
+    : blendHex(colors.bg, colors.panel, 0.42);
+  const titleFg = featured ? colors.textBright : active ? colors.textBright : colors.textDim;
+  const benefitFg = featured || active ? colors.text : colors.textDim;
+  const markerFg = featured ? colors.positive : colors.textDim;
   return (
-    <Box flexDirection="column" width={width} backgroundColor={active ? colors.panel : undefined} paddingX={active ? 1 : 0}>
-      <Text fg={active ? colors.textBright : colors.textDim} attributes={active ? TextAttributes.BOLD : 0}>
+    <Box flexDirection="column" width={width} backgroundColor={backgroundColor} paddingX={1}>
+      <Text fg={titleFg} attributes={featured || active ? TextAttributes.BOLD : 0}>
         {title}
       </Text>
       {benefits.map((benefit) => (
-        <Text key={benefit} fg={active ? colors.text : colors.textDim} wrapText width={Math.max(12, width - (active ? 2 : 0))}>
-          {`+ ${benefit}`}
-        </Text>
+        <Box key={benefit} height={1} flexDirection="row" gap={1}>
+          <Text fg={markerFg} attributes={featured ? TextAttributes.BOLD : 0}>+</Text>
+          <Text fg={benefitFg} wrapText width={contentWidth - 2}>
+            {benefit}
+          </Text>
+        </Box>
       ))}
     </Box>
   );
@@ -777,6 +791,7 @@ export function AccountManagementPane({ focused, width, height }: PaneProps) {
                   title="Pro $49/mo"
                   benefits={PRO_BENEFITS}
                   active={profile?.plan === "pro"}
+                  featured
                   width={benefitColumnWidth}
                 />
               </FieldRow>
