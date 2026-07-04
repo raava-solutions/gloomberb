@@ -29,6 +29,7 @@ type MutableCommandRegistry = {
 
 type MutablePaneRegistry = {
   panes: ReadonlyMap<string, unknown>;
+  paneTemplates: ReadonlyMap<string, unknown>;
 };
 
 const DEFAULT_ALERT_OPTIONS = [
@@ -138,22 +139,31 @@ describe("CommandBar", () => {
     expect(testSetup.captureCharFrame()).not.toContain("Commands");
   });
 
-  test("opens account management when searching profile", async () => {
-    const openedPanes: string[] = [];
+  test("shows one account management result when searching profile", async () => {
+    const created: Array<{ templateId: string; options?: PaneTemplateCreateOptions }> = [];
 
     testSetup = await testRender(<CommandBarHarness
       query="profile"
       live
       configurePluginRegistry={(pluginRegistry) => {
-        mutablePaneRegistryMap((pluginRegistry as MutablePaneRegistry).panes).set("account-management", {
+        const registry = pluginRegistry as MutablePaneRegistry;
+        mutablePaneRegistryMap(registry.panes).set("account-management", {
           id: "account-management",
           name: "Account Management",
           component: () => null,
           defaultPosition: "right",
           defaultMode: "floating",
         });
-        pluginRegistry.showPane = (paneId) => {
-          openedPanes.push(paneId);
+        mutablePaneRegistryMap(registry.paneTemplates).set("account-management-pane", {
+          id: "account-management-pane",
+          paneId: "account-management",
+          label: "Account Management",
+          description: "Edit your Gloom Cloud profile, password, and public portfolio sharing settings",
+          keywords: ["account", "profile", "cloud", "acm", "password", "settings"],
+          shortcut: { prefix: "ACM" },
+        });
+        pluginRegistry.createPaneFromTemplateAsyncFn = async (templateId, options) => {
+          created.push({ templateId, options });
         };
       }}
     />, {
@@ -162,12 +172,13 @@ describe("CommandBar", () => {
     });
 
     await testSetup.renderOnce();
-    const frame = await waitForFrameToContain("Profile");
-    expect(frame.indexOf("Profile")).toBeLessThan(frame.indexOf("Add Broker Account"));
+    const frame = await waitForFrameToContain("Account Management");
+    expect(frame).not.toMatch(/\n\s*Profile\s*(?:\n|$)/);
+    expect(frame.indexOf("Account Management")).toBeLessThan(frame.indexOf("Add Broker Account"));
 
     await emitKeypress(testSetup, { name: "return", sequence: "\r" });
 
-    expect(openedPanes).toEqual(["account-management"]);
+    expect(created).toEqual([{ templateId: "account-management-pane", options: undefined }]);
   });
 
   test("shows theme picker rows and commits a filtered light theme", async () => {
