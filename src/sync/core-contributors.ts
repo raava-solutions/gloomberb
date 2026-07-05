@@ -1,0 +1,400 @@
+import { scheduleConfigSave } from "../state/config-save-scheduler";
+import type { AppConfig, BrokerInstanceConfig } from "../types/config";
+import type { PricePoint, TickerFinancials } from "../types/financials";
+import type { Portfolio, TickerMetadata, TickerPosition, TickerRecord, Watchlist } from "../types/ticker";
+import { hydrateTickerMetadata } from "../tickers/metadata";
+import type { SyncContributor } from "./types";
+import { convertCurrency } from "../utils/format";
+import {
+  computeDatedBeta,
+  computeDatedReturns,
+  computeWeightedPortfolioReturns,
+  type WeightedReturnSeries,
+} from "../plugins/builtin/analytics/metrics";
+import { getSyncedProfileAnalytics } from "./profile-analytics";
+
+const SENSITIVE_KEY_PATTERN = /(token|secret|password|credential|private|api[_-]?key|access[_-]?key|refresh[_-]?key|session|cookie|dataDir|path|directory|localPath)/i;
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === "object" && !Array.isArray(value);
+}
+
+function sanitizeUnknown(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sanitizeUnknown).filter((entry) => entry !== undefined);
+  }
+  if (!isPlainObject(value)) return value;
+
+  const output: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (SENSITIVE_KEY_PATTERN.test(key)) continue;
+    const sanitized = sanitizeUnknown(child);
+    if (sanitized !== undefined) output[key] = sanitized;
+  }
+  return output;
+}
+
+function sanitizePortfolio(portfolio: Portfolio): Portfolio {
+  return {
+    id: portfolio.id,
+    name: portfolio.name,
+    description: portfolio.description,
+    currency: portfolio.currency,
+    brokerId: portfolio.brokerId,
+    lastSyncedAt: portfolio.lastSyncedAt,
+  };
+}
+
+function sanitizeWatchlist(watchlist: Watchlist): Watchlist {
+  return {
+    id: watchlist.id,
+    name: watchlist.name,
+    description: watchlist.description,
+  };
+}
+
+function sanitizeBrokerInstance(instance: BrokerInstanceConfig): Omit<BrokerInstanceConfig, "config"> {
+  return {
+    id: instance.id,
+    brokerType: instance.brokerType,
+    label: instance.label,
+    connectionMode: instance.connectionMode,
+    enabled: instance.enabled,
+    lastSyncedAt: instance.lastSyncedAt,
+  };
+}
+
+function sanitizePosition(position: TickerPosition): TickerPosition {
+  return {
+    portfolio: position.portfolio,
+    shares: position.shares,
+    avgCost: position.avgCost,
+    currency: position.currency,
+    dateAcquired: position.dateAcquired,
+    broker: position.broker,
+    side: position.side,
+    marketValue: position.marketValue,
+    unrealizedPnl: position.unrealizedPnl,
+    multiplier: position.multiplier,
+    markPrice: position.markPrice,
+  };
+}
+
+function pricePointTime(point: { date: Date | string | number }): number {
+  const value = point.date;
+  if (value instanceof Date) return value.getTime();
+  return new Date(value).getTime();
+}
+
+function weeklyQuoteMove(financials: TickerFinancials | null | undefined) {
+  const quote = financials?.quote;
+  if (!quote || !Number.isFinite(quote.price) || quote.price <= 0) return undefined;
+  const history = (financials?.priceHistory ?? [])
+    .filter((point) => Number.isFinite(point.close) && point.close > 0 && Number.isFinite(pricePointTime(point)))
+    .sort((left, right) => pricePointTime(left) - pricePointTime(right));
+  if (history.length === 0) return undefined;
+  const latestTime = Number.isFinite(quote.lastUpdated)
+    ? quote.lastUpdated
+    : pricePointTime(history[history.length - 1]!);
+  const cutoff = latestTime - 7 * 24 * 60 * 60 * 1000;
+  const reference = history.find((point) => pricePointTime(point) >= cutoff) ?? history[Math.max(0, history.length - 7)];
+  if (!reference || !Number.isFinite(reference.close) || reference.close <= 0) return undefined;
+  const weekChange = quote.price - reference.close;
+  return {
+    weekReferencePrice: reference.close,
+    weekChange,
+    weekChangePercent: (weekChange / reference.close) * 100,
+  };
+}
+
+function sanitizeQuote(financials: TickerFinancials | null | undefined) {
+  const quote = financials?.quote;
+  if (!quote) return undefined;
+  const week = weeklyQuoteMove(financials);
+  return {
+    price: Number.isFinite(quote.price) ? quote.price : undefined,
+    currency: quote.currency,
+    changePercent: Number.isFinite(quote.changePercent) ? quote.changePercent : undefined,
+    previousClose: Number.isFinite(quote.previousClose) ? quote.previousClose : undefined,
+    weekReferencePrice: week?.weekReferencePrice,
+    weekChange: week?.weekChange,
+    weekChangePercent: week?.weekChangePercent,
+    lastUpdated: quote.lastUpdated,
+  };
+}
+
+function sanitizeTickerMetadata(metadata: TickerMetadata, financials?: TickerFinancials | null): Omit<TickerMetadata, "broker_contracts"> & { quote?: ReturnType<typeof sanitizeQuote> } {
+  return {
+    ticker: metadata.ticker,
+    exchange: metadata.exchange,
+    currency: metadata.currency,
+    name: metadata.name,
+    sector: metadata.sector,
+    industry: metadata.industry,
+    assetCategory: metadata.assetCategory,
+    isin: metadata.isin,
+    cusip: metadata.cusip,
+    portfolios: [...metadata.portfolios],
+    watchlists: [...metadata.watchlists],
+    positions: metadata.positions.map(sanitizePosition),
+    custom: (sanitizeUnknown(metadata.custom) as Record<string, unknown>) ?? {},
+    tags: [...metadata.tags],
+    quote: sanitizeQuote(financials),
+  };
+}
+
+function collectCoreConfigPayload(config: AppConfig) {
+  return sanitizeUnknown({
+    configVersion: config.configVersion,
+    baseCurrency: config.baseCurrency,
+    refreshIntervalMinutes: config.refreshIntervalMinutes,
+    portfolios: config.portfolios.map(sanitizePortfolio),
+    watchlists: config.watchlists.map(sanitizeWatchlist),
+    layout: config.layout,
+    layouts: config.layouts,
+    activeLayoutIndex: config.activeLayoutIndex,
+    brokerInstances: config.brokerInstances.map(sanitizeBrokerInstance),
+    disabledPlugins: config.disabledPlugins,
+    disabledSources: config.disabledSources,
+    pluginConfig: config.pluginConfig,
+    theme: config.theme,
+    chartPreferences: config.chartPreferences,
+    valueFlashingEnabled: config.valueFlashingEnabled,
+    recentTickers: config.recentTickers,
+    onboardingComplete: config.onboardingComplete,
+  });
+}
+
+function positionValueBase(
+  position: TickerPosition,
+  financials: TickerFinancials | null | undefined,
+  baseCurrency: string,
+  exchangeRates: Map<string, number>,
+): number | null {
+  const quoteCurrency = financials?.quote?.currency || position.currency || baseCurrency;
+  const positionCurrency = position.currency || quoteCurrency;
+  if (typeof position.marketValue === "number" && Number.isFinite(position.marketValue)) {
+    return convertCurrency(Math.abs(position.marketValue), positionCurrency, baseCurrency, exchangeRates);
+  }
+  const hasMarkPrice = typeof position.markPrice === "number" && Number.isFinite(position.markPrice);
+  const hasQuotePrice = typeof financials?.quote?.price === "number" && Number.isFinite(financials.quote.price);
+  const price = hasMarkPrice ? position.markPrice : hasQuotePrice ? financials!.quote!.price : position.avgCost;
+  if (!Number.isFinite(position.shares) || typeof price !== "number" || !Number.isFinite(price)) return null;
+  return convertCurrency(
+    Math.abs(position.shares * price * (position.multiplier ?? 1)),
+    hasQuotePrice && !hasMarkPrice ? quoteCurrency : positionCurrency,
+    baseCurrency,
+    exchangeRates,
+  );
+}
+
+function pricePointTimeOrNull(point: PricePoint): number | null {
+  const value = point.date;
+  if (value == null) return null;
+  const time = value instanceof Date ? value.getTime() : new Date(value).getTime();
+  return Number.isFinite(time) ? time : null;
+}
+
+function recentPriceHistory(history: PricePoint[], days: number): PricePoint[] {
+  let latestTime = 0;
+  for (const point of history) {
+    const time = pricePointTimeOrNull(point);
+    if (time != null && time > latestTime) latestTime = time;
+  }
+  if (latestTime <= 0) return [];
+  const cutoff = latestTime - days * 24 * 60 * 60 * 1000;
+  return history.filter((point) => {
+    const time = pricePointTimeOrNull(point);
+    return time != null && time >= cutoff;
+  });
+}
+
+function oneYearReturnFromSeries(series: WeightedReturnSeries[]): number | null {
+  const returns = computeWeightedPortfolioReturns(series);
+  if (returns.length === 0) return null;
+  const cumulative = returns.reduce((acc, point) => (
+    Number.isFinite(point.value) ? acc * (1 + point.value) : acc
+  ), 1) - 1;
+  return Number.isFinite(cumulative) ? cumulative : null;
+}
+
+function collectAnalyticsByPortfolio(
+  config: AppConfig,
+  tickers: Map<string, TickerRecord>,
+  financials: Map<string, TickerFinancials>,
+  exchangeRates: Map<string, number>,
+) {
+  const output: Record<string, Record<string, unknown>> = {};
+  const spyReturns = computeDatedReturns(recentPriceHistory(financials.get("SPY")?.priceHistory ?? [], 366));
+  for (const portfolio of config.portfolios) {
+    let returnWeight = 0;
+    let weightedReturn = 0;
+    const datedReturnSeries: WeightedReturnSeries[] = [];
+    for (const ticker of tickers.values()) {
+      const tickerFinancials = financials.get(ticker.metadata.ticker);
+      const portfolioPositions = ticker.metadata.positions.filter((position) => position.portfolio === portfolio.id);
+      if (portfolioPositions.length === 0 && !ticker.metadata.portfolios.includes(portfolio.id)) continue;
+      for (const position of portfolioPositions) {
+        const value = positionValueBase(position, tickerFinancials, config.baseCurrency, exchangeRates);
+        if (value != null) {
+          const return1Y = tickerFinancials?.fundamentals?.return1Y;
+          if (typeof return1Y === "number" && Number.isFinite(return1Y)) {
+            returnWeight += value;
+            weightedReturn += return1Y * value;
+          }
+          const returns = computeDatedReturns(recentPriceHistory(tickerFinancials?.priceHistory ?? [], 366));
+          if (returns.length >= 10) datedReturnSeries.push({ weight: value, returns });
+        }
+      }
+    }
+    const portfolioReturns = computeWeightedPortfolioReturns(datedReturnSeries);
+    const previewAnalytics = getSyncedProfileAnalytics(portfolio.id);
+    output[portfolio.id] = {
+      oneYearReturn: previewAnalytics?.oneYearReturn
+        ?? (returnWeight > 0 ? weightedReturn / returnWeight : oneYearReturnFromSeries(datedReturnSeries)),
+      spyBeta: previewAnalytics?.spyBeta
+        ?? (
+          portfolioReturns.length > 0 && spyReturns.length > 0
+            ? computeDatedBeta(portfolioReturns, spyReturns)
+            : null
+        ),
+    };
+  }
+  return output;
+}
+
+function collectCoreCollectionsPayload(
+  config: AppConfig,
+  tickers: Map<string, TickerRecord>,
+  financials: Map<string, TickerFinancials>,
+  exchangeRates: Map<string, number>,
+) {
+  const records = [...tickers.values()]
+    .map((ticker) => sanitizeTickerMetadata(ticker.metadata, financials.get(ticker.metadata.ticker)))
+    .filter((metadata) => (
+      metadata.portfolios.length > 0 ||
+      metadata.watchlists.length > 0 ||
+      metadata.positions.length > 0
+    ));
+
+  return {
+    baseCurrency: config.baseCurrency,
+    exchangeRates: Object.fromEntries(
+      [...exchangeRates.entries()]
+        .filter(([currency, rate]) => (
+          typeof currency === "string" &&
+          Number.isFinite(rate) &&
+          rate > 0
+        ))
+        .map(([currency, rate]) => [currency.trim().toUpperCase(), rate]),
+    ),
+    portfolios: config.portfolios.map(sanitizePortfolio),
+    watchlists: config.watchlists.map(sanitizeWatchlist),
+    analyticsByPortfolio: collectAnalyticsByPortfolio(config, tickers, financials, exchangeRates),
+    tickers: records,
+  };
+}
+
+function mergeConfigPayload(config: AppConfig, payload: unknown): AppConfig | null {
+  if (!isPlainObject(payload)) return null;
+  const next: AppConfig = { ...config };
+  const assign = <K extends keyof AppConfig>(key: K) => {
+    if (key in payload) {
+      next[key] = payload[key as string] as AppConfig[K];
+    }
+  };
+
+  assign("baseCurrency");
+  assign("refreshIntervalMinutes");
+  assign("layout");
+  assign("layouts");
+  assign("activeLayoutIndex");
+  assign("disabledPlugins");
+  assign("disabledSources");
+  assign("pluginConfig");
+  assign("theme");
+  assign("chartPreferences");
+  assign("valueFlashingEnabled");
+  assign("recentTickers");
+  assign("onboardingComplete");
+
+  if (Array.isArray(payload.portfolios)) next.portfolios = payload.portfolios as Portfolio[];
+  if (Array.isArray(payload.watchlists)) next.watchlists = payload.watchlists as Watchlist[];
+  if (Array.isArray(payload.brokerInstances)) {
+    const incoming = payload.brokerInstances as Array<Partial<BrokerInstanceConfig>>;
+    const existingById = new Map(config.brokerInstances.map((instance) => [instance.id, instance]));
+    next.brokerInstances = incoming.map((instance) => {
+      const current = instance.id ? existingById.get(instance.id) : undefined;
+      return {
+        id: instance.id ?? current?.id ?? crypto.randomUUID(),
+        brokerType: instance.brokerType ?? current?.brokerType ?? "",
+        label: instance.label ?? current?.label ?? "",
+        connectionMode: instance.connectionMode ?? current?.connectionMode,
+        enabled: instance.enabled ?? current?.enabled,
+        lastSyncedAt: instance.lastSyncedAt ?? current?.lastSyncedAt,
+        config: current?.config ?? {},
+      };
+    });
+  }
+  return next;
+}
+
+export const coreConfigSyncContributor: SyncContributor = {
+  id: "core.config",
+  schemaVersion: 1,
+  collect: ({ state }) => collectCoreConfigPayload(state.config),
+  apply: (payload, { state, dispatch }) => {
+    const nextConfig = mergeConfigPayload(state.config, payload);
+    if (!nextConfig) return;
+    dispatch({ type: "SET_CONFIG", config: nextConfig });
+    scheduleConfigSave(nextConfig);
+  },
+};
+
+export const coreCollectionsSyncContributor: SyncContributor = {
+  id: "core.collections",
+  schemaVersion: 1,
+  collect: ({ state }) => collectCoreCollectionsPayload(
+    state.config,
+    state.tickers,
+    state.financials,
+    state.exchangeRates,
+  ),
+  apply: async (payload, { state, dispatch, tickerRepository }) => {
+    if (!isPlainObject(payload)) return;
+    const nextConfig = { ...state.config };
+    if (Array.isArray(payload.portfolios)) nextConfig.portfolios = payload.portfolios as Portfolio[];
+    if (Array.isArray(payload.watchlists)) nextConfig.watchlists = payload.watchlists as Watchlist[];
+
+    const nextTickers = new Map(state.tickers);
+    const rawTickers = Array.isArray(payload.tickers) ? payload.tickers : [];
+    for (const rawTicker of rawTickers) {
+      if (!isPlainObject(rawTicker)) continue;
+      const current = typeof rawTicker.ticker === "string"
+        ? nextTickers.get(rawTicker.ticker)
+        : null;
+      const metadata = hydrateTickerMetadata({
+        ...current?.metadata,
+        ...rawTicker,
+        broker_contracts: current?.metadata.broker_contracts ?? [],
+      });
+      const record: TickerRecord = { metadata };
+      await tickerRepository.saveTicker(record);
+      nextTickers.set(metadata.ticker, record);
+    }
+
+    dispatch({ type: "SET_CONFIG", config: nextConfig });
+    dispatch({ type: "SET_TICKERS", tickers: nextTickers });
+    scheduleConfigSave(nextConfig);
+  },
+};
+
+export function createCoreSyncContributors(): SyncContributor[] {
+  return [coreConfigSyncContributor, coreCollectionsSyncContributor];
+}
+
+export const __syncContributorInternalsForTests = {
+  sanitizeUnknown,
+  collectCoreConfigPayload,
+  collectCoreCollectionsPayload,
+};

@@ -22,6 +22,7 @@ import { PluginRegistry } from "./plugins/registry";
 import type { TickerRepository } from "./data/ticker-repository";
 import { ThemeProvider, useThemeColors } from "./theme/theme-context";
 import type { AppConfig } from "./types/config";
+import type { DesktopDeepLinkBridge } from "./types/desktop-deeplink";
 import type { CliLaunchRequest } from "./types/plugin";
 import type { DataProvider } from "./types/data-provider";
 import type { DesktopDockPreviewState, DesktopSharedStateSnapshot, DesktopThemePreviewState, DesktopWindowBridge } from "./types/desktop-window";
@@ -32,6 +33,7 @@ import type { MarketDataCoordinator } from "./market-data/coordinator";
 import { createAppNotifier } from "./notifications/app-notifier";
 import { createAppServices } from "./core/app-services";
 import { useBrokerImportRuntime } from "./app/runtime/broker-import";
+import { useDesktopDeepLinkRuntime } from "./app/runtime/desktop-deeplink";
 import { useDesktopApplicationMenuRuntime } from "./app/runtime/desktop-menu";
 import { useAppGlobalShortcuts } from "./app/global-shortcuts";
 import { useAppPaneRuntime } from "./app/pane-runtime";
@@ -39,6 +41,8 @@ import { bindPluginRegistryRuntimeAccess } from "./app/runtime/plugin-bindings";
 import { useAppStartupRuntime } from "./app/runtime/startup";
 import { useTickerRefreshRuntime } from "./app/runtime/ticker-refresh";
 import { useAppUpdateRuntime } from "./app/runtime/update";
+import { createCoreSyncContributors } from "./sync/core-contributors";
+import { useCloudSyncRuntime } from "./sync/react";
 import { RemoteControlHost, type RemoteControlAdapter } from "./remote/app-host";
 import { RemoteUiRegistryProvider } from "./remote/semantic-tree";
 import {
@@ -57,6 +61,7 @@ interface AppInnerProps {
   sessionSnapshot?: AppSessionSnapshot | null;
   desktopWindowBridge?: DesktopWindowBridge;
   desktopApplicationMenuBridge?: DesktopApplicationMenuBridge;
+  desktopDeepLinkBridge?: DesktopDeepLinkBridge;
   remoteControlAdapter?: RemoteControlAdapter;
 }
 
@@ -86,6 +91,7 @@ function AppInner({
   sessionSnapshot = null,
   desktopWindowBridge,
   desktopApplicationMenuBridge,
+  desktopDeepLinkBridge,
   remoteControlAdapter,
 }: AppInnerProps) {
   const dispatch = useAppDispatch();
@@ -173,6 +179,15 @@ function AppInner({
     });
   }, [desktopWindowBridge]);
 
+  useEffect(() => {
+    const disposers = createCoreSyncContributors().map((contributor) => (
+      pluginRegistry.registerSyncContributorForPlugin("core", contributor)
+    ));
+    return () => {
+      for (const dispose of disposers) dispose();
+    };
+  }, [pluginRegistry]);
+
   const {
     primeCachedFinancials,
     refreshQuote,
@@ -214,6 +229,14 @@ function AppInner({
     stateRef,
   });
 
+  useDesktopDeepLinkRuntime({
+    desktopDeepLinkBridge,
+    desktopWindowKind: desktopWindowBridge?.kind,
+    dispatch,
+    pluginRegistry,
+    stateRef,
+  });
+
   const focusedTickerSymbol = getFocusedTickerSymbol(state);
   useAppStartupRuntime({
     appActive,
@@ -241,6 +264,14 @@ function AppInner({
     pluginRegistry,
     state,
     tickerRepository,
+  });
+
+  useCloudSyncRuntime({
+    state,
+    dispatch,
+    tickerRepository,
+    pluginRegistry,
+    initialized: state.initialized && desktopWindowBridge?.kind !== "detached",
   });
 
   useAppPaneRuntime({
@@ -353,6 +384,7 @@ interface AppProps {
   cliLaunchRequest?: CliLaunchRequest | null;
   desktopWindowBridge?: DesktopWindowBridge;
   desktopApplicationMenuBridge?: DesktopApplicationMenuBridge;
+  desktopDeepLinkBridge?: DesktopDeepLinkBridge;
   desktopSnapshot?: DesktopSharedStateSnapshot | null;
   desktopThemePreview?: DesktopThemePreviewState | null;
   remoteControlAdapter?: RemoteControlAdapter;
@@ -364,6 +396,7 @@ export function App({
   cliLaunchRequest = null,
   desktopWindowBridge,
   desktopApplicationMenuBridge,
+  desktopDeepLinkBridge,
   desktopSnapshot = null,
   desktopThemePreview = null,
   remoteControlAdapter,
@@ -451,6 +484,7 @@ export function App({
           sessionSnapshot={sessionSnapshot}
           desktopWindowBridge={desktopWindowBridge}
           desktopApplicationMenuBridge={desktopApplicationMenuBridge}
+          desktopDeepLinkBridge={desktopDeepLinkBridge}
           remoteControlAdapter={remoteControlAdapter}
         />
       </AppProvider>

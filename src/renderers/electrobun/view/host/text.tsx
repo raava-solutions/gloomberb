@@ -9,7 +9,7 @@ import {
 } from "../../../../ui/host";
 import { WEB_CELL_WIDTH } from "../input-host";
 import { webAsciiTextLines, webAsciiTextWordmarkVariant } from "./ascii-text";
-import { hasDirectMouseHandler, mouseHandlers } from "./mouse";
+import { mouseHandlers } from "./mouse";
 import { cleanDomProps, commonStyle, textStyle } from "./style";
 
 const WEB_WORDMARK_CHAR_WIDTH_PX = Math.max(10, WEB_CELL_WIDTH);
@@ -56,7 +56,6 @@ export function WebText({ children, ...props }: TextProps) {
     <span
       {...cleanDomProps(props)}
       {...mouseHandlers(props)}
-      data-gloom-interactive={hasDirectMouseHandler(props) ? "true" : undefined}
       style={{ ...textStyle(props), ...(props.style as CSSProperties | undefined) }}
     >
       {renderTextContent(children, props.content, props)}

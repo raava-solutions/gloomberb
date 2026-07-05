@@ -6,6 +6,7 @@ import type { CommandDef, CommandShortcutArgContext, PaneTemplateCreateOptions, 
 import {
   CommandBarHarness,
   createCommandBarTestControls,
+  emitKeypress,
   expectSingleBackControl,
   makeDataProvider,
   makeTicker,
@@ -24,6 +25,11 @@ const { waitForFrameToContain, clickFrameText } = createCommandBarTestControls((
 
 type MutableCommandRegistry = {
   commands: ReadonlyMap<string, CommandDef>;
+};
+
+type MutablePaneRegistry = {
+  panes: ReadonlyMap<string, unknown>;
+  paneTemplates: ReadonlyMap<string, unknown>;
 };
 
 const DEFAULT_ALERT_OPTIONS = [
@@ -68,6 +74,10 @@ function registerAlertCommand(
     execute: async () => {},
     ...overrides,
   });
+}
+
+function mutablePaneRegistryMap(map: ReadonlyMap<string, unknown>): Map<string, unknown> {
+  return map as Map<string, unknown>;
 }
 
 describe("CommandBar", () => {
@@ -127,6 +137,48 @@ describe("CommandBar", () => {
 
     expect(calls).toHaveLength(1);
     expect(testSetup.captureCharFrame()).not.toContain("Commands");
+  });
+
+  test("shows one account management result when searching profile", async () => {
+    const created: Array<{ templateId: string; options?: PaneTemplateCreateOptions }> = [];
+
+    testSetup = await testRender(<CommandBarHarness
+      query="profile"
+      live
+      configurePluginRegistry={(pluginRegistry) => {
+        const registry = pluginRegistry as MutablePaneRegistry;
+        mutablePaneRegistryMap(registry.panes).set("account-management", {
+          id: "account-management",
+          name: "Account Management",
+          component: () => null,
+          defaultPosition: "right",
+          defaultMode: "floating",
+        });
+        mutablePaneRegistryMap(registry.paneTemplates).set("account-management-pane", {
+          id: "account-management-pane",
+          paneId: "account-management",
+          label: "Account Management",
+          description: "Edit your Gloom Cloud profile, password, and public portfolio sharing settings",
+          keywords: ["account", "profile", "cloud", "acm", "password", "settings"],
+          shortcut: { prefix: "ACM" },
+        });
+        pluginRegistry.createPaneFromTemplateAsyncFn = async (templateId, options) => {
+          created.push({ templateId, options });
+        };
+      }}
+    />, {
+      width: 80,
+      height: 24,
+    });
+
+    await testSetup.renderOnce();
+    const frame = await waitForFrameToContain("Account Management");
+    expect(frame).not.toMatch(/\n\s*Profile\s*(?:\n|$)/);
+    expect(frame.indexOf("Account Management")).toBeLessThan(frame.indexOf("Add Broker Account"));
+
+    await emitKeypress(testSetup, { name: "return", sequence: "\r" });
+
+    expect(created).toEqual([{ templateId: "account-management-pane", options: undefined }]);
   });
 
   test("shows theme picker rows and commits a filtered light theme", async () => {

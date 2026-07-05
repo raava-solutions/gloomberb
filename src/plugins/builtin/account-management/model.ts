@@ -1,6 +1,7 @@
 import type { ChoiceDialogChoice } from "../../../components";
-import type { AccountProfile } from "../../../api-client";
+import type { AccountProfile, PublicPortfolioAnalytics } from "../../../api-client";
 import type { Portfolio, TickerRecord } from "../../../types/ticker";
+import { formatNumber } from "../../../utils/format";
 
 export type AccountFieldKey =
   | "username"
@@ -13,7 +14,12 @@ export type AccountFieldKey =
   | "xAccount"
   | "acceptUnknownDms"
   | "sharedPortfolioId"
-  | "passwordAction";
+  | "weeklyRoundupEnabled"
+  | "positionAlertsEnabled"
+  | "emailAlertsOffAction"
+  | "upgradeAction"
+  | "passwordAction"
+  | "deleteAccountAction";
 
 export interface AccountDraft {
   username: string;
@@ -26,6 +32,24 @@ export interface AccountDraft {
   xAccount: string;
   sharedPortfolioId: string;
   acceptUnknownDms: boolean;
+  weeklyRoundupEnabled: boolean;
+  positionAlertsEnabled: boolean;
+}
+
+export interface ProfileAnalyticsPreviewMetric {
+  id: string;
+  label: string;
+  value: string;
+  detail?: string;
+  tone?: "positive" | "negative" | "muted";
+}
+
+export interface ProfileAnalyticsPreview {
+  status: "off" | "missing" | "empty" | "pending" | "ready";
+  title: string;
+  subtitle: string;
+  metrics: ProfileAnalyticsPreviewMetric[];
+  publicAnalytics: PublicPortfolioAnalytics | null;
 }
 
 export const BASE_FIELD_ORDER: AccountFieldKey[] = [
@@ -39,7 +63,12 @@ export const BASE_FIELD_ORDER: AccountFieldKey[] = [
   "xAccount",
   "acceptUnknownDms",
   "sharedPortfolioId",
+  "weeklyRoundupEnabled",
+  "positionAlertsEnabled",
+  "emailAlertsOffAction",
+  "upgradeAction",
   "passwordAction",
+  "deleteAccountAction",
 ];
 
 export const NO_PORTFOLIO_VALUE = "__none__";
@@ -56,6 +85,8 @@ export function profileToDraft(profile: AccountProfile | null): AccountDraft {
     xAccount: profile?.xAccount ?? "",
     sharedPortfolioId: profile?.sharedPortfolioId ?? "",
     acceptUnknownDms: profile?.acceptUnknownDms === true,
+    weeklyRoundupEnabled: profile?.weeklyRoundupEnabled === false ? false : true,
+    positionAlertsEnabled: profile?.positionAlertsEnabled === false ? false : true,
   };
 }
 
@@ -92,7 +123,7 @@ export function buildPortfolioChoices(portfolios: Portfolio[], holdingCounts: Re
       id: portfolio.id,
       label: portfolio.name,
       detail: `${holdingCounts[portfolio.id] ?? 0} tickers`,
-      description: "Shares this portfolio's YTD % and SPY Beta on your public profile.",
+      description: "Shares this portfolio's 1Y return and SPY Beta on your public profile.",
     })),
   ];
 }
@@ -104,4 +135,233 @@ export function portfolioOptionIds(portfolios: Portfolio[]): string[] {
 export function selectedPortfolioLabel(portfolios: Portfolio[], value: string): string {
   if (!value) return "None";
   return portfolios.find((portfolio) => portfolio.id === value)?.name ?? value;
+}
+
+function signedReturn(value: number): string {
+  const percent = value * 100;
+  return `${percent >= 0 ? "+" : ""}${formatNumber(percent, 2)}%`;
+}
+
+function signedTone(value: number | null | undefined): ProfileAnalyticsPreviewMetric["tone"] {
+  if (value == null || !Number.isFinite(value)) return "muted";
+  if (value > 0) return "positive";
+  if (value < 0) return "negative";
+  return "muted";
+}
+
+function finiteMetric(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function normalizePublicAnalytics(analytics: PublicPortfolioAnalytics | null | undefined): PublicPortfolioAnalytics | null {
+  const normalized: PublicPortfolioAnalytics = {
+    oneYearReturn: finiteMetric(analytics?.oneYearReturn),
+    spyBeta: finiteMetric(analytics?.spyBeta),
+  };
+  return normalized.oneYearReturn != null || normalized.spyBeta != null ? normalized : null;
+}
+
+function buildPublicAnalyticsMetrics(analytics: PublicPortfolioAnalytics): ProfileAnalyticsPreviewMetric[] {
+  const metrics: ProfileAnalyticsPreviewMetric[] = [];
+  if (analytics.oneYearReturn != null) {
+    metrics.push({
+      id: "one-year",
+      label: "1Y",
+      value: signedReturn(analytics.oneYearReturn),
+      tone: signedTone(analytics.oneYearReturn),
+    });
+  }
+  if (analytics.spyBeta != null) {
+    metrics.push({
+      id: "beta",
+      label: "SPY Beta",
+      value: formatNumber(analytics.spyBeta, 2),
+    });
+  }
+  return metrics;
+}
+
+export function getPortfolioPositionTickers(
+  tickers: ReadonlyMap<string, TickerRecord>,
+  portfolioId: string,
+): TickerRecord[] {
+  return [...tickers.values()].filter((ticker) => (
+    ticker.metadata.positions.some((position) => position.portfolio === portfolioId)
+  ));
+}
+
+export function computeCumulativeReturn(
+  returns: Array<{ dateKey: string; value: number }>,
+  options?: { sinceDateKey?: string },
+): number | null {
+  const filtered = options?.sinceDateKey
+    ? returns.filter((point) => point.dateKey >= options.sinceDateKey!)
+    : returns;
+  if (filtered.length === 0) return null;
+  const value = filtered.reduce((acc, point) => (
+    Number.isFinite(point.value) ? acc * (1 + point.value) : acc
+  ), 1) - 1;
+  return Number.isFinite(value) ? value : null;
+}
+
+export function buildProfileAnalyticsPreview({
+  beta,
+  portfolio,
+  portfolioTickers,
+  selectedPortfolioId,
+  oneYearReturn,
+}: {
+  beta: number | null;
+  portfolio: Portfolio | null;
+  portfolioTickers: TickerRecord[];
+  selectedPortfolioId: string;
+  oneYearReturn: number | null;
+}): ProfileAnalyticsPreview {
+  if (!selectedPortfolioId) {
+    return {
+      status: "off",
+      title: "No public portfolio analytics",
+      subtitle: "Choose a portfolio to preview the public profile metrics.",
+      metrics: [],
+      publicAnalytics: null,
+    };
+  }
+
+  if (!portfolio) {
+    return {
+      status: "missing",
+      title: "Portfolio not found",
+      subtitle: selectedPortfolioId,
+      metrics: [],
+      publicAnalytics: null,
+    };
+  }
+
+  if (portfolioTickers.length === 0) {
+    return {
+      status: "empty",
+      title: portfolio.name,
+      subtitle: "No positions to preview yet.",
+      metrics: [],
+      publicAnalytics: null,
+    };
+  }
+
+  const publicAnalytics: PublicPortfolioAnalytics = {
+    oneYearReturn: finiteMetric(oneYearReturn),
+    spyBeta: finiteMetric(beta),
+  };
+  const hasSharedMetric = publicAnalytics.oneYearReturn != null || publicAnalytics.spyBeta != null;
+
+  return {
+    status: "ready",
+    title: portfolio.name,
+    subtitle: "",
+    publicAnalytics: hasSharedMetric ? publicAnalytics : null,
+    metrics: [
+      {
+        id: "one-year",
+        label: "1Y",
+        value: oneYearReturn == null ? "Pending" : signedReturn(oneYearReturn),
+        detail: oneYearReturn == null ? "needs price history" : undefined,
+        tone: signedTone(oneYearReturn),
+      },
+      {
+        id: "beta",
+        label: "SPY Beta",
+        value: beta == null ? "Pending" : formatNumber(beta, 2),
+        detail: beta == null ? "needs SPY overlap" : undefined,
+        tone: beta == null ? "muted" : undefined,
+      },
+    ],
+  };
+}
+
+export function buildPublishedProfileAnalyticsPreview({
+  analytics,
+  draftProfilePublic,
+  portfolio,
+  profileLoaded,
+  savedProfilePublic,
+  savedSharedPortfolioId,
+  selectedPortfolioId,
+  syncing,
+}: {
+  analytics: PublicPortfolioAnalytics | null | undefined;
+  draftProfilePublic: boolean;
+  portfolio: Portfolio | null;
+  profileLoaded: boolean;
+  savedProfilePublic: boolean;
+  savedSharedPortfolioId: string;
+  selectedPortfolioId: string;
+  syncing: boolean;
+}): ProfileAnalyticsPreview {
+  if (!selectedPortfolioId) {
+    return {
+      status: "off",
+      title: "No public portfolio analytics",
+      subtitle: "Choose a portfolio to publish 1Y return and SPY Beta.",
+      metrics: [],
+      publicAnalytics: null,
+    };
+  }
+
+  if (!portfolio) {
+    return {
+      status: "missing",
+      title: "Portfolio not found",
+      subtitle: selectedPortfolioId,
+      metrics: [],
+      publicAnalytics: null,
+    };
+  }
+
+  if (!profileLoaded) {
+    return {
+      status: "pending",
+      title: portfolio.name,
+      subtitle: "Loading published metrics.",
+      metrics: [],
+      publicAnalytics: null,
+    };
+  }
+
+  if (draftProfilePublic !== savedProfilePublic || selectedPortfolioId !== savedSharedPortfolioId) {
+    return {
+      status: "pending",
+      title: portfolio.name,
+      subtitle: "Save profile to update published metrics.",
+      metrics: [],
+      publicAnalytics: null,
+    };
+  }
+
+  if (!savedProfilePublic) {
+    return {
+      status: "off",
+      title: "No public portfolio analytics",
+      subtitle: "Public profile is off.",
+      metrics: [],
+      publicAnalytics: null,
+    };
+  }
+
+  const publicAnalytics = normalizePublicAnalytics(analytics);
+  if (!publicAnalytics) {
+    return {
+      status: "pending",
+      title: portfolio.name,
+      subtitle: syncing ? "Syncing published metrics." : "Waiting for published metrics.",
+      metrics: [],
+      publicAnalytics: null,
+    };
+  }
+
+  return {
+    status: "ready",
+    title: portfolio.name,
+    subtitle: "",
+    metrics: buildPublicAnalyticsMetrics(publicAnalytics),
+    publicAnalytics,
+  };
 }
