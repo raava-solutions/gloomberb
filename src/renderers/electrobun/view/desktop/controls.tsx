@@ -33,6 +33,7 @@ export function WebButton({
   active = false,
   shortcut,
   width,
+  height,
 }: ButtonProps) {
   useThemeColors();
   const palette = buttonPalette({ variant, active, disabled });
@@ -40,7 +41,7 @@ export function WebButton({
   return (
     <Box
       width={width}
-      height={1}
+      height={height ?? 1}
       flexDirection="row"
       alignItems="center"
       justifyContent="center"

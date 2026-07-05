@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Button, ChoiceDialog, ConfirmDialog, Tabs } from "../../../components";
 import { useAppSelector } from "../../../state/app/context";
 import { useChartQueries, useFxRatesMap, useTickerFinancialsMap } from "../../../market-data/hooks";
 import { selectEffectiveExchangeRates } from "../../../utils/exchange-rate-map";
 import { blendHex, colors } from "../../../theme/colors";
 import type { PaneProps } from "../../../types/plugin";
-import { Box, ScrollBox, Text, Textarea, TextAttributes, type TextareaRenderable, useRendererHost } from "../../../ui";
+import { Box, ScrollBox, Text, Textarea, TextAttributes, type TextareaRenderable, useRendererHost, useUiHost } from "../../../ui";
 import { useDialog, type AlertContext, type PromptContext } from "../../../ui/dialog";
 import { openNativeSelect, type NativeSelectElement } from "../../../components/ui/native-select";
 import { apiClient, type AccountProfile } from "../../../api-client";
@@ -95,6 +95,7 @@ function PlanComparison({
   activePlan: "free" | "pro";
   upgradeButton: ReactNode;
 }) {
+  const isDesktop = useUiHost().kind === "desktop-web";
   const comparisonWidth = Math.min(width, 58);
   const capabilityWidth = Math.max(13, Math.min(16, Math.floor(comparisonWidth * 0.32)));
   const valueWidth = Math.max(10, Math.floor((comparisonWidth - capabilityWidth - 2) / 2));
@@ -107,6 +108,138 @@ function PlanComparison({
     if (tone === "muted") return colors.textMuted;
     return colors.text;
   };
+
+  if (isDesktop) {
+    const gridStyle: CSSProperties = {
+      display: "grid",
+      gridTemplateColumns: width >= 86
+        ? "minmax(220px, 1fr) minmax(120px, 0.42fr) minmax(300px, 1.05fr)"
+        : "minmax(150px, 0.95fr) minmax(86px, 0.42fr) minmax(180px, 1fr)",
+      columnGap: width >= 86 ? "clamp(30px, 5vw, 72px)" : "22px",
+      alignItems: "center",
+      width: "100%",
+    };
+    const desktopProBg = blendHex(colors.panel, colors.selected, activePlan === "pro" ? 0.34 : 0.24);
+    const desktopProAltBg = blendHex(colors.panel, colors.selected, activePlan === "pro" ? 0.39 : 0.28);
+    const desktopText = {
+      lineHeight: "22px",
+      fontSize: "15px",
+    } satisfies CSSProperties;
+    return (
+      <Box
+        flexDirection="column"
+        width="100%"
+        maxWidth={width >= 86 ? "980px" : "100%"}
+        style={{
+          marginTop: 18,
+          paddingLeft: width >= 86 ? 12 : 4,
+          paddingRight: width >= 86 ? 10 : 4,
+        }}
+      >
+        <Box
+          style={{
+            ...gridStyle,
+            marginBottom: 12,
+          }}
+        >
+          <Text fg={colors.textDim} style={{ ...desktopText, fontWeight: 650 }}>
+            Capability
+          </Text>
+          <Text
+            fg={activePlan === "free" ? colors.textBright : colors.textDim}
+            attributes={activePlan === "free" ? TextAttributes.BOLD : 0}
+            style={{ ...desktopText, fontWeight: activePlan === "free" ? 700 : 650 }}
+          >
+            Free
+          </Text>
+          <Box flexDirection="row" alignItems="baseline" gap={1}>
+            <Text
+              fg={colors.borderFocused}
+              attributes={TextAttributes.BOLD}
+              style={{ ...desktopText, fontWeight: 750 }}
+            >
+              Pro
+            </Text>
+            <Text fg={colors.textBright} style={desktopText}>
+              $49/mo
+            </Text>
+          </Box>
+        </Box>
+        {PLAN_COMPARISON_ROWS.map((row, index) => {
+          const first = index === 0;
+          const last = index === PLAN_COMPARISON_ROWS.length - 1;
+          return (
+            <Box
+              key={row.capability}
+              style={{
+                ...gridStyle,
+                minHeight: 48,
+              }}
+            >
+              <Box flexDirection="row" alignItems="center" style={{ minWidth: 0 }}>
+                <Box
+                  aria-hidden="true"
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: 999,
+                    marginRight: 18,
+                    flexShrink: 0,
+                    backgroundColor: colors.borderFocused,
+                    boxShadow: `0 0 0 2px ${blendHex(colors.bg, colors.borderFocused, 0.14)}`,
+                  }}
+                />
+                <Text fg={colors.textBright} style={{ ...desktopText, fontWeight: 520 }}>
+                  {row.capability}
+                </Text>
+              </Box>
+              <Text fg={freeFg} style={desktopText}>
+                {row.free}
+              </Text>
+              <Box
+                flexDirection="row"
+                alignItems="center"
+                backgroundColor={index % 2 === 0 ? desktopProBg : desktopProAltBg}
+                style={{
+                  minHeight: 48,
+                  paddingLeft: width >= 86 ? 24 : 16,
+                  paddingRight: width >= 86 ? 24 : 14,
+                  borderTopLeftRadius: first ? 2 : 0,
+                  borderTopRightRadius: first ? 2 : 0,
+                  borderBottomLeftRadius: last ? 2 : 0,
+                  borderBottomRightRadius: last ? 2 : 0,
+                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.025)",
+                }}
+              >
+                <Text
+                  fg={proValueColor(row.proTone)}
+                  attributes={row.proTone === "positive" ? TextAttributes.BOLD : 0}
+                  style={{
+                    ...desktopText,
+                    fontWeight: row.proTone === "positive" ? 720 : 560,
+                  }}
+                >
+                  {row.pro}
+                </Text>
+              </Box>
+            </Box>
+          );
+        })}
+        <Box
+          style={{
+            ...gridStyle,
+            marginTop: 14,
+          }}
+        >
+          <Box />
+          <Box />
+          <Box flexDirection="row" justifyContent="center">
+            {upgradeButton}
+          </Box>
+        </Box>
+      </Box>
+    );
+  }
 
   return (
     <Box flexDirection="column" width={rowWidth}>
@@ -146,6 +279,7 @@ function PlanComparison({
 export function AccountManagementPane({ focused, width, height }: PaneProps) {
   const dialog = useDialog();
   const renderer = useRendererHost();
+  const isDesktop = useUiHost().kind === "desktop-web";
   const config = useAppSelector((state) => state.config);
   const portfolios = config.portfolios;
   const baseCurrency = config.baseCurrency;
@@ -171,6 +305,7 @@ export function AccountManagementPane({ focused, width, height }: PaneProps) {
   draftRef.current = draft;
 
   const formWidth = Math.max(24, Math.min(70, width - 2));
+  const contentWidth = activeTab === "pro" && isDesktop ? Math.max(formWidth, width - 2) : formWidth;
   const twoColumns = formWidth >= 60;
   const fieldWidth = twoColumns ? Math.max(22, Math.floor((formWidth - 3) / 2)) : Math.max(18, Math.min(46, formWidth - 2));
   const formLabelWidth = accountFieldLabelWidth(formWidth);
@@ -622,7 +757,7 @@ export function AccountManagementPane({ focused, width, height }: PaneProps) {
         keyboardNavigation={false}
       />
       <ScrollBox height={Math.max(3, bodyHeight - 2)} scrollY focusable={false}>
-        <Box flexDirection="column" width={formWidth} gap={1}>
+        <Box flexDirection="column" width={contentWidth} gap={1}>
           {activeTab === "profile" ? (
             <>
               <FieldRow twoColumns={twoColumns}>
@@ -833,12 +968,14 @@ export function AccountManagementPane({ focused, width, height }: PaneProps) {
                 {profile?.email ? <Text fg={colors.textMuted}>{profile.email}</Text> : null}
               </Box>
               <PlanComparison
-                width={formWidth}
+                width={contentWidth}
                 activePlan={profile?.plan === "pro" ? "pro" : "free"}
                 upgradeButton={(
                   <Button
                     label={profile?.plan === "pro" ? "Manage Pro" : busy === "billing" ? "Opening..." : "Upgrade to Pro"}
                     variant={profile?.plan === "pro" ? "secondary" : "primary"}
+                    width={isDesktop ? 28 : profile?.plan === "pro" ? 18 : 24}
+                    height={isDesktop ? "28px" : undefined}
                     active={activeField === "upgradeAction"}
                     onPress={openUpgrade}
                     disabled={!!busy}
