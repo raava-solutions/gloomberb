@@ -4,9 +4,11 @@ import { Box, Input, Text, Textarea, editableTextContextMenuItems, useRendererHo
 import { TextAttributes, type InputRenderable } from "../../../../ui";
 import { useShortcut } from "../../../../react/input";
 import { blendHex, colors } from "../../../../theme/colors";
+import { contrastRatio } from "../../../../theme/color-utils";
 import { useThemeColors } from "../../../../theme/theme-context";
 import { isDetailBackNavigationKey } from "../../../../utils/back-navigation";
 import type { ButtonProps } from "../../../../components/ui/button";
+import type { CheckboxProps } from "../../../../components/ui/checkbox";
 import type { TextFieldProps } from "../../../../components/ui/fields";
 import type { DialogFrameProps } from "../../../../components/ui/frame";
 import type { MessageComposerProps } from "../../../../components/ui/message-composer";
@@ -31,6 +33,7 @@ export function WebButton({
   active = false,
   shortcut,
   width,
+  height,
 }: ButtonProps) {
   useThemeColors();
   const palette = buttonPalette({ variant, active, disabled });
@@ -38,7 +41,7 @@ export function WebButton({
   return (
     <Box
       width={width}
-      height={1}
+      height={height ?? 1}
       flexDirection="row"
       alignItems="center"
       justifyContent="center"
@@ -51,7 +54,8 @@ export function WebButton({
       style={{
         border: `1px solid ${palette.border}`,
         borderRadius: CONTROL_RADIUS,
-        paddingInline: 8,
+        paddingLeft: 8,
+        paddingRight: 8,
         boxShadow: controlShadow(active),
         cursor: disabled ? "default" : "pointer",
       }}
@@ -59,7 +63,9 @@ export function WebButton({
       <Text
         fg={palette.fg}
         attributes={active ? TextAttributes.BOLD : 0}
-        style={{ fontWeight: active || variant === "primary" ? 700 : 600 }}
+        style={{
+          fontWeight: active || variant === "primary" ? 700 : 600,
+        }}
       >
         {label}
       </Text>
@@ -71,6 +77,129 @@ export function WebButton({
           {shortcut}
         </Text>
       )}
+    </Box>
+  );
+}
+
+function checkboxAccentColor(): string {
+  const base = colors.borderFocused;
+  const nativeCheckmark = "#ffffff";
+  const candidates = [
+    blendHex(base, colors.selected, 0.55),
+    blendHex(base, colors.selected, 0.65),
+    blendHex(base, "#000000", 0.45),
+    blendHex(base, "#000000", 0.52),
+    base,
+  ];
+  return candidates.find((candidate) => (
+    contrastRatio(candidate, nativeCheckmark) >= 4.5
+    && contrastRatio(candidate, colors.panel) >= 2.2
+  )) ?? candidates[1]!;
+}
+
+function checkboxCheckImage(): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 14 14"><path d="M3 7.3 5.8 10 11.2 3.7" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+
+export function WebCheckbox({
+  label,
+  displayLabel,
+  checked,
+  onChange,
+  disabled = false,
+  active = false,
+  description,
+  width,
+}: CheckboxProps) {
+  useThemeColors();
+  const textColor = disabled
+    ? colors.textMuted
+    : active
+    ? colors.textBright
+    : colors.text;
+  const visibleLabel = displayLabel ?? label;
+  const accentColor = checkboxAccentColor();
+  const borderColor = checked ? accentColor : controlBorderColor(active, false);
+  return (
+    <Box
+      flexDirection="column"
+      width={width}
+      data-gloom-role="desktop-checkbox"
+      data-gloom-interactive={disabled ? undefined : "true"}
+      style={{ opacity: disabled ? 0.55 : 1 }}
+    >
+      <label
+        onMouseDown={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        }}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (!disabled) onChange?.(!checked);
+        }}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          width: "100%",
+          minWidth: 0,
+          cursor: disabled ? "default" : "pointer",
+          color: textColor,
+          fontWeight: active ? 700 : 500,
+          lineHeight: "20px",
+          userSelect: "none",
+          position: "relative",
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={checked}
+          readOnly
+          disabled={disabled}
+          style={{
+            appearance: "none",
+            WebkitAppearance: "none",
+            width: 14,
+            height: 14,
+            margin: 0,
+            backgroundColor: checked ? accentColor : panelFill(),
+            backgroundImage: checked ? checkboxCheckImage() : undefined,
+            backgroundPosition: "center",
+            backgroundRepeat: "no-repeat",
+            backgroundSize: "12px 12px",
+            border: `1px solid ${borderColor}`,
+            borderRadius: 4,
+            boxShadow: active
+              ? `0 0 0 2px ${blendHex(colors.bg, colors.borderFocused, 0.28)}, inset 0 1px 0 rgba(255,255,255,0.16)`
+              : "inset 0 1px 0 rgba(255,255,255,0.10)",
+            boxSizing: "border-box",
+            flexShrink: 0,
+            cursor: disabled ? "default" : "pointer",
+            verticalAlign: "middle",
+          }}
+        />
+        <span
+          style={{
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {visibleLabel}
+        </span>
+      </label>
+      {description ? (
+        <Text
+          fg={colors.textMuted}
+          wrapText
+          width={width}
+          style={{ paddingLeft: 22, lineHeight: "18px" }}
+        >
+          {description}
+        </Text>
+      ) : null}
     </Box>
   );
 }
@@ -297,7 +426,7 @@ export function WebDialogFrame({
   title,
   children,
   footer,
-  showTitleDivider = true,
+  showTitleDivider = false,
 }: DialogFrameProps) {
   useThemeColors();
   return (

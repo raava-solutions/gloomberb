@@ -19,7 +19,6 @@ import {
   cancelWebFrame,
   cellBoundsForElement,
   cellMouseEvent,
-  hasDirectMouseHandler,
   requestWebFrame,
 } from "./mouse";
 import { cleanDomProps, commonStyle } from "./style";
@@ -148,7 +147,6 @@ export const WebBox = forwardRef<HTMLDivElement, Record<string, unknown> & { chi
       <div
         {...cleanDomProps(props)}
         data-gloom-hover-bg={hoverBackgroundColor ? "true" : undefined}
-        data-gloom-interactive={hasDirectMouseHandler(props) ? "true" : undefined}
         ref={elementRef}
         onMouseDown={handleMouseDown}
         onMouseOver={handleMouseOver}

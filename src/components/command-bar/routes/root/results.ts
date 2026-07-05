@@ -196,7 +196,7 @@ export function buildRootResultModel(options: RootResultModelOptions): RootResul
       ...tickerActionItems(),
       ...pluginCommandItems(),
     ];
-    items.push(...fuzzyFilter(allItems, rootQuery, (item) => `${item.label} ${item.detail} ${item.searchText || ""} ${item.right || ""}`));
+    items.push(...fuzzyFilter(allItems, rootQuery, (item) => `${item.label} ${item.searchText || ""} ${item.detail} ${item.right || ""}`));
   }
 
   return { items, initialIdx };

@@ -11,7 +11,7 @@ export interface DialogFrameProps {
   showTitleDivider?: boolean;
 }
 
-export function DialogFrame({ title, children, footer, showTitleDivider = true }: DialogFrameProps) {
+export function DialogFrame({ title, children, footer, showTitleDivider = false }: DialogFrameProps) {
   useThemeColors();
   const HostDialogFrame = useUiHost().DialogFrame as ComponentType<DialogFrameProps> | undefined;
   if (HostDialogFrame) {

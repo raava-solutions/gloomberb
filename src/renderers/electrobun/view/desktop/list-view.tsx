@@ -20,24 +20,29 @@ function DefaultDesktopRow({
   selected: boolean;
 }) {
   return (
-    <Box flexDirection="row" justifyContent="space-between" width="100%" alignItems="center">
-      <Box flexDirection="row" alignItems="center" minWidth={0}>
-        <Box
-          width={1}
-          height={1}
-          marginRight={1}
-          backgroundColor={selected ? colors.borderFocused : "transparent"}
-          style={{ borderRadius: CONTROL_RADIUS }}
-        />
+    <Box
+      flexDirection="row"
+      justifyContent="space-between"
+      width="100%"
+      minWidth={0}
+      alignItems="center"
+      style={{ boxSizing: "border-box" }}
+    >
+      <Box flexDirection="row" alignItems="center" minWidth={0} flexShrink={1}>
         <Text
           fg={selected ? colors.text : colors.textDim}
           attributes={selected ? TextAttributes.BOLD : 0}
+          style={{
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
         >
           {item.label}
         </Text>
       </Box>
       {item.detail && (
-        <Text fg={colors.textMuted}>
+        <Text fg={colors.textMuted} style={{ flexShrink: 0, marginLeft: 12 }}>
           {item.detail}
         </Text>
       )}
@@ -50,7 +55,11 @@ function listRowStyle(selected: boolean): CSSProperties {
     borderRadius: CONTROL_RADIUS,
     border: `1px solid ${selected ? colors.borderFocused : "transparent"}`,
     boxShadow: selected ? `inset 0 1px 0 ${blendHex(colors.bg, colors.textBright, 0.06)}` : undefined,
+    boxSizing: "border-box",
     cursor: "pointer",
+    maxWidth: "100%",
+    minWidth: 0,
+    paddingInline: 10,
   };
 }
 
@@ -69,10 +78,11 @@ export function WebListView({
   hoverBgColor,
   rowGap = 1,
   rowHeight = 1,
-  surface = "framed",
+  surface,
   height,
   flexGrow,
   scrollable = false,
+  selectOnHover = false,
   autoScrollToIndex = true,
 }: ListViewProps) {
   useThemeColors();
@@ -83,6 +93,20 @@ export function WebListView({
   const rowHoverBg = hoverBgColor ?? hoverBg();
   const selectedItem = selectedIndex >= 0 ? items[selectedIndex] : undefined;
   const activeScrollIndex = scrollIndex ?? selectedIndex;
+  const effectiveSurface = surface ?? (scrollable ? "framed" : "plain");
+  const frameStyle = effectiveSurface === "plain"
+    ? {
+      border: "none",
+      borderRadius: 0,
+      padding: 0,
+      backgroundColor: "transparent",
+    }
+    : {
+      border: `1px solid ${panelBorder()}`,
+      borderRadius: CONTROL_RADIUS,
+      padding: 4,
+      backgroundColor: subtlePanelFill(),
+    };
 
   useEffect(() => {
     if (!scrollable || !autoScrollToIndex || activeScrollIndex < 0) return;
@@ -130,6 +154,7 @@ export function WebListView({
           onMouseMove={() => {
             if (!disabled) {
               setHoveredIndex((current) => (current === index ? current : index));
+              if (selectOnHover) onSelect?.(index);
             }
           }}
           onMouseDown={() => {
@@ -156,26 +181,14 @@ export function WebListView({
           flexGrow={flexGrow}
           scrollY
           focusable={false}
-          style={surface === "plain"
-            ? {
-              border: "none",
-              borderRadius: 0,
-              padding: 0,
-              backgroundColor: "transparent",
-            }
-            : {
-              border: `1px solid ${panelBorder()}`,
-              borderRadius: CONTROL_RADIUS,
-              padding: 4,
-              backgroundColor: subtlePanelFill(),
-            }}
+          style={frameStyle}
         >
           <Box flexDirection="column" gap={rowGap}>
             {rows}
           </Box>
         </ScrollBox>
       ) : (
-        <Box flexDirection="column" gap={rowGap}>
+        <Box flexDirection="column" gap={rowGap} style={frameStyle}>
           {rows}
         </Box>
       )}

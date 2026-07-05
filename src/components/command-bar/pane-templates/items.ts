@@ -139,6 +139,14 @@ export function buildPaneTemplateItem(options: {
       .join(" ")
     : null;
   const arg = options.createOptions?.arg;
+  const searchText = [
+    options.template.keywords?.join(" ") || "",
+    displayLabel,
+    options.template.label,
+    options.template.paneId,
+    shortcutLabel || "",
+    pluginName || "",
+  ].filter(Boolean).join(" ");
 
   const action = () => {
     if (
@@ -163,7 +171,7 @@ export function buildPaneTemplateItem(options: {
     kind: "action",
     right: options.showShortcut ? options.template.shortcut?.prefix : undefined,
     shortcutQuery: options.template.shortcut?.prefix,
-    searchText: `${displayLabel} ${options.template.label} ${options.template.paneId} ${options.template.keywords?.join(" ") || ""} ${shortcutLabel || ""} ${pluginName || ""}`,
+    searchText,
     action,
   };
 }
@@ -187,7 +195,7 @@ export function buildPaneShortcutItems(options: {
     }));
 
   return options.filterQuery
-    ? fuzzyFilter(items, options.filterQuery, (item) => `${item.label} ${item.detail} ${item.searchText || ""} ${item.right || ""}`)
+    ? fuzzyFilter(items, options.filterQuery, (item) => `${item.label} ${item.searchText || ""} ${item.detail} ${item.right || ""}`)
     : items;
 }
 
@@ -201,6 +209,6 @@ export function buildNonShortcutPaneTemplateItems(options: {
     .map((template) => options.createItem(template, { category: "Panes" }));
 
   return options.filterQuery
-    ? fuzzyFilter(items, options.filterQuery, (item) => `${item.label} ${item.detail} ${item.searchText || ""} ${item.right || ""}`)
+    ? fuzzyFilter(items, options.filterQuery, (item) => `${item.label} ${item.searchText || ""} ${item.detail} ${item.right || ""}`)
     : items;
 }
