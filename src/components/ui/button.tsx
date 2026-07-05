@@ -14,6 +14,7 @@ export interface ButtonProps {
   active?: boolean;
   shortcut?: string;
   width?: number;
+  height?: number | string;
 }
 
 function resolveButtonColors(variant: ButtonVariant, active: boolean, disabled: boolean) {
@@ -45,6 +46,7 @@ export function Button({
   active = false,
   shortcut,
   width,
+  height,
 }: ButtonProps) {
   useRemoteUiNode({
     role: "button",
@@ -68,6 +70,7 @@ export function Button({
         active={active}
         shortcut={shortcut}
         width={width}
+        height={height}
       />
     );
   }
@@ -77,7 +80,7 @@ export function Button({
   return (
     <Box
       width={width}
-      height={1}
+      height={height ?? 1}
       flexDirection="row"
       backgroundColor={palette.bg}
       onMouseDown={() => {
