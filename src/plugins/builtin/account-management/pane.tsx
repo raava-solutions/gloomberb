@@ -268,7 +268,7 @@ function PlanComparison({
       <Box height={1} flexDirection="row" gap={1}>
         <Box width={capabilityWidth} />
         <Box width={valueWidth} />
-        <Box width={valueWidth} flexDirection="row">
+        <Box width={valueWidth} flexDirection="row" paddingLeft={1}>
           {upgradeButton}
         </Box>
       </Box>
@@ -974,7 +974,7 @@ export function AccountManagementPane({ focused, width, height }: PaneProps) {
                   <Button
                     label={profile?.plan === "pro" ? "Manage Pro" : busy === "billing" ? "Opening..." : "Upgrade to Pro"}
                     variant={profile?.plan === "pro" ? "secondary" : "primary"}
-                    width={isDesktop ? 28 : profile?.plan === "pro" ? 18 : 24}
+                    width={isDesktop ? 28 : undefined}
                     height={isDesktop ? "28px" : undefined}
                     active={activeField === "upgradeAction"}
                     onPress={openUpgrade}

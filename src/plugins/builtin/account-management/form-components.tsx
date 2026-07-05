@@ -310,9 +310,12 @@ export function PublicAnalyticsGroup({
   const contentWidth = Math.max(1, width - 2);
   const labelText = active ? "> Public Stats:" : "  Public Stats:";
   const labelWidth = Math.min(accountFieldLabelWidth(width), Math.max(1, contentWidth));
-  const buttonWidth = Math.max(14, Math.min(24, Math.floor(contentWidth * 0.3)));
-  const buttonLabel = truncate(label, Math.max(1, buttonWidth - 4));
-  const nativeSelectWidth = buttonWidth * 8;
+  const nativeButtonWidth = Math.max(14, Math.min(24, Math.floor(contentWidth * 0.3)));
+  const terminalMaxButtonWidth = Math.max(8, Math.min(24, contentWidth - labelWidth - 1));
+  const buttonLabel = truncate(label, Math.max(1, terminalMaxButtonWidth - 4));
+  const buttonWidth = buttonLabel.length + 4;
+  const layoutButtonWidth = isDesktop ? nativeButtonWidth : buttonWidth;
+  const nativeSelectWidth = nativeButtonWidth * 8;
   const normalizedDetail = (detail ?? "").replace(/\.+$/, "");
   const displayPreview = (
     preview.metrics.length === 0
@@ -320,7 +323,7 @@ export function PublicAnalyticsGroup({
     && preview.subtitle.replace(/\.+$/, "") === normalizedDetail
   ) ? { ...preview, subtitle: "" } : preview;
   const metrics = displayPreview.metrics.slice(0, 2);
-  const metricAreaWidth = Math.max(0, contentWidth - labelWidth - buttonWidth - 2);
+  const metricAreaWidth = Math.max(0, contentWidth - labelWidth - layoutButtonWidth - 2);
   const metricWidth = metrics.length > 0 ? Math.max(8, Math.floor((metricAreaWidth - (metrics.length - 1)) / metrics.length)) : 0;
   const detailWidth = Math.max(0, metricAreaWidth);
   return (
