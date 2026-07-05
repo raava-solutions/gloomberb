@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button, ChoiceDialog, ConfirmDialog, Tabs } from "../../../components";
 import { useAppSelector } from "../../../state/app/context";
 import { useChartQueries, useFxRatesMap, useTickerFinancialsMap } from "../../../market-data/hooks";
@@ -78,54 +78,67 @@ const ACCOUNT_TAB_FIELD_ORDER: Record<AccountTab, AccountFieldKey[]> = {
   advanced: ["passwordAction", "deleteAccountAction"],
 };
 
-const FREE_BENEFITS = [
-  "Delayed market data",
-  "12h delayed news",
-  "Cloud sync",
-];
+const PLAN_COMPARISON_ROWS = [
+  { capability: "Market data", free: "Delayed", pro: "Real-time", proTone: "positive" },
+  { capability: "News", free: "12h delay", pro: "Real-time wire", proTone: "positive" },
+  { capability: "Cloud sync", free: "Included", pro: "Included", proTone: "neutral" },
+  { capability: "X data", free: "No", pro: "Included", proTone: "positive" },
+  { capability: "AI Screener", free: "No", pro: "Soon", proTone: "muted" },
+] as const;
 
-const PRO_BENEFITS = [
-  "Real-time financial data",
-  "Real-time news wire",
-  "X data",
-  "AI Screener soon",
-];
-
-function BenefitList({
-  title,
-  benefits,
-  active,
-  featured = false,
+function PlanComparison({
   width,
+  activePlan,
+  upgradeButton,
 }: {
-  title: string;
-  benefits: string[];
-  active: boolean;
-  featured?: boolean;
   width: number;
+  activePlan: "free" | "pro";
+  upgradeButton: ReactNode;
 }) {
-  const contentWidth = Math.max(12, width - 2);
-  const backgroundColor = featured
-    ? blendHex(colors.panel, colors.selected, active ? 0.48 : 0.34)
-    : active
-    ? colors.panel
-    : blendHex(colors.bg, colors.panel, 0.42);
-  const titleFg = featured ? colors.textBright : active ? colors.textBright : colors.textDim;
-  const benefitFg = featured || active ? colors.text : colors.textDim;
-  const markerFg = featured ? colors.positive : colors.textDim;
+  const comparisonWidth = Math.min(width, 58);
+  const capabilityWidth = Math.max(13, Math.min(16, Math.floor(comparisonWidth * 0.32)));
+  const valueWidth = Math.max(10, Math.floor((comparisonWidth - capabilityWidth - 2) / 2));
+  const rowWidth = capabilityWidth + valueWidth * 2 + 2;
+  const proCellBg = blendHex(colors.panel, colors.selected, activePlan === "pro" ? 0.42 : 0.26);
+  const freeFg = activePlan === "free" ? colors.text : colors.textDim;
+  const proHeadingFg = activePlan === "pro" ? colors.textBright : colors.text;
+  const proValueColor = (tone: typeof PLAN_COMPARISON_ROWS[number]["proTone"]) => {
+    if (tone === "positive") return colors.positive;
+    if (tone === "muted") return colors.textMuted;
+    return colors.text;
+  };
+
   return (
-    <Box flexDirection="column" width={width} backgroundColor={backgroundColor} paddingX={1}>
-      <Text fg={titleFg} attributes={featured || active ? TextAttributes.BOLD : 0}>
-        {title}
-      </Text>
-      {benefits.map((benefit) => (
-        <Box key={benefit} height={1} flexDirection="row" gap={1}>
-          <Text fg={markerFg} attributes={featured ? TextAttributes.BOLD : 0}>+</Text>
-          <Text fg={benefitFg} wrapText width={contentWidth - 2}>
-            {benefit}
+    <Box flexDirection="column" width={rowWidth}>
+      <Box height={1} flexDirection="row" gap={1}>
+        <Text width={capabilityWidth} fg={colors.textDim}>Capability</Text>
+        <Text width={valueWidth} fg={activePlan === "free" ? colors.textBright : colors.textDim} attributes={activePlan === "free" ? TextAttributes.BOLD : 0}>
+          Free
+        </Text>
+        <Box width={valueWidth} backgroundColor={proCellBg} paddingX={1}>
+          <Text fg={proHeadingFg} attributes={TextAttributes.BOLD}>
+            Pro $49/mo
           </Text>
         </Box>
+      </Box>
+      {PLAN_COMPARISON_ROWS.map((row) => (
+        <Box key={row.capability} height={1} flexDirection="row" gap={1}>
+          <Text width={capabilityWidth} fg={colors.textDim}>{row.capability}</Text>
+          <Text width={valueWidth} fg={freeFg}>{row.free}</Text>
+          <Box width={valueWidth} backgroundColor={proCellBg} paddingX={1}>
+            <Text fg={proValueColor(row.proTone)} attributes={row.proTone === "positive" ? TextAttributes.BOLD : 0}>
+              {row.pro}
+            </Text>
+          </Box>
+        </Box>
       ))}
+      <Box height={1} flexDirection="row" gap={1}>
+        <Box width={capabilityWidth} />
+        <Box width={valueWidth} />
+        <Box width={valueWidth} flexDirection="row">
+          {upgradeButton}
+        </Box>
+      </Box>
     </Box>
   );
 }
@@ -162,7 +175,6 @@ export function AccountManagementPane({ focused, width, height }: PaneProps) {
   const fieldWidth = twoColumns ? Math.max(22, Math.floor((formWidth - 3) / 2)) : Math.max(18, Math.min(46, formWidth - 2));
   const formLabelWidth = accountFieldLabelWidth(formWidth);
   const bodyHeight = Math.max(5, height);
-  const benefitColumnWidth = twoColumns ? Math.max(22, Math.floor((formWidth - 3) / 2)) : formWidth;
   const fieldOrder = ACCOUNT_TAB_FIELD_ORDER[activeTab];
 
   const portfolioHoldingCounts = useMemo(() => countPortfolioHoldings(tickers), [tickers]);
@@ -820,30 +832,19 @@ export function AccountManagementPane({ focused, width, height }: PaneProps) {
                 </Text>
                 {profile?.email ? <Text fg={colors.textMuted}>{profile.email}</Text> : null}
               </Box>
-              <FieldRow twoColumns={twoColumns}>
-                <BenefitList
-                  title="Free"
-                  benefits={FREE_BENEFITS}
-                  active={profile?.plan !== "pro"}
-                  width={benefitColumnWidth}
-                />
-                <BenefitList
-                  title="Pro $49/mo"
-                  benefits={PRO_BENEFITS}
-                  active={profile?.plan === "pro"}
-                  featured
-                  width={benefitColumnWidth}
-                />
-              </FieldRow>
-              <Box flexDirection="row" gap={1}>
-                <Button
-                  label={profile?.plan === "pro" ? "Manage Pro" : busy === "billing" ? "Opening..." : "Upgrade to Pro"}
-                  variant={profile?.plan === "pro" ? "secondary" : "primary"}
-                  active={activeField === "upgradeAction"}
-                  onPress={openUpgrade}
-                  disabled={!!busy}
-                />
-              </Box>
+              <PlanComparison
+                width={formWidth}
+                activePlan={profile?.plan === "pro" ? "pro" : "free"}
+                upgradeButton={(
+                  <Button
+                    label={profile?.plan === "pro" ? "Manage Pro" : busy === "billing" ? "Opening..." : "Upgrade to Pro"}
+                    variant={profile?.plan === "pro" ? "secondary" : "primary"}
+                    active={activeField === "upgradeAction"}
+                    onPress={openUpgrade}
+                    disabled={!!busy}
+                  />
+                )}
+              />
             </>
           ) : null}
 
