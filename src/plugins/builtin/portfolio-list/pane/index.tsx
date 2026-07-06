@@ -317,6 +317,7 @@ export function PortfolioListPane({ focused, width, height }: PaneProps) {
     cursorSymbol,
     streamWindow: effectiveStreamWindow,
     isPortfolioTab,
+    activeSort,
     financialsMap,
     visibleWarmupRequirements,
   });

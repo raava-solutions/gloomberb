@@ -4,16 +4,20 @@ import { instrumentFromTicker, quoteSubscriptionTargetFromTicker } from "../../.
 import { useQuoteStreaming } from "../../../../state/hooks/quote-streaming";
 import type { TickerFinancials } from "../../../../types/financials";
 import type { TickerRecord } from "../../../../types/ticker";
+import type { CollectionSortPreference } from "../../../../state/app/context";
 import {
   VISIBLE_FINANCIAL_WARMUP_DELAY_MS,
   VISIBLE_QUOTE_REFRESH_COOLDOWN_MS,
   VISIBLE_QUOTE_STREAM_WATCHDOG_MS,
   VISIBLE_SNAPSHOT_WARMUP_BATCH_LIMIT,
   VISIBLE_SNAPSHOT_REFRESH_COOLDOWN_MS,
+  SORT_QUOTE_WARMUP_BATCH_LIMIT,
   needsVisibleQuoteWarmup,
   needsVisibleQuoteWatchdogRefresh,
   needsVisibleSnapshotWarmup,
+  selectQuoteWarmupTickers,
   selectStreamTickers,
+  sortPreferenceUsesQuote,
   visibleWarmupKey,
   type VisibleWarmupRequirements,
 } from "./data";
@@ -26,6 +30,7 @@ export function usePortfolioPaneStreaming({
   cursorSymbol,
   streamWindow,
   isPortfolioTab,
+  activeSort,
   financialsMap,
   visibleWarmupRequirements,
 }: {
@@ -36,6 +41,7 @@ export function usePortfolioPaneStreaming({
   cursorSymbol: string | null;
   streamWindow: { start: number; end: number };
   isPortfolioTab: boolean;
+  activeSort: CollectionSortPreference;
   financialsMap: Map<string, TickerFinancials>;
   visibleWarmupRequirements: VisibleWarmupRequirements;
 }) {
@@ -91,19 +97,39 @@ export function usePortfolioPaneStreaming({
 
     const nowTimestamp = Date.now();
     const quoteQueue: TickerRecord[] = [];
+    const quoteSnapshotQueue: TickerRecord[] = [];
     const snapshotQueue: TickerRecord[] = [];
-    for (const ticker of visibleFinancialTickers) {
+    const snapshotQueueSymbols = new Set<string>();
+    const useSnapshotForQuoteWarmup = sortPreferenceUsesQuote(activeSort);
+    const quoteWarmupTickers = selectQuoteWarmupTickers(
+      sortedTickers,
+      streamWindow,
+      financialsMap,
+      activeSort,
+      nowTimestamp,
+    );
+    for (const ticker of quoteWarmupTickers) {
       const financials = financialsMap.get(ticker.metadata.ticker);
       const quoteKey = visibleWarmupKey("quote", ticker);
+      const warmupWithSnapshot = useSnapshotForQuoteWarmup && ticker.metadata.assetCategory !== "OPT";
+      const warmupKey = warmupWithSnapshot ? visibleWarmupKey("snapshot", ticker) : quoteKey;
       if (
         needsVisibleQuoteWarmup(financials, nowTimestamp)
-        && !warmupInFlightRef.current.has(quoteKey)
-        && nowTimestamp - (warmupAttemptRef.current.get(quoteKey) ?? 0) >= VISIBLE_QUOTE_REFRESH_COOLDOWN_MS
+        && !warmupInFlightRef.current.has(warmupKey)
+        && nowTimestamp - (warmupAttemptRef.current.get(warmupKey) ?? 0) >= VISIBLE_QUOTE_REFRESH_COOLDOWN_MS
       ) {
-        quoteQueue.push(ticker);
-        continue;
+        if (warmupWithSnapshot) {
+          quoteSnapshotQueue.push(ticker);
+          snapshotQueueSymbols.add(ticker.metadata.ticker);
+        } else {
+          quoteQueue.push(ticker);
+        }
       }
+    }
 
+    for (const ticker of visibleFinancialTickers) {
+      const financials = financialsMap.get(ticker.metadata.ticker);
+      if (snapshotQueueSymbols.has(ticker.metadata.ticker)) continue;
       const snapshotKey = visibleWarmupKey("snapshot", ticker);
       if (
         needsVisibleSnapshotWarmup(ticker, financials, visibleWarmupRequirements)
@@ -111,9 +137,13 @@ export function usePortfolioPaneStreaming({
         && nowTimestamp - (warmupAttemptRef.current.get(snapshotKey) ?? 0) >= VISIBLE_SNAPSHOT_REFRESH_COOLDOWN_MS
       ) {
         snapshotQueue.push(ticker);
+        snapshotQueueSymbols.add(ticker.metadata.ticker);
       }
     }
-    const limitedSnapshotQueue = snapshotQueue.slice(0, VISIBLE_SNAPSHOT_WARMUP_BATCH_LIMIT);
+    const limitedSnapshotQueue = [
+      ...quoteSnapshotQueue.slice(0, SORT_QUOTE_WARMUP_BATCH_LIMIT),
+      ...snapshotQueue.slice(0, VISIBLE_SNAPSHOT_WARMUP_BATCH_LIMIT),
+    ];
     if (quoteQueue.length === 0 && limitedSnapshotQueue.length === 0) return;
 
     let cancelled = false;
@@ -161,7 +191,7 @@ export function usePortfolioPaneStreaming({
       cancelled = true;
       clearTimeout(timeoutId);
     };
-  }, [appActive, financialsMap, focused, instrumentOptions, sharedCoordinator, visibleFinancialTickers, visibleWarmupRequirements]);
+  }, [activeSort, appActive, financialsMap, focused, instrumentOptions, sharedCoordinator, sortedTickers, streamWindow, visibleFinancialTickers, visibleWarmupRequirements]);
 
   useEffect(() => {
     if (!appActive) return;

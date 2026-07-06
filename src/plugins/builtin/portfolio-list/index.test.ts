@@ -6,7 +6,7 @@ import type { TickerRecord } from "../../../types/ticker";
 import type { PortfolioSummaryTotals } from "./metrics";
 import { buildPortfolioSummarySegments } from "./summary";
 import { portfolioListPlugin, shouldToggleCashMarginDrawer } from ".";
-import { needsVisibleQuoteWatchdogRefresh, selectStreamTickers } from "./pane/data";
+import { needsVisibleQuoteWatchdogRefresh, selectQuoteWarmupTickers, selectStreamTickers } from "./pane/data";
 import { buildPortfolioPaneSettingsDef, getPortfolioPaneSettings } from "./settings";
 
 function ticker(symbol: string): TickerRecord {
@@ -131,6 +131,56 @@ describe("selectStreamTickers", () => {
   test("includes selected ticker outside the visible streaming window", () => {
     const tickers = Array.from({ length: 20 }, (_, index) => ticker(`T${index}`));
     expect(selectStreamTickers(tickers, { start: 3, end: 7 }, "T19").map((entry) => entry.metadata.ticker)).toContain("T19");
+  });
+});
+
+describe("selectQuoteWarmupTickers", () => {
+  function financials(quoteValue: Quote | undefined): TickerFinancials {
+    return {
+      annualStatements: [],
+      quarterlyStatements: [],
+      priceHistory: [],
+      quote: quoteValue,
+    };
+  }
+
+  test("includes hidden quote-missing rows when sorting by quote-dependent columns", () => {
+    const tickers = Array.from({ length: 30 }, (_, index) => ticker(`T${index}`));
+    const financialsMap = new Map<string, TickerFinancials>(
+      tickers.slice(0, 29).map((entry, index) => [
+        entry.metadata.ticker,
+        financials({
+          symbol: entry.metadata.ticker,
+          price: index + 1,
+          currency: "USD",
+          change: index,
+          changePercent: index,
+          lastUpdated: 1_700_000_000_000,
+        }),
+      ]),
+    );
+
+    const selected = selectQuoteWarmupTickers(
+      tickers,
+      { start: 0, end: 24 },
+      financialsMap,
+      { columnId: "change_pct", direction: "asc" },
+      1_700_000_010_000,
+    ).map((entry) => entry.metadata.ticker);
+
+    expect(selected).toContain("T29");
+  });
+
+  test("does not add hidden rows for ticker-only sorting", () => {
+    const tickers = Array.from({ length: 30 }, (_, index) => ticker(`T${index}`));
+    expect(selectQuoteWarmupTickers(
+      tickers,
+      { start: 0, end: 24 },
+      new Map(),
+      { columnId: "ticker", direction: "asc" },
+    ).map((entry) => entry.metadata.ticker)).toEqual(
+      tickers.slice(0, 24).map((entry) => entry.metadata.ticker),
+    );
   });
 });
 

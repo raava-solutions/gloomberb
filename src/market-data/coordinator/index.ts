@@ -20,6 +20,7 @@ import {
   toMarketDataContext,
 } from "../selectors";
 import { resolveTickerFinancialsQuoteState } from "../quotes/resolution";
+import { hasLikelyQuoteUnitMismatch } from "../../utils/currency-units";
 import { normalizePriceHistory } from "../../utils/price-history";
 import {
   createBaselineChartRequest,
@@ -219,6 +220,7 @@ export class MarketDataCoordinator {
       options,
       quoteStore: this.quoteStore,
       runSingleFlight: (key, task) => this.runSingleFlight(key, task),
+      resolveQuote: (targetInstrument, quote) => this.resolveIncomingQuote(targetInstrument, quote),
     });
   }
 
@@ -232,6 +234,7 @@ export class MarketDataCoordinator {
       options,
       quoteStore: this.quoteStore,
       runSingleFlight: (key, task) => this.runSingleFlight(key, task),
+      resolveQuote: (targetInstrument, quote) => this.resolveIncomingQuote(targetInstrument, quote),
     });
   }
 
@@ -387,9 +390,17 @@ export class MarketDataCoordinator {
 
   private resolveIncomingQuote(instrument: InstrumentRef, quote: Quote): Quote {
     const snapshot = resolveEntryData(this.snapshotStore.get(buildSnapshotKey(instrument)));
-    if (snapshot) return quote;
-
-    const cachedFinancials = this.readCachedFinancialsForInstrument(instrument);
+    if (snapshot?.quote) {
+      if (hasLikelyQuoteUnitMismatch(snapshot.quote, quote)) return quote;
+      if (
+        typeof snapshot.quote.lastUpdated === "number"
+        && typeof quote.lastUpdated === "number"
+        && quote.lastUpdated < snapshot.quote.lastUpdated
+      ) {
+        return quote;
+      }
+    }
+    const cachedFinancials = snapshot ?? this.readCachedFinancialsForInstrument(instrument);
     return resolveTickerFinancialsQuoteState(cachedFinancials, quote)?.quote ?? quote;
   }
 

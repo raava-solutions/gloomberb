@@ -1060,6 +1060,14 @@ describe("PortfolioListPane cash and margin UI", () => {
         config={config}
         collectionId="broker:ibkr-flex:DU12345"
         quote={staleQuote}
+        stateMutator={(state) => {
+          state.paneState[TEST_PANE_ID] = {
+            ...(state.paneState[TEST_PANE_ID] ?? {}),
+            collectionSorts: {
+              "broker:ibkr-flex:DU12345": { columnId: "ticker", direction: "asc" },
+            },
+          };
+        }}
       />,
       { width: 100, height: 12 },
     );
@@ -1525,6 +1533,149 @@ describe("PortfolioListPane cash and margin UI", () => {
     const vicrTarget = subscribedTargets.find((target) => target.symbol === "VICR");
     expect(vicrTarget?.context?.brokerInstanceId).toBe("ibkr-live");
     expect(vicrTarget?.context?.instrument).toEqual(liveContract);
+  });
+
+  test("warms hidden quote-missing rows when sorting by change percent", async () => {
+    const portfolioId = "broker:ibkr-live:DU12345";
+    const config = createPortfolioConfigWithColumns(
+      portfolioId,
+      ["ticker", "price", "change_pct", "latency"],
+      [createBrokerInstance("gateway", "ibkr-live")],
+    );
+    const requestedSnapshots: string[] = [];
+    const provider: DataProvider = {
+      id: "test-provider",
+      name: "Test Provider",
+      async getTickerFinancials(symbol) {
+        requestedSnapshots.push(symbol);
+        return {
+          annualStatements: [],
+          quarterlyStatements: [],
+          priceHistory: [],
+          quote: makeQuote({
+            symbol,
+            price: symbol === "SIVE" ? 46.7 : 100,
+            change: symbol === "SIVE" ? -9.6 : 0,
+            changePercent: symbol === "SIVE" ? -17.05 : 0,
+            previousClose: symbol === "SIVE" ? 56.3 : 100,
+          }),
+        };
+      },
+      async getQuote(symbol) {
+        return makeQuote({
+          symbol,
+          price: symbol === "SIVE" ? 46.7 : 100,
+          change: symbol === "SIVE" ? -9.6 : 0,
+          changePercent: symbol === "SIVE" ? -17.05 : 0,
+          previousClose: symbol === "SIVE" ? 56.3 : 100,
+        });
+      },
+      async getQuotesBatch(targets) {
+        return targets.map((target) => ({
+          target,
+          quote: makeQuote({
+            symbol: target.symbol,
+            price: target.symbol === "SIVE" ? 46.7 : 100,
+            change: target.symbol === "SIVE" ? -9.6 : 0,
+            changePercent: target.symbol === "SIVE" ? -17.05 : 0,
+            previousClose: target.symbol === "SIVE" ? 56.3 : 100,
+          }),
+        }));
+      },
+      async getExchangeRate() {
+        return 1;
+      },
+      async search() {
+        return [];
+      },
+      async getArticleSummary() {
+        return null;
+      },
+      async getPriceHistory() {
+        return [];
+      },
+      subscribeQuotes() {
+        return () => {};
+      },
+    };
+    sharedCoordinator = new MarketDataCoordinator(provider);
+    setSharedMarketDataCoordinator(sharedCoordinator);
+
+    const makeBrokerTicker = (symbol: string, index: number): TickerRecord => makeTicker({
+      ticker: symbol,
+      name: symbol,
+      portfolios: [portfolioId],
+      positions: [{
+        portfolio: portfolioId,
+        shares: 10,
+        avgCost: 100,
+        currency: "USD",
+        broker: "ibkr",
+        brokerInstanceId: "ibkr-live",
+        brokerAccountId: "DU12345",
+        brokerContractId: 10_000 + index,
+        markPrice: symbol === "SIVE" ? 56.3 : 100,
+      }],
+      broker_contracts: [{
+        brokerId: "ibkr",
+        brokerInstanceId: "ibkr-live",
+        symbol,
+        localSymbol: symbol,
+        exchange: "SMART",
+        primaryExchange: "NASDAQ",
+        conId: 10_000 + index,
+      }],
+    });
+    const tickers = Array.from({ length: 29 }, (_, index) => makeBrokerTicker(`T${String(index).padStart(2, "0")}`, index));
+    const sive = makeBrokerTicker("SIVE", 29);
+
+    testSetup = await testRender(
+      <PortfolioHarness
+        config={config}
+        collectionId={portfolioId}
+        stateMutator={(state) => {
+          state.tickers = new Map([...tickers, sive].map((entry) => [entry.metadata.ticker, entry]));
+          state.financials = new Map(tickers.map((entry, index) => [
+            entry.metadata.ticker,
+            {
+              annualStatements: [],
+              quarterlyStatements: [],
+              priceHistory: [],
+              quote: makeQuote({
+                symbol: entry.metadata.ticker,
+                price: 100 + index,
+                change: index,
+                changePercent: index,
+              }),
+            },
+          ]));
+          state.paneState[TEST_PANE_ID] = {
+            collectionId: portfolioId,
+            cursorSymbol: "T00",
+            cashDrawerExpanded: false,
+            collectionSorts: {
+              [portfolioId]: { columnId: "change_pct", direction: "asc" },
+            },
+          };
+        }}
+        paneHeight={12}
+      />,
+      { width: 100, height: 12 },
+    );
+
+    await flushFrame();
+    expect(testSetup.captureCharFrame()).not.toContain("SIVE");
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    });
+    await flushFrame();
+
+    expect(requestedSnapshots).toContain("SIVE");
+    const frame = testSetup.captureCharFrame();
+    expect(frame).toContain("SIVE");
+    expect(frame).toContain("-17.05%");
+    expect(frame).toContain("46.7");
   });
 
 });
