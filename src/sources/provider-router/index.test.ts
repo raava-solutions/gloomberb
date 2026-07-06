@@ -312,6 +312,61 @@ describe("AssetDataRouter", () => {
     expect(quote.price).toBe(123.45);
   });
 
+  test("reconciles broker quote price with provider day reference fields", async () => {
+    const router = new AssetDataRouter({
+      ...fallbackProvider,
+      id: "yahoo",
+      async getQuote() {
+        return {
+          symbol: "VICR",
+          providerId: "yahoo",
+          price: 299.74,
+          currency: "USD",
+          previousClose: 282.95,
+          change: 16.79,
+          changePercent: 5.93,
+          lastUpdated: Date.now(),
+        };
+      },
+    });
+    const broker: BrokerAdapter = {
+      id: "ibkr",
+      name: "IBKR",
+      configSchema: [],
+      async validate() {
+        return true;
+      },
+      async importPositions() {
+        return [];
+      },
+      async getQuote() {
+        return {
+          symbol: "VICR",
+          providerId: "ibkr",
+          price: 299.8,
+          currency: "USD",
+          previousClose: 380.1,
+          change: -80.3,
+          changePercent: -21.12,
+          lastUpdated: Date.now(),
+          dataSource: "live",
+        };
+      },
+    };
+
+    attachTestRegistry(router, { brokers: [["ibkr", broker]] });
+    setBrokerInstances(router, [brokerInstance()]);
+
+    const quote = await router.getQuote("VICR", "NASDAQ", { brokerId: "ibkr", brokerInstanceId: "ibkr-work" });
+    expect(quote.providerId).toBe("ibkr");
+    expect(quote.price).toBe(299.8);
+    expect(quote.previousClose).toBe(282.95);
+    expect(quote.change).toBeCloseTo(16.85, 5);
+    expect(quote.changePercent).toBeCloseTo(5.955, 3);
+    expect(quote.provenance?.price?.providerId).toBe("ibkr");
+    expect(quote.provenance?.fields?.previousClose?.providerId).toBe("yahoo");
+  });
+
   test("prefers broker options chains for broker-context targets", async () => {
     const chain = {
       underlyingSymbol: "AAPL",

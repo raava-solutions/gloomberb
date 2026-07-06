@@ -405,6 +405,129 @@ describe("AssetDataRouter cached financials", () => {
     persistence.close();
   });
 
+  test("uses symbol provider quote reference for broker-linked snapshot reads", async () => {
+    const dbPath = createTempDbPath("cached-symbol-reference-for-contract-snapshot");
+    const persistence = new AppPersistence(dbPath);
+    const now = Date.parse("2026-07-06T16:54:30Z");
+
+    persistence.resources.set(
+      {
+        namespace: "market",
+        kind: "financials",
+        entityKey: "contract:275759",
+        variantKey: "exchange=NASDAQ",
+        sourceKey: "provider:gloomberb-cloud",
+      },
+      makeFinancials({
+        quote: makeQuote({
+          symbol: "VICR",
+          providerId: "gloomberb-cloud",
+          price: 292.83,
+          currency: "USD",
+          previousClose: 380.07,
+          change: -87.24,
+          changePercent: -22.95,
+          lastUpdated: now,
+          marketState: "REGULAR",
+          exchangeName: "NASDAQ",
+          listingExchangeName: "NASDAQ",
+          dataSource: "live",
+        }),
+        profile: {
+          description: "Cloud profile",
+        },
+        fundamentals: {
+          trailingPE: 94.3,
+        },
+      }),
+      {
+        cachePolicy: { staleMs: 60_000, expireMs: 7 * 24 * 60 * 60_000 },
+        fetchedAt: now,
+      },
+    );
+    persistence.resources.set(
+      {
+        namespace: "market",
+        kind: "financials",
+        entityKey: "contract:275759",
+        variantKey: "exchange=NASDAQ",
+        sourceKey: "provider:yahoo",
+      },
+      makeFinancials({
+        annualStatements: [{ date: "2025-12-31", totalRevenue: 100 }],
+      }),
+      {
+        cachePolicy: { staleMs: 60_000, expireMs: 7 * 24 * 60 * 60_000 },
+        fetchedAt: now + 1_000,
+      },
+    );
+    persistence.resources.set(
+      {
+        namespace: "market",
+        kind: "financials",
+        entityKey: "VICR",
+        variantKey: "exchange=NASDAQ",
+        sourceKey: "provider:yahoo",
+      },
+      makeFinancials({
+        quote: makeQuote({
+          symbol: "VICR",
+          providerId: "yahoo",
+          price: 294.39,
+          currency: "USD",
+          previousClose: 282.95,
+          change: 11.44,
+          changePercent: 4.04,
+          lastUpdated: now - 1_000,
+          marketState: "REGULAR",
+          exchangeName: "NASDAQ",
+          listingExchangeName: "NASDAQ",
+          dataSource: "delayed",
+        }),
+      }),
+      {
+        cachePolicy: { staleMs: 60_000, expireMs: 7 * 24 * 60 * 60_000 },
+        fetchedAt: now - 1_000,
+      },
+    );
+
+    const router = new AssetDataRouter({
+      ...fallbackProvider,
+      id: "yahoo",
+      name: "Yahoo",
+      async getTickerFinancials() {
+        throw new Error("should not fetch financials");
+      },
+    }, [{
+      ...fallbackProvider,
+      id: "gloomberb-cloud",
+      name: "Cloud",
+      priority: 100,
+      async getTickerFinancials() {
+        throw new Error("should not fetch financials");
+      },
+    }], persistence.resources);
+
+    const financials = await router.getTickerFinancials("VICR", "NASDAQ", {
+      brokerId: "ibkr",
+      brokerInstanceId: "ibkr-work",
+      instrument: {
+        brokerId: "ibkr",
+        brokerInstanceId: "ibkr-work",
+        conId: 275759,
+        symbol: "VICR",
+      },
+    });
+
+    expect(financials.quote?.providerId).toBe("gloomberb-cloud");
+    expect(financials.quote?.price).toBe(292.83);
+    expect(financials.quote?.previousClose).toBe(282.95);
+    expect(financials.quote?.changePercent).toBeCloseTo(((292.83 - 282.95) / 282.95) * 100, 10);
+    expect(financials.quote?.provenance?.fields?.previousClose?.providerId).toBe("yahoo");
+
+    persistence.close();
+  });
+
   test("overlays standalone quote cache on stale financial snapshots during startup priming", () => {
     const dbPath = createTempDbPath("cached-quote-over-financial-snapshot");
     const persistence = new AppPersistence(dbPath);

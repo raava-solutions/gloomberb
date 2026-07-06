@@ -216,13 +216,10 @@ export function mergeCachedFinancialRecords(
   value: TickerFinancials | null;
   stale: boolean;
 } {
-  const seenSources = new Set<string>();
   let merged: TickerFinancials | null = null;
   let stale = false;
 
   for (const record of records) {
-    if (seenSources.has(record.sourceKey)) continue;
-    seenSources.add(record.sourceKey);
     merged = mergeFinancials(merged, sanitizeCachedFinancials(record.value, options));
     stale = stale || record.stale === true;
   }

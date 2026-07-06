@@ -312,6 +312,37 @@ describe("tick-by-tick quote updates", () => {
     expect(next?.lastUpdated).toBe(1_700_000_000_000);
   });
 
+  test("does not use the previous tick as the daily close when no close is known", () => {
+    const current = {
+      symbol: "AAPL",
+      providerId: "ibkr" as const,
+      price: 249,
+      currency: "USD",
+      change: 0,
+      changePercent: 0,
+      name: "Apple Inc.",
+      lastUpdated: 1000,
+      dataSource: "live" as const,
+    };
+    const tick: TickByTickAllLast = {
+      time: 1_700_000_000,
+      price: 250.5,
+      size: 100,
+      tickType: 1,
+      tickAttribLast: {},
+      exchange: "NASDAQ",
+      specialConditions: "",
+      contract: contract as any,
+    };
+
+    const next = applyTickByTickAllLastToQuote(current, contract as any, details, tick, 1, "live");
+
+    expect(next?.price).toBe(250.5);
+    expect(next?.previousClose).toBeUndefined();
+    expect(next?.change).toBe(0);
+    expect(next?.changePercent).toBe(0);
+  });
+
   test("applies bid/ask ticks without disturbing the current trade price", () => {
     const current = {
       symbol: "AAPL",

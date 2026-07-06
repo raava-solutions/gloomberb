@@ -12,6 +12,10 @@ export interface InstrumentRef {
   instrument?: BrokerContractRef | null;
 }
 
+export interface TickerInstrumentOptions {
+  portfolioId?: string | null;
+}
+
 type ChartGranularity = "range" | "detail" | "resolution";
 
 export interface ChartRequest {
@@ -39,10 +43,44 @@ export interface SecFilingsRequest {
   count?: number;
 }
 
-export function instrumentFromTicker(ticker: TickerRecord | null | undefined, fallbackSymbol?: string | null): InstrumentRef | null {
+function brokerContractForTicker(
+  ticker: TickerRecord | null | undefined,
+  options: TickerInstrumentOptions = {},
+): BrokerContractRef | null {
+  const contracts = ticker?.metadata.broker_contracts ?? [];
+  if (contracts.length === 0) return null;
+
+  const portfolioId = options.portfolioId;
+  if (portfolioId) {
+    const positions = ticker?.metadata.positions.filter((position) => position.portfolio === portfolioId) ?? [];
+    for (const position of positions) {
+      const matchingContract = contracts.find((contract) => (
+        (position.brokerContractId == null || contract.conId === position.brokerContractId)
+        && (!position.brokerInstanceId || contract.brokerInstanceId === position.brokerInstanceId)
+        && (!position.broker || contract.brokerId === position.broker)
+      ));
+      if (matchingContract) return matchingContract;
+    }
+    for (const position of positions) {
+      const matchingContract = contracts.find((contract) => (
+        (!position.brokerInstanceId || contract.brokerInstanceId === position.brokerInstanceId)
+        && (!position.broker || contract.brokerId === position.broker)
+      ));
+      if (matchingContract) return matchingContract;
+    }
+  }
+
+  return contracts[0] ?? null;
+}
+
+export function instrumentFromTicker(
+  ticker: TickerRecord | null | undefined,
+  fallbackSymbol?: string | null,
+  options: TickerInstrumentOptions = {},
+): InstrumentRef | null {
   const symbol = ticker?.metadata.ticker ?? fallbackSymbol ?? null;
   if (!symbol) return null;
-  const instrument = ticker?.metadata.broker_contracts?.[0] ?? null;
+  const instrument = brokerContractForTicker(ticker, options);
   return {
     symbol,
     exchange: ticker?.metadata.exchange ?? "",
@@ -56,8 +94,9 @@ export function quoteSubscriptionTargetFromTicker(
   ticker: TickerRecord | null | undefined,
   fallbackSymbol?: string | null,
   route: QuoteSubscriptionTarget["route"] = "auto",
+  options: TickerInstrumentOptions = {},
 ): QuoteSubscriptionTarget | null {
-  const instrument = instrumentFromTicker(ticker, fallbackSymbol);
+  const instrument = instrumentFromTicker(ticker, fallbackSymbol, options);
   return quoteSubscriptionTargetFromInstrument(instrument, route);
 }
 

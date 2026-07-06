@@ -347,6 +347,142 @@ describe("MarketDataCoordinator", () => {
     expect(coordinator.getQuoteEntry(instrument).data?.price).toBe(412.5);
   });
 
+  it("reconciles stream quotes with cached provider day references before a snapshot loads", () => {
+    let streamed: ((target: QuoteSubscriptionTarget, quote: Quote) => void) | null = null;
+    const provider = createProvider({
+      getCachedFinancialsForTargets: () => new Map([[
+        "VICR",
+        {
+          quote: {
+            symbol: "VICR",
+            providerId: "gloomberb-cloud",
+            price: 292.83,
+            currency: "USD",
+            previousClose: 282.95,
+            change: 9.88,
+            changePercent: 3.49,
+            lastUpdated: Date.parse("2026-07-06T16:54:30Z"),
+            marketState: "REGULAR",
+            dataSource: "live",
+          },
+          quoteContributions: {
+            "gloomberb-cloud": {
+              symbol: "VICR",
+              providerId: "gloomberb-cloud",
+              price: 292.83,
+              currency: "USD",
+              previousClose: 380.07,
+              change: -87.24,
+              changePercent: -22.95,
+              lastUpdated: Date.parse("2026-07-06T16:54:30Z"),
+              marketState: "REGULAR",
+              dataSource: "live",
+            },
+            yahoo: {
+              symbol: "VICR",
+              providerId: "yahoo",
+              price: 294.39,
+              currency: "USD",
+              previousClose: 282.95,
+              change: 11.44,
+              changePercent: 4.04,
+              lastUpdated: Date.parse("2026-07-06T16:45:37Z"),
+              marketState: "REGULAR",
+              dataSource: "delayed",
+            },
+          },
+          annualStatements: [],
+          quarterlyStatements: [],
+          priceHistory: [],
+        },
+      ]]),
+      subscribeQuotes: (_targets, onQuote) => {
+        streamed = onQuote as typeof streamed;
+        return () => {};
+      },
+    });
+    const coordinator = new MarketDataCoordinator(provider);
+    const instrument = {
+      symbol: "VICR",
+      exchange: "NASDAQ",
+      brokerId: "ibkr",
+      brokerInstanceId: "ibkr-work",
+      instrument: {
+        brokerId: "ibkr",
+        brokerInstanceId: "ibkr-work",
+        conId: 275759,
+        symbol: "VICR",
+      },
+    };
+
+    coordinator.subscribeQuotes([{ instrument }]);
+    const onStreamed = streamed as ((target: QuoteSubscriptionTarget, quote: Quote) => void) | null;
+    if (!onStreamed) throw new Error("expected streaming callback");
+    onStreamed(
+      {
+        symbol: "VICR",
+        exchange: "NASDAQ",
+        context: {
+          brokerId: "ibkr",
+          brokerInstanceId: "ibkr-work",
+          instrument: instrument.instrument,
+        },
+      },
+      {
+        symbol: "VICR",
+        providerId: "gloomberb-cloud",
+        price: 293.07,
+        currency: "USD",
+        previousClose: 380.07,
+        change: -87,
+        changePercent: -22.89,
+        lastUpdated: Date.parse("2026-07-06T17:17:00Z"),
+        marketState: "REGULAR",
+        dataSource: "live",
+      },
+    );
+
+    const quote = coordinator.getQuoteEntry(instrument).data;
+    expect(quote?.price).toBe(293.07);
+    expect(quote?.previousClose).toBe(282.95);
+    expect(quote?.changePercent).toBeCloseTo(((293.07 - 282.95) / 282.95) * 100, 10);
+    expect(quote?.provenance?.fields?.previousClose?.providerId).toBe("yahoo");
+  });
+
+  it("preserves requested quote stream routes", () => {
+    let subscribedTargets: QuoteSubscriptionTarget[] = [];
+    const provider = createProvider({
+      subscribeQuotes: (targets) => {
+        subscribedTargets = targets;
+        return () => {};
+      },
+    });
+    const coordinator = new MarketDataCoordinator(provider);
+
+    coordinator.subscribeQuotes([{
+      instrument: {
+        symbol: "AAPL",
+        exchange: "NASDAQ",
+        brokerId: "ibkr",
+        brokerInstanceId: "ibkr-work",
+      },
+      priority: { route: "provider", surface: "portfolio", visible: true },
+    }]);
+
+    expect(subscribedTargets).toEqual([{
+      symbol: "AAPL",
+      exchange: "NASDAQ",
+      route: "provider",
+      context: {
+        brokerId: "ibkr",
+        brokerInstanceId: "ibkr-work",
+        instrument: null,
+      },
+      surface: "portfolio",
+      visible: true,
+    }]);
+  });
+
   it("routes manual-resolution chart requests through the resolution-aware provider path", async () => {
     let requested: { range: string; resolution: string } | null = null;
     const provider = createProvider({
