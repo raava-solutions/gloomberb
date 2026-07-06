@@ -107,7 +107,10 @@ export function PortfolioListPane({ focused, width, height }: PaneProps) {
     () => getCollectionTickersFromConfig(config, tickersBySymbol, activeCollectionId),
     [activeCollectionId, config, tickersBySymbol],
   );
-  const marketFinancialsMap = useTickerFinancialsMap(tickers);
+  const financialsInstrumentOptions = useMemo(() => ({
+    portfolioId: isPortfolioTab ? activeCollectionId : undefined,
+  }), [activeCollectionId, isPortfolioTab]);
+  const marketFinancialsMap = useTickerFinancialsMap(tickers, financialsInstrumentOptions);
   const financialsMap = useMemo(() => {
     const merged = new Map(cachedFinancials);
     for (const [symbol, financials] of marketFinancialsMap) {
@@ -309,6 +312,7 @@ export function PortfolioListPane({ focused, width, height }: PaneProps) {
   usePortfolioPaneStreaming({
     appActive,
     focused,
+    activeCollectionId: isPortfolioTab ? activeCollectionId : undefined,
     sortedTickers,
     cursorSymbol,
     streamWindow: effectiveStreamWindow,

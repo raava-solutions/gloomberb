@@ -31,9 +31,6 @@ const PRICE_FIELD_KEYS = [
   "symbol",
   "price",
   "currency",
-  "change",
-  "changePercent",
-  "previousClose",
   "bid",
   "ask",
   "bidSize",
@@ -80,6 +77,19 @@ function providerKindRank(providerId?: string): number {
     case "gloomberb-cloud":
       return 0;
     case "yahoo":
+      return 1;
+    case "ibkr":
+      return 2;
+    default:
+      return 3;
+  }
+}
+
+function dailyReferenceRank(providerId?: string): number {
+  switch (providerId) {
+    case "yahoo":
+      return 0;
+    case "gloomberb-cloud":
       return 1;
     case "ibkr":
       return 2;
@@ -142,6 +152,61 @@ function pickField(
     return candidate;
   }
   return undefined;
+}
+
+function finitePositiveNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function buildDailyReferenceCandidates(
+  candidates: QuoteContribution[],
+  priceProvider: QuoteContribution | undefined,
+): QuoteContribution[] {
+  return [...candidates]
+    .filter((quote) => finitePositiveNumber(quote.previousClose))
+    .sort((left, right) => {
+      if (priceProvider) {
+        const leftMismatch = hasLikelyQuoteUnitMismatch(priceProvider, left) ? 1 : 0;
+        const rightMismatch = hasLikelyQuoteUnitMismatch(priceProvider, right) ? 1 : 0;
+        if (leftMismatch !== rightMismatch) return leftMismatch - rightMismatch;
+      }
+      const providerDelta = dailyReferenceRank(left.providerId) - dailyReferenceRank(right.providerId);
+      if (providerDelta !== 0) return providerDelta;
+      return (right.lastUpdated ?? 0) - (left.lastUpdated ?? 0);
+    });
+}
+
+function assignDailyChangeFields(
+  target: Partial<Quote>,
+  provenance: QuoteProvenance,
+  priceProvider: QuoteContribution | undefined,
+  candidates: QuoteContribution[],
+): void {
+  const referenceProvider = buildDailyReferenceCandidates(candidates, priceProvider)[0];
+  if (!referenceProvider) {
+    pickField(target, provenance, "previousClose", candidates);
+    pickField(target, provenance, "change", candidates);
+    pickField(target, provenance, "changePercent", candidates);
+    return;
+  }
+
+  assignField(target, provenance, "previousClose", referenceProvider);
+  const price = target.price;
+  const previousClose = target.previousClose;
+  if (!finitePositiveNumber(price) || !finitePositiveNumber(previousClose)) {
+    pickField(target, provenance, "change", candidates);
+    pickField(target, provenance, "changePercent", candidates);
+    return;
+  }
+
+  target.change = price - previousClose;
+  target.changePercent = (target.change / previousClose) * 100;
+  provenance.fields ??= {};
+  const referenceProvenance = toProvenance(referenceProvider);
+  if (referenceProvenance) {
+    provenance.fields.change = referenceProvenance;
+    provenance.fields.changePercent = referenceProvenance;
+  }
 }
 
 function buildAcceptedPriceCandidates(contributions: QuoteContribution[]): {
@@ -290,6 +355,7 @@ export function resolveCanonicalQuote(
     if (field === "price") continue;
     pickField(resolved, provenance, field, acceptedPriceCandidates);
   }
+  assignDailyChangeFields(resolved, provenance, priceProvider, acceptedPriceCandidates);
   provenance.price = toProvenance(priceProvider);
 
   const sessionProvider = sessionCandidates[0];

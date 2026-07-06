@@ -68,6 +68,95 @@ describe("quote-resolution", () => {
     expect(quote?.provenance?.session?.providerId).toBe("yahoo");
   });
 
+  test("uses provider previous close with the live broker price for daily change", () => {
+    const now = Date.parse("2026-07-06T14:05:00Z");
+    const contributions: QuoteContributionMap = {
+      ibkr: {
+        symbol: "VICR",
+        providerId: "ibkr",
+        dataSource: "live",
+        price: 299.8,
+        currency: "USD",
+        change: -80.3,
+        changePercent: -21.12,
+        previousClose: 380.1,
+        lastUpdated: Date.parse("2026-07-06T14:04:58Z"),
+        receivedAt: Date.parse("2026-07-06T14:04:59Z"),
+        listingExchangeName: "NASDAQ",
+        routingExchangeName: "SMART",
+        sessionConfidence: "unknown",
+      },
+      yahoo: {
+        symbol: "VICR",
+        providerId: "yahoo",
+        dataSource: "delayed",
+        price: 299.74,
+        currency: "USD",
+        change: 16.79,
+        changePercent: 5.93,
+        previousClose: 282.95,
+        lastUpdated: Date.parse("2026-07-06T14:04:00Z"),
+        listingExchangeName: "NMS",
+        marketState: "REGULAR",
+        sessionConfidence: "derived",
+      },
+    };
+
+    const quote = resolveCanonicalQuote(contributions, now).quote;
+
+    expect(quote?.providerId).toBe("ibkr");
+    expect(quote?.price).toBe(299.8);
+    expect(quote?.previousClose).toBe(282.95);
+    expect(quote?.change).toBeCloseTo(16.85, 10);
+    expect(quote?.changePercent).toBeCloseTo((16.85 / 282.95) * 100, 10);
+    expect(quote?.provenance?.price?.providerId).toBe("ibkr");
+    expect(quote?.provenance?.fields?.previousClose?.providerId).toBe("yahoo");
+  });
+
+  test("prefers yahoo day reference fields over stale cloud previous close data", () => {
+    const now = Date.parse("2026-07-06T15:45:00Z");
+    const contributions: QuoteContributionMap = {
+      "gloomberb-cloud": {
+        symbol: "VICR",
+        providerId: "gloomberb-cloud",
+        dataSource: "delayed",
+        price: 299.8,
+        currency: "USD",
+        change: -80.27,
+        changePercent: -21.12,
+        previousClose: 380.07,
+        lastUpdated: Date.parse("2026-07-06T15:44:00Z"),
+        listingExchangeName: "NASDAQ",
+        marketState: "REGULAR",
+        sessionConfidence: "derived",
+      },
+      yahoo: {
+        symbol: "VICR",
+        providerId: "yahoo",
+        dataSource: "delayed",
+        price: 297.9,
+        currency: "USD",
+        change: 14.95,
+        changePercent: 5.28,
+        previousClose: 282.95,
+        lastUpdated: Date.parse("2026-07-06T15:41:00Z"),
+        listingExchangeName: "NMS",
+        marketState: "REGULAR",
+        sessionConfidence: "derived",
+      },
+    };
+
+    const quote = resolveCanonicalQuote(contributions, now).quote;
+
+    expect(quote?.providerId).toBe("gloomberb-cloud");
+    expect(quote?.price).toBe(299.8);
+    expect(quote?.previousClose).toBe(282.95);
+    expect(quote?.change).toBeCloseTo(16.85, 10);
+    expect(quote?.changePercent).toBeCloseTo((16.85 / 282.95) * 100, 10);
+    expect(quote?.provenance?.price?.providerId).toBe("gloomberb-cloud");
+    expect(quote?.provenance?.fields?.previousClose?.providerId).toBe("yahoo");
+  });
+
   test("prefers cloud session data over yahoo when confidence is tied", () => {
     const now = Date.parse("2026-04-08T11:00:00Z");
     const contributions: QuoteContributionMap = {

@@ -52,8 +52,9 @@ export class ProviderRouterBatchRoutes {
       const context = target.context;
       const entityKey = this.deps.getEntityKey(target.symbol, context?.instrument);
       const variantKeys = this.deps.getTickerVariantCandidates(target.exchange);
+      const brokerSourceKeys = this.deps.getBrokerCandidatesForContext(context, false).map((candidate) => this.deps.brokerSourceKey(candidate));
       const sourceKeys = [
-        ...this.deps.getBrokerCandidatesForContext(context, false).map((candidate) => this.deps.brokerSourceKey(candidate)),
+        ...brokerSourceKeys,
         ...this.deps.getProviderSourceKeys(),
       ];
       const rawCached = selectCachedResource<Quote>(this.deps.resources, "quote", entityKey, variantKeys, sourceKeys, false);
@@ -61,6 +62,10 @@ export class ProviderRouterBatchRoutes {
         ? rawCached
         : null;
       if (cached && !forceRefresh && !cached.stale) {
+        if (brokerSourceKeys.includes(cached.sourceKey)) {
+          misses.push({ index, target });
+          return;
+        }
         results[index] = { target, quote: cached.value };
         return;
       }
