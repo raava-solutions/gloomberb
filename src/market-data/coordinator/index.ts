@@ -19,6 +19,7 @@ import {
   resolveEntryData,
   toMarketDataContext,
 } from "../selectors";
+import { resolveTickerFinancialsQuoteState } from "../quotes/resolution";
 import { normalizePriceHistory } from "../../utils/price-history";
 import {
   createBaselineChartRequest,
@@ -377,10 +378,35 @@ export class MarketDataCoordinator {
   private applyStreamQuote(instrument: InstrumentRef, quote: Quote): void {
     const key = buildQuoteKey(instrument);
     const current = this.quoteStore.get(key);
-    if (areStreamQuotesEquivalent(current.data ?? current.lastGoodData, quote)) return;
+    const resolvedQuote = this.resolveIncomingQuote(instrument, quote);
+    if (areStreamQuotesEquivalent(current.data ?? current.lastGoodData, resolvedQuote)) return;
     const receivedAt = Date.now();
-    const attempts = [createAttempt(quote.providerId ?? this.dataProvider.id, receivedAt, "success")];
-    this.quoteStore.set(key, readyQuoteEntry(current, { ...quote, receivedAt }, quote.providerId ?? this.dataProvider.id, attempts));
+    const attempts = [createAttempt(resolvedQuote.providerId ?? this.dataProvider.id, receivedAt, "success")];
+    this.quoteStore.set(key, readyQuoteEntry(current, { ...resolvedQuote, receivedAt }, resolvedQuote.providerId ?? this.dataProvider.id, attempts));
+  }
+
+  private resolveIncomingQuote(instrument: InstrumentRef, quote: Quote): Quote {
+    const snapshot = resolveEntryData(this.snapshotStore.get(buildSnapshotKey(instrument)));
+    if (snapshot) return quote;
+
+    const cachedFinancials = this.readCachedFinancialsForInstrument(instrument);
+    return resolveTickerFinancialsQuoteState(cachedFinancials, quote)?.quote ?? quote;
+  }
+
+  private readCachedFinancialsForInstrument(instrument: InstrumentRef): TickerFinancials | null {
+    if (!this.dataProvider.getCachedFinancialsForTargets) return null;
+    const result = this.dataProvider.getCachedFinancialsForTargets([{
+      symbol: instrument.symbol,
+      exchange: instrument.exchange,
+      brokerId: instrument.brokerId,
+      brokerInstanceId: instrument.brokerInstanceId,
+      instrument: instrument.instrument ?? null,
+    }], {
+      allowExpired: true,
+      includeStaleQuotes: true,
+    });
+    if (result instanceof Promise) return null;
+    return result.get(instrument.symbol.trim().toUpperCase()) ?? null;
   }
 }
 

@@ -74,6 +74,7 @@ export function useQuoteStreaming(targets: QuoteSubscriptionTarget[]): void {
         instrument: target.context?.instrument ?? null,
       },
       priority: {
+        route: target.route,
         surface: target.surface,
         visible: target.visible,
         selected: target.selected,

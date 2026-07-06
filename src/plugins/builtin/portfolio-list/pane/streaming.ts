@@ -21,6 +21,7 @@ import {
 export function usePortfolioPaneStreaming({
   appActive,
   focused,
+  activeCollectionId,
   sortedTickers,
   cursorSymbol,
   streamWindow,
@@ -30,6 +31,7 @@ export function usePortfolioPaneStreaming({
 }: {
   appActive: boolean;
   focused: boolean;
+  activeCollectionId?: string;
   sortedTickers: TickerRecord[];
   cursorSymbol: string | null;
   streamWindow: { start: number; end: number };
@@ -57,10 +59,13 @@ export function usePortfolioPaneStreaming({
     [streamTickers],
   );
   const streamSurface: "portfolio" | "watchlist" = isPortfolioTab ? "portfolio" : "watchlist";
+  const instrumentOptions = useMemo(() => ({
+    portfolioId: isPortfolioTab ? activeCollectionId : undefined,
+  }), [activeCollectionId, isPortfolioTab]);
   const streamTargets = useMemo(() => (
     sortedTickers
       .map((ticker) => {
-        const target = quoteSubscriptionTargetFromTicker(ticker, ticker.metadata.ticker, "provider");
+        const target = quoteSubscriptionTargetFromTicker(ticker, ticker.metadata.ticker, "provider", instrumentOptions);
         if (!target) return null;
         const selected = ticker.metadata.ticker === cursorSymbol;
         const visible = priorityStreamSymbols.has(ticker.metadata.ticker);
@@ -73,7 +78,7 @@ export function usePortfolioPaneStreaming({
         };
       })
       .filter((target): target is NonNullable<typeof target> => target != null)
-  ), [cursorSymbol, priorityStreamSymbols, sortedTickers, streamSurface]);
+  ), [cursorSymbol, instrumentOptions, priorityStreamSymbols, sortedTickers, streamSurface]);
   const visibleFinancialTickers = useMemo(
     () => sortedTickers.slice(streamWindow.start, streamWindow.end),
     [sortedTickers, streamWindow.end, streamWindow.start],
@@ -114,7 +119,7 @@ export function usePortfolioPaneStreaming({
     let cancelled = false;
     const runBatch = async (): Promise<void> => {
       const quoteEntries = quoteQueue.flatMap((ticker) => {
-        const instrument = instrumentFromTicker(ticker, ticker.metadata.ticker);
+        const instrument = instrumentFromTicker(ticker, ticker.metadata.ticker, instrumentOptions);
         if (!instrument) return [];
         const key = visibleWarmupKey("quote", ticker);
         warmupInFlightRef.current.add(key);
@@ -122,7 +127,7 @@ export function usePortfolioPaneStreaming({
         return [{ key, instrument }];
       });
       const snapshotEntries = limitedSnapshotQueue.flatMap((ticker) => {
-        const instrument = instrumentFromTicker(ticker, ticker.metadata.ticker);
+        const instrument = instrumentFromTicker(ticker, ticker.metadata.ticker, instrumentOptions);
         if (!instrument) return [];
         const key = visibleWarmupKey("snapshot", ticker);
         warmupInFlightRef.current.add(key);
@@ -156,7 +161,7 @@ export function usePortfolioPaneStreaming({
       cancelled = true;
       clearTimeout(timeoutId);
     };
-  }, [appActive, financialsMap, focused, sharedCoordinator, visibleFinancialTickers, visibleWarmupRequirements]);
+  }, [appActive, financialsMap, focused, instrumentOptions, sharedCoordinator, visibleFinancialTickers, visibleWarmupRequirements]);
 
   useEffect(() => {
     if (!appActive) return;
@@ -176,7 +181,7 @@ export function usePortfolioPaneStreaming({
         ) {
           return [];
         }
-        const instrument = instrumentFromTicker(ticker, ticker.metadata.ticker);
+        const instrument = instrumentFromTicker(ticker, ticker.metadata.ticker, instrumentOptions);
         if (!instrument) return [];
         warmupInFlightRef.current.add(key);
         warmupAttemptRef.current.set(key, nowTimestamp);
@@ -203,7 +208,7 @@ export function usePortfolioPaneStreaming({
       cancelled = true;
       clearInterval(intervalId);
     };
-  }, [appActive, financialsMap, focused, sharedCoordinator, visibleFinancialTickers]);
+  }, [appActive, financialsMap, focused, instrumentOptions, sharedCoordinator, visibleFinancialTickers]);
 
   useQuoteStreaming(streamTargets);
 }

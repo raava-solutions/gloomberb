@@ -15,7 +15,7 @@ import {
   readyQuoteEntry,
 } from "./entries";
 
-export type QuoteSubscriptionPriority = Pick<QuoteSubscriptionTarget, "surface" | "visible" | "selected" | "weight">;
+export type QuoteSubscriptionPriority = Pick<QuoteSubscriptionTarget, "route" | "surface" | "visible" | "selected" | "weight">;
 
 export interface QuoteSubscriptionEntry {
   target: QuoteSubscriptionTarget;
@@ -292,6 +292,7 @@ export class QuoteSubscriptionManager {
       .sort(([left], [right]) => left.localeCompare(right));
     const nextSignature = activeEntries.map(([key, entry]) => [
       key,
+      entry.target.route ?? "",
       entry.target.surface ?? "",
       entry.target.visible ? "visible" : "",
       entry.target.selected ? "selected" : "",

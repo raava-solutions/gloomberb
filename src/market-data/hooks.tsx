@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "r
 import type { SecFilingDocument, SecFilingItem } from "../types/data-provider";
 import type { OptionsChain, PricePoint, Quote, TickerFinancials } from "../types/financials";
 import type { TickerRecord } from "../types/ticker";
-import type { ChartRequest, InstrumentRef, OptionsRequest, SecFilingsRequest } from "./request-types";
+import type { ChartRequest, InstrumentRef, OptionsRequest, SecFilingsRequest, TickerInstrumentOptions } from "./request-types";
 import { instrumentFromTicker } from "./request-types";
 import { useAppActive } from "../state/app/activity";
 import {
@@ -74,17 +74,17 @@ function stableCurrencyList(currencies: Array<string | null | undefined>): strin
   )].sort((left, right) => left.localeCompare(right));
 }
 
-function buildTickerFinancialsMapKey(tickers: TickerRecord[]): string {
+function buildTickerFinancialsMapKey(tickers: TickerRecord[], options: TickerInstrumentOptions = {}): string {
   return tickers.map((ticker) => {
-    const instrument = ticker.metadata.broker_contracts?.[0];
+    const instrument = instrumentFromTicker(ticker, ticker.metadata.ticker, options);
     return [
       ticker.metadata.ticker,
       ticker.metadata.exchange ?? "",
       instrument?.brokerId ?? "",
       instrument?.brokerInstanceId ?? "",
-      instrument?.conId ?? "",
-      instrument?.localSymbol ?? "",
-      instrument?.symbol ?? "",
+      instrument?.instrument?.conId ?? "",
+      instrument?.instrument?.localSymbol ?? "",
+      instrument?.instrument?.symbol ?? "",
     ].join("|");
   }).join("::");
 }
@@ -122,10 +122,10 @@ export function useTickerFinancials(symbol: string | null | undefined, ticker: T
   return financials;
 }
 
-function buildTickerFinancialsKeys(tickers: TickerRecord[]): string[] {
+function buildTickerFinancialsKeys(tickers: TickerRecord[], options: TickerInstrumentOptions = {}): string[] {
   const keys: string[] = [];
   for (const ticker of tickers) {
-    const instrument = instrumentFromTicker(ticker, ticker.metadata.ticker);
+    const instrument = instrumentFromTicker(ticker, ticker.metadata.ticker, options);
     if (!instrument) continue;
     keys.push(
       buildSnapshotKey(instrument),
@@ -136,17 +136,21 @@ function buildTickerFinancialsKeys(tickers: TickerRecord[]): string[] {
   return keys;
 }
 
-export function useTickerFinancialsMap(tickers: TickerRecord[]): Map<string, TickerFinancials> {
+export function useTickerFinancialsMap(
+  tickers: TickerRecord[],
+  options: TickerInstrumentOptions = {},
+): Map<string, TickerFinancials> {
   const coordinator = getSharedMarketDataCoordinator();
-  const tickerKey = buildTickerFinancialsMapKey(tickers);
-  const subscriptionKeys = useMemo(() => buildTickerFinancialsKeys(tickers), [tickerKey]);
+  const optionsKey = options.portfolioId ?? "";
+  const tickerKey = buildTickerFinancialsMapKey(tickers, options);
+  const subscriptionKeys = useMemo(() => buildTickerFinancialsKeys(tickers, options), [optionsKey, tickerKey]);
   const keysVersion = useCoordinatorKeysVersion(subscriptionKeys);
 
   return useMemo(() => {
     if (!coordinator) return new Map<string, TickerFinancials>();
     const result = new Map<string, TickerFinancials>();
     for (const ticker of tickers) {
-      const instrument = instrumentFromTicker(ticker, ticker.metadata.ticker);
+      const instrument = instrumentFromTicker(ticker, ticker.metadata.ticker, options);
       if (!instrument) continue;
       const financials = coordinator.getTickerFinancialsSync(instrument);
       if (financials) {
@@ -154,7 +158,7 @@ export function useTickerFinancialsMap(tickers: TickerRecord[]): Map<string, Tic
       }
     }
     return result;
-  }, [coordinator, keysVersion, tickerKey, subscriptionKeys]);
+  }, [coordinator, keysVersion, optionsKey, tickerKey, subscriptionKeys]);
 }
 
 export function useQuoteEntry(symbol: string | null | undefined, ticker: TickerRecord | null | undefined): QueryEntry<Quote> | null {

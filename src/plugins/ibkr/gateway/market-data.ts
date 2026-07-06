@@ -136,15 +136,22 @@ export function applyTickByTickAllLastToQuote(
   const nextPrice = normalizeIbkrPriceValue(tick.price, priceDivisor);
   if (nextPrice == null || nextPrice <= 0) return null;
 
-  const previousClose = current?.previousClose ?? current?.price ?? nextPrice;
-  const change = nextPrice - previousClose;
+  const canInferPreviousClose = current?.price != null
+    && current.change != null
+    && (current.change !== 0 || current.changePercent !== 0);
+  const inferredPreviousClose = current?.previousClose
+    ?? (canInferPreviousClose ? current.price - current.change : undefined);
+  const previousClose = inferredPreviousClose != null && Number.isFinite(inferredPreviousClose) && inferredPreviousClose > 0
+    ? inferredPreviousClose
+    : undefined;
+  const change = previousClose != null ? nextPrice - previousClose : current?.change ?? 0;
   return {
     symbol: current?.symbol ?? contract.localSymbol ?? contract.symbol ?? "",
     providerId: "ibkr",
     price: nextPrice,
     currency: current?.currency ?? contract.currency ?? "USD",
     change,
-    changePercent: previousClose ? (change / previousClose) * 100 : 0,
+    changePercent: previousClose ? (change / previousClose) * 100 : current?.changePercent ?? 0,
     previousClose,
     high52w: current?.high52w,
     low52w: current?.low52w,
