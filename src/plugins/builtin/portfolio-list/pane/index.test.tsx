@@ -323,6 +323,7 @@ async function flushFrame() {
   await act(async () => {
     await Promise.resolve();
     await testSetup!.renderOnce();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     await Promise.resolve();
     await testSetup!.renderOnce();
   });
@@ -1411,6 +1412,119 @@ describe("PortfolioListPane cash and margin UI", () => {
     expect(frame).toContain("AAPL");
     expect(frame).toContain("126.5");
     expect(frame).toContain("+5.41%");
+  });
+
+  test("streams portfolio rows with the active collection broker contract", async () => {
+    const config = createPortfolioConfigWithColumns(
+      "broker:ibkr-live:DU12345",
+      ["ticker", "price", "change_pct", "latency"],
+      [createBrokerInstance("gateway", "ibkr-flex"), createBrokerInstance("gateway", "ibkr-live")],
+    );
+    let subscribedTargets: Array<{ symbol: string; context?: { brokerInstanceId?: string; instrument?: unknown } }> = [];
+    const provider: DataProvider = {
+      id: "test-provider",
+      name: "Test Provider",
+      async getTickerFinancials(symbol) {
+        return {
+          annualStatements: [],
+          quarterlyStatements: [],
+          priceHistory: [],
+          quote: makeQuote({ symbol }),
+        };
+      },
+      async getQuote(symbol) {
+        return makeQuote({ symbol });
+      },
+      async getExchangeRate() {
+        return 1;
+      },
+      async search() {
+        return [];
+      },
+      async getArticleSummary() {
+        return null;
+      },
+      async getPriceHistory() {
+        return [];
+      },
+      subscribeQuotes(targets) {
+        subscribedTargets = targets;
+        return () => {};
+      },
+    };
+    sharedCoordinator = new MarketDataCoordinator(provider);
+    setSharedMarketDataCoordinator(sharedCoordinator);
+
+    const flexContract = {
+      brokerId: "ibkr",
+      brokerInstanceId: "ibkr-flex",
+      symbol: "VICR",
+      localSymbol: "VICR",
+      exchange: "NASDAQ",
+      conId: 275759,
+    };
+    const liveContract = {
+      brokerId: "ibkr",
+      brokerInstanceId: "ibkr-live",
+      symbol: "VICR",
+      localSymbol: "VICR",
+      exchange: "NASDAQ",
+      primaryExchange: "NASDAQ",
+      conId: 275759,
+    };
+
+    testSetup = await testRender(
+      <PortfolioHarness
+        config={config}
+        collectionId="broker:ibkr-live:DU12345"
+        stateMutator={(state) => {
+          state.tickers = new Map([["VICR", makeTicker({
+            ticker: "VICR",
+            name: "Vicor",
+            portfolios: ["broker:ibkr-flex:DU12345", "broker:ibkr-live:DU12345"],
+            positions: [
+              {
+                portfolio: "broker:ibkr-flex:DU12345",
+                shares: 170,
+                avgCost: 198,
+                currency: "USD",
+                broker: "ibkr",
+                brokerInstanceId: "ibkr-flex",
+                brokerAccountId: "DU12345",
+                brokerContractId: 275759,
+              },
+              {
+                portfolio: "broker:ibkr-live:DU12345",
+                shares: 350,
+                avgCost: 290,
+                currency: "USD",
+                broker: "ibkr",
+                brokerInstanceId: "ibkr-live",
+                brokerAccountId: "DU12345",
+                brokerContractId: 275759,
+              },
+            ],
+            broker_contracts: [flexContract, liveContract],
+          })]]);
+          state.financials = new Map();
+          state.paneState[TEST_PANE_ID] = {
+            collectionId: "broker:ibkr-live:DU12345",
+            cursorSymbol: "VICR",
+            cashDrawerExpanded: false,
+          };
+        }}
+      />,
+      { width: 100, height: 12 },
+    );
+
+    await flushFrame();
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const vicrTarget = subscribedTargets.find((target) => target.symbol === "VICR");
+    expect(vicrTarget?.context?.brokerInstanceId).toBe("ibkr-live");
+    expect(vicrTarget?.context?.instrument).toEqual(liveContract);
   });
 
 });

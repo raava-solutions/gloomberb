@@ -81,7 +81,9 @@ export class ProviderRouterFinancialRoutes {
       quarterlyStatements: base?.quarterlyStatements ?? [],
       priceHistory: base?.priceHistory ?? [],
     });
-    const cached = this.readCachedMergedFinancialsSelection(ticker, exchange, context, false);
+    const cached = this.readCachedMergedFinancialsSelection(ticker, exchange, context, false, {
+      includeSymbolProviderFallback: true,
+    });
     const forceRefresh = context?.cacheMode === "refresh";
     if (cached.value && !forceRefresh) {
       if (isOptionTicker && !cached.value.quote) {
@@ -128,8 +130,9 @@ export class ProviderRouterFinancialRoutes {
   async getQuote(ticker: string, exchange?: string, context?: MarketDataRequestContext): Promise<Quote> {
     const entityKey = this.deps.getEntityKey(ticker, context?.instrument);
     const variantKeys = this.deps.getTickerVariantCandidates(exchange);
+    const brokerSourceKeys = this.deps.getBrokerCandidatesForContext(context, false).map((candidate) => this.deps.brokerSourceKey(candidate));
     const sourceKeys = [
-      ...this.deps.getBrokerCandidatesForContext(context, false).map((candidate) => this.deps.brokerSourceKey(candidate)),
+      ...brokerSourceKeys,
       ...this.deps.getProviderSourceKeys(),
     ];
     const rawCached = selectCachedResource<Quote>(this.deps.resources, "quote", entityKey, variantKeys, sourceKeys, false);
@@ -138,12 +141,19 @@ export class ProviderRouterFinancialRoutes {
       : null;
     const forceRefresh = context?.cacheMode === "refresh";
     if (cached && !forceRefresh && !cached.stale) {
-      return cached.value;
+      if (!brokerSourceKeys.includes(cached.sourceKey)) return cached.value;
+      return this.mergeBrokerQuoteWithProviderReference(
+        cached.value,
+        await this.getProviderReferenceQuote(ticker, exchange, context),
+      );
     }
 
     const brokerQuote = await withBrokerTimeout(this.deps.primaryRoutes.fetchBrokerQuote(ticker, exchange, context));
     if (brokerQuote && !isQuoteStaleForCurrentSession(quoteWithFreshnessExchange(brokerQuote.value, exchange))) {
-      return brokerQuote.value;
+      return this.mergeBrokerQuoteWithProviderReference(
+        brokerQuote.value,
+        await this.getProviderReferenceQuote(ticker, exchange, context),
+      );
     }
 
     const providerQuote = await this.deps.primaryRoutes.fetchProviderQuote(ticker, exchange, context);
@@ -152,6 +162,45 @@ export class ProviderRouterFinancialRoutes {
     }
     if (cached) return cached.value;
     throw new Error(`No quote provider available for ${ticker}`);
+  }
+
+  private async getProviderReferenceQuote(
+    ticker: string,
+    exchange?: string,
+    context?: MarketDataRequestContext,
+  ): Promise<Quote | null> {
+    const cached = this.readCachedProviderQuote(ticker, exchange, context);
+    if (cached) return cached;
+    const providerQuote = await this.deps.primaryRoutes.fetchProviderQuote(ticker, exchange, context);
+    return providerQuote?.value ?? null;
+  }
+
+  private readCachedProviderQuote(
+    ticker: string,
+    exchange?: string,
+    context?: MarketDataRequestContext,
+  ): Quote | null {
+    const entityKey = this.deps.getEntityKey(ticker, context?.instrument);
+    const entityKeys = [...new Set([entityKey, normalizeTicker(ticker)])];
+    const variantKeys = this.deps.getTickerVariantCandidates(exchange);
+    const sourceKeys = this.deps.getProviderSourceKeys();
+    for (const candidateEntityKey of entityKeys) {
+      const record = selectCachedResource<Quote>(this.deps.resources, "quote", candidateEntityKey, variantKeys, sourceKeys, false);
+      if (record && !isQuoteStaleForCurrentSession(quoteWithFreshnessExchange(record.value, exchange))) {
+        return record.value;
+      }
+    }
+    return null;
+  }
+
+  private mergeBrokerQuoteWithProviderReference(brokerQuote: Quote, providerQuote: Quote | null): Quote {
+    if (!providerQuote) return brokerQuote;
+    return resolveTickerFinancialsQuoteState({
+      quote: providerQuote,
+      annualStatements: [],
+      quarterlyStatements: [],
+      priceHistory: [],
+    }, brokerQuote)?.quote ?? brokerQuote;
   }
 
   readCachedMergedFinancialsSelection(
@@ -171,7 +220,8 @@ export class ProviderRouterFinancialRoutes {
       ? { ...brokerRecord, value: sanitizeCachedFinancials(brokerRecord.value, options) }
       : null;
     const providerSourceKeys = this.deps.getProviderSourceKeys();
-    const providerEntityKeys = options.includeSymbolProviderFallback
+    const includeSymbolProviderFallback = options.includeSymbolProviderFallback !== false;
+    const providerEntityKeys = includeSymbolProviderFallback
       ? [...new Set([entityKey, normalizeTicker(ticker)])]
       : [entityKey];
     const providerRecords = sortCachedRecords(
