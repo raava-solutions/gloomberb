@@ -123,6 +123,7 @@ interface LoadQuoteEntryOptions {
   options?: CoordinatorLoadOptions;
   quoteStore: QueryStore<Quote>;
   runSingleFlight: CoordinatorSingleFlight;
+  resolveQuote?: (instrument: InstrumentRef, quote: Quote) => Quote;
 }
 
 export async function loadQuoteEntry({
@@ -131,6 +132,7 @@ export async function loadQuoteEntry({
   options = {},
   quoteStore,
   runSingleFlight,
+  resolveQuote,
 }: LoadQuoteEntryOptions): Promise<QueryEntry<Quote>> {
   const key = buildQuoteKey(instrument);
   const flightKey = options.forceRefresh ? `${key}|refresh` : key;
@@ -146,9 +148,10 @@ export async function loadQuoteEntry({
           cacheMode: options.forceRefresh ? "refresh" : "default",
         },
       );
-      const source = quote.providerId ?? dataProvider.id;
+      const resolvedQuote = resolveQuote?.(instrument, quote) ?? quote;
+      const source = resolvedQuote.providerId ?? dataProvider.id;
       const attempts = [createAttempt(source, startedAt, "success")];
-      return quoteStore.update(key, (current) => readyQuoteEntry(current, quote, source, attempts));
+      return quoteStore.update(key, (current) => readyQuoteEntry(current, resolvedQuote, source, attempts));
     } catch (error) {
       const classified = classifyError(error);
       const attempt = createAttempt(dataProvider.id, startedAt, EXPECTED_EMPTY.test(classified.message) ? "empty" : "fatal_error", classified.reasonCode, classified.message);
@@ -163,6 +166,7 @@ interface LoadQuoteBatchEntriesOptions {
   options?: CoordinatorLoadOptions;
   quoteStore: QueryStore<Quote>;
   runSingleFlight: CoordinatorSingleFlight;
+  resolveQuote?: (instrument: InstrumentRef, quote: Quote) => Quote;
 }
 
 export async function loadQuoteBatchEntries({
@@ -171,6 +175,7 @@ export async function loadQuoteBatchEntries({
   options = {},
   quoteStore,
   runSingleFlight,
+  resolveQuote,
 }: LoadQuoteBatchEntriesOptions): Promise<QueryEntry<Quote>[]> {
   const uniqueInstruments = [...new Map(instruments.map((instrument) => [buildQuoteKey(instrument), instrument] as const)).values()];
   const results = new Map<string, QueryEntry<Quote>>();
@@ -195,9 +200,10 @@ export async function loadQuoteBatchEntries({
       const instrument = misses[index];
       if (!instrument || !item.quote) return;
       const key = buildQuoteKey(instrument);
-      const source = item.quote.providerId ?? dataProvider.id;
+      const quote = resolveQuote?.(instrument, item.quote) ?? item.quote;
+      const source = quote.providerId ?? dataProvider.id;
       const attempts = [createAttempt(source, Date.now(), "success")];
-      results.set(key, quoteStore.update(key, (current) => readyQuoteEntry(current, item.quote!, source, attempts)));
+      results.set(key, quoteStore.update(key, (current) => readyQuoteEntry(current, quote, source, attempts)));
     });
   }
 
@@ -210,6 +216,7 @@ export async function loadQuoteBatchEntries({
       options,
       quoteStore,
       runSingleFlight,
+      resolveQuote,
     }));
   }));
 

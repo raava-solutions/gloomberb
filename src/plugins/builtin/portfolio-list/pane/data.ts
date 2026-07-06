@@ -16,8 +16,26 @@ export const VISIBLE_QUOTE_STREAM_WATCHDOG_MS = 30_000;
 export const VISIBLE_SNAPSHOT_REFRESH_COOLDOWN_MS = 5 * 60_000;
 export const VISIBLE_FINANCIAL_WARMUP_DELAY_MS = 350;
 export const VISIBLE_SNAPSHOT_WARMUP_BATCH_LIMIT = 3;
+export const SORT_QUOTE_WARMUP_BATCH_LIMIT = 64;
 
 const STREAM_OVERSCAN_ROWS = 6;
+const QUOTE_SORT_COLUMN_IDS = new Set([
+  "price",
+  "change",
+  "change_pct",
+  "volume",
+  "dollar_volume",
+  "range_52w",
+  "market_cap",
+  "latency",
+  "ext_hours",
+  "mkt_value",
+  "weight",
+  "day_pnl",
+  "pnl",
+  "pnl_pct",
+  "mark_delta",
+]);
 const FUNDAMENTAL_COLUMN_IDS = new Set(["pe", "forward_pe", "dividend_yield"]);
 const PROFILE_COLUMN_IDS = new Set(["sector", "industry"]);
 const sortValueCache = createRowValueCache<string, ReturnType<typeof getSortValue>>(5000);
@@ -79,6 +97,35 @@ export function selectStreamTickers(
   }
   const selectedTicker = tickers.find((ticker) => ticker.metadata.ticker === selectedSymbol);
   return selectedTicker ? [...visible, selectedTicker] : visible;
+}
+
+export function sortPreferenceUsesQuote(sortPreference: CollectionSortPreference): boolean {
+  return !!sortPreference.columnId && QUOTE_SORT_COLUMN_IDS.has(sortPreference.columnId);
+}
+
+export function selectQuoteWarmupTickers(
+  sortedTickers: TickerRecord[],
+  visibleRange: { start: number; end: number },
+  financialsMap: Map<string, TickerFinancials>,
+  sortPreference: CollectionSortPreference,
+  now = Date.now(),
+  hiddenLimit = SORT_QUOTE_WARMUP_BATCH_LIMIT,
+): TickerRecord[] {
+  const visible = sortedTickers.slice(visibleRange.start, visibleRange.end);
+  if (!sortPreferenceUsesQuote(sortPreference)) {
+    return visible;
+  }
+
+  const seen = new Set(visible.map((ticker) => ticker.metadata.ticker));
+  const hidden: TickerRecord[] = [];
+  for (const ticker of sortedTickers) {
+    if (seen.has(ticker.metadata.ticker)) continue;
+    if (!needsVisibleQuoteWarmup(financialsMap.get(ticker.metadata.ticker), now)) continue;
+    hidden.push(ticker);
+    seen.add(ticker.metadata.ticker);
+    if (hidden.length >= hiddenLimit) break;
+  }
+  return [...visible, ...hidden];
 }
 
 export function buildTrackedCurrencies(
