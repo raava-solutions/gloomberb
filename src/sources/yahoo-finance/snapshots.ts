@@ -42,6 +42,7 @@ interface YahooSnapshotLoaders {
   fetchExtendedHoursData: (
     symbol: string,
     meta: NonNullable<ChartResult["meta"]>,
+    regularClose?: number,
   ) => Promise<ExtendedHoursData>;
   fetchQuoteSupplement: (
     symbol: string,
@@ -132,7 +133,12 @@ export async function loadYahooTickerFinancials(
   const changePct = prev ? (change / prev) * 100 : 0;
 
   const marketState = deriveMarketState(meta);
-  const extHours = await loaders.fetchExtendedHoursData(symbol, meta);
+  const extendedHoursBase = quoteSupplement.previousClose ?? prev;
+  const extHours = await loaders.fetchExtendedHoursData(
+    symbol,
+    meta,
+    extendedHoursBase == null ? undefined : extendedHoursBase * currencyDivisor,
+  );
   if (currencyDivisor !== 1) {
     normalizeExtendedHoursPrices(extHours, currencyDivisor);
   }
@@ -207,7 +213,12 @@ export async function loadYahooQuote(
   const change = prev != null ? price - prev : 0;
 
   const marketState = deriveMarketState(meta);
-  const extHours = await loaders.fetchExtendedHoursData(symbol, meta);
+  const extendedHoursBase = quoteSupplement.previousClose ?? prev;
+  const extHours = await loaders.fetchExtendedHoursData(
+    symbol,
+    meta,
+    extendedHoursBase == null ? undefined : extendedHoursBase * currencyDivisor,
+  );
   if (currencyDivisor !== 1) {
     normalizeExtendedHoursPrices(extHours, currencyDivisor);
   }

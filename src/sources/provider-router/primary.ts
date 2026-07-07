@@ -1,14 +1,16 @@
 import type { MarketDataRequestContext } from "../../types/data-provider";
 import type { Quote, TickerFinancials } from "../../types/financials";
 import { normalizeTickerFinancialsPriceHistory } from "../../utils/price-history";
-import { isQuoteStaleForCurrentSession } from "../../market-data/quotes/freshness";
 import { resolveTickerFinancialsQuoteState } from "../../market-data/quotes/resolution";
 import { shouldLogProviderError } from "../provider-errors";
 import {
+  dropUnusableProviderQuote,
   hasDetailedStatementRows,
   hasDeepStatementHistory,
   hasStatementRows,
+  isProviderQuoteUsableForCurrentSession,
   mergeMissingStatementArrays,
+  mergeFinancials,
 } from "./financials";
 import type { ProviderRouterCoreDeps, SourceResult } from "./route-types";
 
@@ -61,7 +63,8 @@ export class ProviderRouterPrimaryRoutes {
     for (const provider of this.options.providersInPriorityOrder()) {
       try {
         const rawValue = await provider.getTickerFinancials(ticker, exchange, context);
-        const value = resolveTickerFinancialsQuoteState(normalizeTickerFinancialsPriceHistory(rawValue));
+        const resolvedValue = resolveTickerFinancialsQuoteState(normalizeTickerFinancialsPriceHistory(rawValue));
+        const value = resolvedValue ? dropUnusableProviderQuote(resolvedValue, exchange) : null;
         if (!value) continue;
         const sourceKey = this.options.providerSourceKey(provider);
         const cacheValue = primaryResult
@@ -83,6 +86,17 @@ export class ProviderRouterPrimaryRoutes {
           primaryResult = { sourceKey, value };
           if (hasDetailedStatementRows(value) && hasDeepStatementHistory(value)) return primaryResult;
           continue;
+        }
+        if (!primaryResult.value.quote && value.quote) {
+          primaryResult = {
+            sourceKey: primaryResult.sourceKey,
+            value: mergeFinancials(primaryResult.value, {
+              annualStatements: [],
+              quarterlyStatements: [],
+              priceHistory: [],
+              quote: value.quote,
+            }) ?? primaryResult.value,
+          };
         }
         if (hasStatementRows(value)) {
           primaryResult = {
@@ -143,7 +157,7 @@ export class ProviderRouterPrimaryRoutes {
     for (const provider of this.options.providersInPriorityOrder()) {
       try {
         const quote = await provider.getQuote(ticker, exchange, context);
-        if (quote == null || isQuoteStaleForCurrentSession(quote)) continue;
+        if (!isProviderQuoteUsableForCurrentSession(quote, exchange)) continue;
         const sourceKey = this.options.providerSourceKey(provider);
         this.options.cacheResource(
           "quote",

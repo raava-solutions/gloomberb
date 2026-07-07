@@ -65,6 +65,7 @@ export async function fetchYahooExtendedHoursData(
   http: YahooHttpClient,
   symbol: string,
   meta: NonNullable<ChartResult["meta"]>,
+  regularClose?: number,
 ): Promise<ExtendedHoursData> {
   const marketState = deriveMarketState(meta);
   if (marketState !== "PRE" && marketState !== "POST") return {};
@@ -80,7 +81,7 @@ export async function fetchYahooExtendedHoursData(
     const result = data.chart?.result?.[0];
     if (!result?.timestamp?.length) return {};
     const closes = result.indicators?.quote?.[0]?.close || [];
-    return extractExtendedHoursPrices(meta, result.timestamp, closes, marketState);
+    return extractExtendedHoursPrices(meta, result.timestamp, closes, marketState, regularClose);
   } catch {
     return {};
   }
