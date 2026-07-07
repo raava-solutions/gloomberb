@@ -279,6 +279,7 @@ function PortfolioHarness({
   stateMutator,
   runtime = createTestPluginRuntime(),
   paneHeight = 24,
+  paneFocused = true,
 }: {
   config: AppConfig;
   collectionId: string;
@@ -290,6 +291,7 @@ function PortfolioHarness({
   stateMutator?: (state: ReturnType<typeof createInitialState>) => void;
   runtime?: PluginRuntimeAccess;
   paneHeight?: number;
+  paneFocused?: boolean;
 }) {
   const initialState = createPortfolioState(config, collectionId, expanded, {
     ticker,
@@ -309,7 +311,7 @@ function PortfolioHarness({
           <PortfolioPane
             paneId={TEST_PANE_ID}
             paneType="portfolio-list"
-            focused
+            focused={paneFocused}
             width={100}
             height={paneHeight}
           />
@@ -327,6 +329,156 @@ async function flushFrame() {
     await Promise.resolve();
     await testSetup!.renderOnce();
   });
+}
+
+function makeSortWarmupQuote(symbol: string): Quote {
+  return makeQuote({
+    symbol,
+    price: symbol === "SIVE" ? 46.7 : 100,
+    change: symbol === "SIVE" ? -9.6 : 0,
+    changePercent: symbol === "SIVE" ? -17.05 : 0,
+    previousClose: symbol === "SIVE" ? 56.3 : 100,
+    listingExchangeName: "NASDAQ",
+  });
+}
+
+function makeSortWarmupBrokerTicker(portfolioId: string, symbol: string, index: number): TickerRecord {
+  return makeTicker({
+    ticker: symbol,
+    name: symbol,
+    portfolios: [portfolioId],
+    positions: [{
+      portfolio: portfolioId,
+      shares: 10,
+      avgCost: 100,
+      currency: "USD",
+      broker: "ibkr",
+      brokerInstanceId: "ibkr-live",
+      brokerAccountId: "DU12345",
+      brokerContractId: 10_000 + index,
+      markPrice: 100,
+    }],
+    broker_contracts: [{
+      brokerId: "ibkr",
+      brokerInstanceId: "ibkr-live",
+      symbol,
+      localSymbol: symbol,
+      exchange: "SMART",
+      primaryExchange: "NASDAQ",
+      conId: 10_000 + index,
+    }],
+  });
+}
+
+async function renderHiddenChangePctSortWarmup(options: { staleCachedSiveSnapshot?: boolean } = {}) {
+  const portfolioId = "broker:ibkr-live:DU12345";
+  const config = createPortfolioConfigWithColumns(
+    portfolioId,
+    ["ticker", "price", "change_pct", "latency"],
+    [createBrokerInstance("gateway", "ibkr-live")],
+  );
+  const requestedSnapshots: string[] = [];
+  const provider: DataProvider = {
+    id: "test-provider",
+    name: "Test Provider",
+    async getTickerFinancials(symbol) {
+      requestedSnapshots.push(symbol);
+      return {
+        annualStatements: [],
+        quarterlyStatements: [],
+        priceHistory: [],
+        quote: makeSortWarmupQuote(symbol),
+      };
+    },
+    async getQuote(symbol) {
+      return makeSortWarmupQuote(symbol);
+    },
+    async getExchangeRate() {
+      return 1;
+    },
+    async search() {
+      return [];
+    },
+    async getArticleSummary() {
+      return null;
+    },
+    async getPriceHistory() {
+      return [];
+    },
+    subscribeQuotes() {
+      return () => {};
+    },
+  };
+  sharedCoordinator = new MarketDataCoordinator(provider);
+  setSharedMarketDataCoordinator(sharedCoordinator);
+
+  const tickers = Array.from({ length: 29 }, (_, index) => makeSortWarmupBrokerTicker(portfolioId, `T${String(index).padStart(2, "0")}`, index));
+  const sive = makeSortWarmupBrokerTicker(portfolioId, "SIVE", 29);
+  if (options.staleCachedSiveSnapshot) {
+    const siveInstrument = instrumentFromTicker(sive, "SIVE", { portfolioId });
+    if (!siveInstrument) throw new Error("expected SIVE instrument");
+    sharedCoordinator.primeCachedFinancials([{
+      instrument: siveInstrument,
+      financials: {
+        annualStatements: [],
+        quarterlyStatements: [],
+        priceHistory: [],
+        quote: makeQuote({
+          symbol: "SIVE",
+          price: 56.3,
+          change: 56.3,
+          changePercent: 100,
+          previousClose: 0,
+          listingExchangeName: "NASDAQ",
+          lastUpdated: Date.now() - 24 * 60 * 60_000,
+        }),
+      },
+    }]);
+  }
+
+  testSetup = await testRender(
+    <PortfolioHarness
+      config={config}
+      collectionId={portfolioId}
+      stateMutator={(state) => {
+        state.tickers = new Map([...tickers, sive].map((entry) => [entry.metadata.ticker, entry]));
+        state.financials = new Map(tickers.map((entry, index) => [
+          entry.metadata.ticker,
+          {
+            annualStatements: [],
+            quarterlyStatements: [],
+            priceHistory: [],
+            quote: makeQuote({
+              symbol: entry.metadata.ticker,
+              price: 100 + index,
+              change: index,
+              changePercent: index,
+              listingExchangeName: "NASDAQ",
+            }),
+          },
+        ]));
+        state.paneState[TEST_PANE_ID] = {
+          collectionId: portfolioId,
+          cursorSymbol: "T00",
+          cashDrawerExpanded: false,
+          collectionSorts: {
+            [portfolioId]: { columnId: "change_pct", direction: "asc" },
+          },
+        };
+      }}
+      paneHeight={12}
+    />,
+    { width: 100, height: 12 },
+  );
+
+  await flushFrame();
+  const beforeFrame = testSetup.captureCharFrame();
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 400));
+  });
+  await flushFrame();
+
+  return { beforeFrame, frame: testSetup.captureCharFrame(), requestedSnapshots };
 }
 
 afterEach(async () => {
@@ -992,18 +1144,20 @@ describe("PortfolioListPane cash and margin UI", () => {
     expect(frame).toContain("22.0");
   });
 
-  test("force-refreshes stale quote data for visible rows", async () => {
+  test("force-refreshes old visible quote data even when the pane is not focused", async () => {
     const config = createPortfolioConfigWithColumns(
       "broker:ibkr-flex:DU12345",
       ["ticker", "price", "day_pnl"],
       [createBrokerInstance("flex")],
     );
-    const staleQuote = makeQuote({
+    const oldQuote = makeQuote({
       price: 120,
-      change: 0,
-      changePercent: 0,
-      marketState: "PRE",
-      lastUpdated: Date.now() - 24 * 60 * 60 * 1000,
+      change: -5,
+      changePercent: -4,
+      currency: "EUR",
+      listingExchangeName: "FWB2",
+      marketState: "REGULAR",
+      lastUpdated: Date.now() - 5 * 60 * 1000,
     });
     const batchOptions: Array<{ forceRefresh?: boolean } | undefined> = [];
     const provider: DataProvider = {
@@ -1014,7 +1168,7 @@ describe("PortfolioListPane cash and margin UI", () => {
           annualStatements: [],
           quarterlyStatements: [],
           priceHistory: [],
-          quote: staleQuote,
+          quote: oldQuote,
         };
       },
       async getQuotesBatch(targets, options) {
@@ -1024,12 +1178,11 @@ describe("PortfolioListPane cash and margin UI", () => {
           quote: makeQuote({
             symbol: target.symbol,
             price: 126,
-            change: 6,
-            changePercent: 5,
-            marketState: "PRE",
-            preMarketPrice: 126,
-            preMarketChange: 6,
-            preMarketChangePercent: 5,
+            change: 1,
+            changePercent: 0.8,
+            currency: "EUR",
+            listingExchangeName: "FWB2",
+            marketState: "REGULAR",
           }),
         }));
       },
@@ -1059,8 +1212,11 @@ describe("PortfolioListPane cash and margin UI", () => {
       <PortfolioHarness
         config={config}
         collectionId="broker:ibkr-flex:DU12345"
-        quote={staleQuote}
+        ticker={makeTicker({ exchange: "FWB2", currency: "EUR" })}
+        quote={oldQuote}
+        paneFocused={false}
         stateMutator={(state) => {
+          state.focusedPaneId = "portfolio-list:other";
           state.paneState[TEST_PANE_ID] = {
             ...(state.paneState[TEST_PANE_ID] ?? {}),
             collectionSorts: {
@@ -1074,7 +1230,7 @@ describe("PortfolioListPane cash and margin UI", () => {
 
     await flushFrame();
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 380));
+      await Promise.resolve();
     });
     await flushFrame();
 
@@ -1536,143 +1692,20 @@ describe("PortfolioListPane cash and margin UI", () => {
   });
 
   test("warms hidden quote-missing rows when sorting by change percent", async () => {
-    const portfolioId = "broker:ibkr-live:DU12345";
-    const config = createPortfolioConfigWithColumns(
-      portfolioId,
-      ["ticker", "price", "change_pct", "latency"],
-      [createBrokerInstance("gateway", "ibkr-live")],
-    );
-    const requestedSnapshots: string[] = [];
-    const provider: DataProvider = {
-      id: "test-provider",
-      name: "Test Provider",
-      async getTickerFinancials(symbol) {
-        requestedSnapshots.push(symbol);
-        return {
-          annualStatements: [],
-          quarterlyStatements: [],
-          priceHistory: [],
-          quote: makeQuote({
-            symbol,
-            price: symbol === "SIVE" ? 46.7 : 100,
-            change: symbol === "SIVE" ? -9.6 : 0,
-            changePercent: symbol === "SIVE" ? -17.05 : 0,
-            previousClose: symbol === "SIVE" ? 56.3 : 100,
-          }),
-        };
-      },
-      async getQuote(symbol) {
-        return makeQuote({
-          symbol,
-          price: symbol === "SIVE" ? 46.7 : 100,
-          change: symbol === "SIVE" ? -9.6 : 0,
-          changePercent: symbol === "SIVE" ? -17.05 : 0,
-          previousClose: symbol === "SIVE" ? 56.3 : 100,
-        });
-      },
-      async getQuotesBatch(targets) {
-        return targets.map((target) => ({
-          target,
-          quote: makeQuote({
-            symbol: target.symbol,
-            price: target.symbol === "SIVE" ? 46.7 : 100,
-            change: target.symbol === "SIVE" ? -9.6 : 0,
-            changePercent: target.symbol === "SIVE" ? -17.05 : 0,
-            previousClose: target.symbol === "SIVE" ? 56.3 : 100,
-          }),
-        }));
-      },
-      async getExchangeRate() {
-        return 1;
-      },
-      async search() {
-        return [];
-      },
-      async getArticleSummary() {
-        return null;
-      },
-      async getPriceHistory() {
-        return [];
-      },
-      subscribeQuotes() {
-        return () => {};
-      },
-    };
-    sharedCoordinator = new MarketDataCoordinator(provider);
-    setSharedMarketDataCoordinator(sharedCoordinator);
-
-    const makeBrokerTicker = (symbol: string, index: number): TickerRecord => makeTicker({
-      ticker: symbol,
-      name: symbol,
-      portfolios: [portfolioId],
-      positions: [{
-        portfolio: portfolioId,
-        shares: 10,
-        avgCost: 100,
-        currency: "USD",
-        broker: "ibkr",
-        brokerInstanceId: "ibkr-live",
-        brokerAccountId: "DU12345",
-        brokerContractId: 10_000 + index,
-        markPrice: symbol === "SIVE" ? 56.3 : 100,
-      }],
-      broker_contracts: [{
-        brokerId: "ibkr",
-        brokerInstanceId: "ibkr-live",
-        symbol,
-        localSymbol: symbol,
-        exchange: "SMART",
-        primaryExchange: "NASDAQ",
-        conId: 10_000 + index,
-      }],
-    });
-    const tickers = Array.from({ length: 29 }, (_, index) => makeBrokerTicker(`T${String(index).padStart(2, "0")}`, index));
-    const sive = makeBrokerTicker("SIVE", 29);
-
-    testSetup = await testRender(
-      <PortfolioHarness
-        config={config}
-        collectionId={portfolioId}
-        stateMutator={(state) => {
-          state.tickers = new Map([...tickers, sive].map((entry) => [entry.metadata.ticker, entry]));
-          state.financials = new Map(tickers.map((entry, index) => [
-            entry.metadata.ticker,
-            {
-              annualStatements: [],
-              quarterlyStatements: [],
-              priceHistory: [],
-              quote: makeQuote({
-                symbol: entry.metadata.ticker,
-                price: 100 + index,
-                change: index,
-                changePercent: index,
-              }),
-            },
-          ]));
-          state.paneState[TEST_PANE_ID] = {
-            collectionId: portfolioId,
-            cursorSymbol: "T00",
-            cashDrawerExpanded: false,
-            collectionSorts: {
-              [portfolioId]: { columnId: "change_pct", direction: "asc" },
-            },
-          };
-        }}
-        paneHeight={12}
-      />,
-      { width: 100, height: 12 },
-    );
-
-    await flushFrame();
-    expect(testSetup.captureCharFrame()).not.toContain("SIVE");
-
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 400));
-    });
-    await flushFrame();
-
+    const { beforeFrame, frame, requestedSnapshots } = await renderHiddenChangePctSortWarmup();
+    expect(beforeFrame).not.toContain("SIVE");
     expect(requestedSnapshots).toContain("SIVE");
-    const frame = testSetup.captureCharFrame();
+    expect(frame).toContain("SIVE");
+    expect(frame).toContain("-17.05%");
+    expect(frame).toContain("46.7");
+  });
+
+  test("force-refreshes hidden stale cached snapshots when sorting by change percent", async () => {
+    const { beforeFrame, frame, requestedSnapshots } = await renderHiddenChangePctSortWarmup({
+      staleCachedSiveSnapshot: true,
+    });
+    expect(beforeFrame).not.toContain("SIVE");
+    expect(requestedSnapshots).toContain("SIVE");
     expect(frame).toContain("SIVE");
     expect(frame).toContain("-17.05%");
     expect(frame).toContain("46.7");

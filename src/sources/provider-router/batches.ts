@@ -12,8 +12,10 @@ import { isQuoteStaleForCurrentSession } from "../../market-data/quotes/freshnes
 import { resolveTickerFinancialsQuoteState } from "../../market-data/quotes/resolution";
 import { selectCachedResource } from "./cache";
 import {
+  dropUnusableProviderQuote,
   hasDeepStatementHistory,
   hasDetailedStatementRows,
+  isProviderQuoteUsableForCurrentSession,
   quoteWithFreshnessExchange,
   type CachedFinancialsSelection,
 } from "./financials";
@@ -85,7 +87,7 @@ export class ProviderRouterBatchRoutes {
       const uniqueTargets = [...providerIndexes.values()].map((bucket) => bucket[0]!.target);
       const batchResults = await batchProvider.getQuotesBatch!(uniqueTargets, options).catch(() => []);
       for (const item of batchResults) {
-        if (!item.quote || isQuoteStaleForCurrentSession(item.quote)) continue;
+        if (!isProviderQuoteUsableForCurrentSession(item.quote, item.target.exchange)) continue;
         const key = this.quoteBatchKey(item.target);
         const sourceKey = this.deps.providerSourceKey(batchProvider);
         for (const entry of providerIndexes.get(key) ?? []) {
@@ -147,7 +149,8 @@ export class ProviderRouterBatchRoutes {
       for (const item of batchResults) {
         if (!item.financials) continue;
         const key = this.cachedFinancialsBatchKey(item.target);
-        const value = resolveTickerFinancialsQuoteState(normalizeTickerFinancialsPriceHistory(item.financials));
+        let value = resolveTickerFinancialsQuoteState(normalizeTickerFinancialsPriceHistory(item.financials));
+        if (value) value = dropUnusableProviderQuote(value, item.target.exchange);
         if (!value) continue;
         const sourceKey = this.deps.providerSourceKey(batchProvider);
         for (const entry of providerIndexes.get(key) ?? []) {

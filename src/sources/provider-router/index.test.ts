@@ -875,6 +875,48 @@ describe("AssetDataRouter", () => {
     unsubscribe();
   });
 
+  test("drops empty zero provider stream quotes", () => {
+    const providerTargets: QuoteSubscriptionTarget[] = [];
+    const seenQuotes: Array<{ symbol: string; price: number }> = [];
+    const streamingProvider: DataProvider = {
+      ...fallbackProvider,
+      id: "cloud",
+      name: "Cloud",
+      subscribeQuotes(targets, onQuote) {
+        providerTargets.push(...targets);
+        onQuote(targets[0]!, {
+          symbol: "HEXA B",
+          price: 0,
+          currency: "SEK",
+          change: 0,
+          changePercent: 0,
+          lastUpdated: Date.now(),
+          listingExchangeName: "SFB",
+          dataSource: "delayed",
+        });
+        return () => {};
+      },
+    };
+
+    const router = new AssetDataRouter(fallbackProvider, [streamingProvider]);
+    const unsubscribe = router.subscribeQuotes([{
+      symbol: "HEXA B",
+      exchange: "SFB",
+      route: "provider",
+    }], (_target, quote) => {
+      seenQuotes.push({ symbol: quote.symbol, price: quote.price });
+    });
+
+    expect(providerTargets).toEqual([{
+      symbol: "HEXA B",
+      exchange: "SFB",
+      route: "provider",
+    }]);
+    expect(seenQuotes).toEqual([]);
+
+    unsubscribe();
+  });
+
   test("returns quote-only financials for option tickers when snapshots are unavailable", async () => {
     const router = new AssetDataRouter({
       ...fallbackProvider,
@@ -1361,6 +1403,56 @@ describe("AssetDataRouter", () => {
       inventory: 125,
     }]);
     expect(yahooCalls).toBe(1);
+  });
+
+  test("fills unusable preferred provider financial quotes from a later provider", async () => {
+    const cloudProvider: DataProvider = {
+      ...fallbackProvider,
+      id: "cloud",
+      name: "Cloud",
+      priority: 100,
+      async getTickerFinancials() {
+        return makeFinancials({
+          profile: { sector: "Industrials" },
+          quote: makeQuote({
+            symbol: "HY9H",
+            price: 1295,
+            change: -95,
+            changePercent: -6.83,
+            lastUpdated: Date.now() - 20 * 60_000,
+            listingExchangeName: "FWB2",
+            marketState: "REGULAR",
+          }),
+        });
+      },
+    };
+    const yahooProvider: DataProvider = {
+      ...fallbackProvider,
+      id: "yahoo",
+      name: "Yahoo",
+      priority: 1000,
+      async getTickerFinancials() {
+        return makeFinancials({
+          quote: makeQuote({
+            symbol: "HY9H.F",
+            price: 1305,
+            change: -85,
+            changePercent: -6.12,
+            lastUpdated: Date.now(),
+            listingExchangeName: "FWB2",
+            marketState: "REGULAR",
+          }),
+        });
+      },
+    };
+
+    const router = new AssetDataRouter(yahooProvider, [cloudProvider]);
+    const merged = await router.getTickerFinancials("HY9H", "FWB2", { cacheMode: "refresh" });
+
+    expect(merged.profile?.sector).toBe("Industrials");
+    expect(merged.quote?.symbol).toBe("HY9H.F");
+    expect(merged.quote?.price).toBe(1305);
+    expect(merged.quote?.changePercent).toBe(-6.12);
   });
 
   test("caches the preferred provider financial snapshot without merging fallback snapshots", async () => {

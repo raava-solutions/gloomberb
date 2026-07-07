@@ -132,7 +132,55 @@ describe("quote freshness", () => {
     ).toBe(false);
   });
 
-  test("treats prior-date regular-session quotes as stale immediately", () => {
+  test("allows prior-day regular-session quotes before the local exchange reopens", () => {
+    expect(
+      isQuoteStaleForCurrentSession(
+        quote({
+          symbol: "NEO.TO",
+          currency: "CAD",
+          lastUpdated: Date.parse("2026-07-06T20:00:00Z"),
+          listingExchangeName: "TOR",
+          exchangeName: "TOR",
+          marketState: "REGULAR",
+        }),
+        Date.parse("2026-07-07T12:10:00Z"),
+      ),
+    ).toBe(false);
+  });
+
+  test("allows non-US premarket labels without active-session prices", () => {
+    expect(
+      isQuoteStaleForCurrentSession(
+        quote({
+          symbol: "NEO.TO",
+          currency: "CAD",
+          lastUpdated: Date.parse("2026-07-07T12:10:00Z"),
+          listingExchangeName: "TOR",
+          exchangeName: "TOR",
+          marketState: "PRE",
+        }),
+        Date.parse("2026-07-07T12:10:30Z"),
+      ),
+    ).toBe(false);
+  });
+
+  test("rejects US premarket labels without active-session prices", () => {
+    expect(
+      isQuoteStaleForCurrentSession(
+        quote({
+          symbol: "ALAB",
+          currency: "USD",
+          lastUpdated: Date.parse("2026-07-07T12:10:00Z"),
+          listingExchangeName: "NASDAQ",
+          exchangeName: "NASDAQ",
+          marketState: "PRE",
+        }),
+        Date.parse("2026-07-07T12:10:30Z"),
+      ),
+    ).toBe(true);
+  });
+
+  test("treats prior-date regular-session quotes as stale after the local exchange reopens", () => {
     expect(
       isQuoteStaleForCurrentSession(
         quote({

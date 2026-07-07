@@ -2,18 +2,18 @@ import { useEffect } from "react";
 import { useAppActive } from "../app/activity";
 import type { QuoteSubscriptionTarget } from "../../types/data-provider";
 import { debugLog } from "../../utils/debug-log";
-import { canonicalExchange, normalizeSymbol } from "../../utils/exchanges";
+import { normalizeSymbol } from "../../utils/exchanges";
 import { getSharedMarketDataCoordinator } from "../../market-data/coordinator";
 
 const quoteStreamLog = debugLog.createLogger("quote-stream");
 
-function normalizeTarget(target: QuoteSubscriptionTarget): QuoteSubscriptionTarget | null {
+export function normalizeQuoteStreamSubscriptionTarget(target: QuoteSubscriptionTarget): QuoteSubscriptionTarget | null {
   const symbol = normalizeSymbol(target.symbol);
   if (!symbol) return null;
   return {
     ...target,
     symbol,
-    exchange: canonicalExchange(target.exchange),
+    exchange: target.exchange?.trim().toUpperCase() ?? "",
   };
 }
 
@@ -43,7 +43,7 @@ export function useQuoteStreaming(targets: QuoteSubscriptionTarget[]): void {
 
   const normalizedEntries = new Map<string, QuoteSubscriptionTarget>();
   for (const target of targets) {
-    const normalized = normalizeTarget(target);
+    const normalized = normalizeQuoteStreamSubscriptionTarget(target);
     if (!normalized) continue;
     const key = buildQuoteStreamSubscriptionKey(normalized);
     normalizedEntries.set(key, normalized);

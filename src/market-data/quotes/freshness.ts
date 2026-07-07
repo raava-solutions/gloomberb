@@ -1,7 +1,15 @@
 import type { Quote } from "../../types/financials";
+import { canonicalExchange } from "../../utils/exchanges";
 import { isTimestampStaleForExchangeSession } from "../market/freshness";
 
+const EXTENDED_HOURS_EXCHANGES = new Set(["NASDAQ", "NYSE", "AMEX", "ARCA", "BATS"]);
+
+function isExtendedHoursExchange(quote: Quote): boolean {
+  return EXTENDED_HOURS_EXCHANGES.has(canonicalExchange(quote.listingExchangeName || quote.exchangeName));
+}
+
 function isQuoteMissingActiveSessionPrice(quote: Quote): boolean {
+  if (!isExtendedHoursExchange(quote)) return false;
   if ((quote.marketState === "PRE" || quote.marketState === "PREPRE") && quote.preMarketPrice == null) {
     return true;
   }

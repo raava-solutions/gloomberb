@@ -77,6 +77,46 @@ export function quoteWithFreshnessExchange(quote: Quote, exchange?: string): Quo
   };
 }
 
+function finitePositiveNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+const ACTIVE_PROVIDER_QUOTE_MAX_AGE_MS = 10 * 60_000;
+const ACTIVE_QUOTE_MARKET_STATES = new Set(["PRE", "REGULAR", "POST"]);
+
+function isActiveProviderQuoteTooOld(quote: Quote, now = Date.now()): boolean {
+  if (!ACTIVE_QUOTE_MARKET_STATES.has(quote.marketState ?? "")) return false;
+  if (!Number.isFinite(quote.lastUpdated)) return false;
+  return now - quote.lastUpdated > ACTIVE_PROVIDER_QUOTE_MAX_AGE_MS;
+}
+
+export function isProviderQuoteUsableForCurrentSession(quote: Quote | null | undefined, exchange?: string): quote is Quote {
+  if (!quote) return false;
+  const normalized = quoteWithFreshnessExchange(quote, exchange);
+  if (isQuoteStaleForCurrentSession(normalized)) return false;
+  if (isActiveProviderQuoteTooOld(normalized)) return false;
+  return [
+    normalized.price,
+    normalized.preMarketPrice,
+    normalized.postMarketPrice,
+    normalized.bid,
+    normalized.ask,
+    normalized.mark,
+  ].some(finitePositiveNumber);
+}
+
+export function dropUnusableProviderQuote(value: TickerFinancials, exchange?: string): TickerFinancials {
+  if (!value.quote || isProviderQuoteUsableForCurrentSession(value.quote, exchange)) {
+    return value;
+  }
+
+  return {
+    ...value,
+    quote: undefined,
+    quoteContributions: undefined,
+  };
+}
+
 function sanitizeCachedQuote(
   quote: Quote,
   exchange: string | undefined,
