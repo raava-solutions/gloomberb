@@ -408,7 +408,7 @@ describe("AssetDataRouter cached financials", () => {
   test("uses symbol provider quote reference for broker-linked snapshot reads", async () => {
     const dbPath = createTempDbPath("cached-symbol-reference-for-contract-snapshot");
     const persistence = new AppPersistence(dbPath);
-    const now = Date.parse("2026-07-06T16:54:30Z");
+    const now = Date.now();
 
     persistence.resources.set(
       {

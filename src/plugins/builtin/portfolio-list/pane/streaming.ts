@@ -24,7 +24,6 @@ import {
 
 export function usePortfolioPaneStreaming({
   appActive,
-  focused,
   activeCollectionId,
   sortedTickers,
   cursorSymbol,
@@ -35,7 +34,6 @@ export function usePortfolioPaneStreaming({
   visibleWarmupRequirements,
 }: {
   appActive: boolean;
-  focused: boolean;
   activeCollectionId?: string;
   sortedTickers: TickerRecord[];
   cursorSymbol: string | null;
@@ -89,10 +87,22 @@ export function usePortfolioPaneStreaming({
     () => sortedTickers.slice(streamWindow.start, streamWindow.end),
     [sortedTickers, streamWindow.end, streamWindow.start],
   );
+  const watchdogInputsRef = useRef<{
+    financialsMap: Map<string, TickerFinancials>;
+    instrumentOptions: typeof instrumentOptions;
+    visibleFinancialTickers: TickerRecord[];
+  }>({ financialsMap, instrumentOptions, visibleFinancialTickers });
+
+  useEffect(() => {
+    watchdogInputsRef.current = {
+      financialsMap,
+      instrumentOptions,
+      visibleFinancialTickers,
+    };
+  }, [financialsMap, instrumentOptions, visibleFinancialTickers]);
 
   useEffect(() => {
     if (!appActive) return;
-    if (!focused) return;
     if (!sharedCoordinator) return;
 
     const nowTimestamp = Date.now();
@@ -140,11 +150,9 @@ export function usePortfolioPaneStreaming({
         snapshotQueueSymbols.add(ticker.metadata.ticker);
       }
     }
-    const limitedSnapshotQueue = [
-      ...quoteSnapshotQueue.slice(0, SORT_QUOTE_WARMUP_BATCH_LIMIT),
-      ...snapshotQueue.slice(0, VISIBLE_SNAPSHOT_WARMUP_BATCH_LIMIT),
-    ];
-    if (quoteQueue.length === 0 && limitedSnapshotQueue.length === 0) return;
+    const limitedQuoteSnapshotQueue = quoteSnapshotQueue.slice(0, SORT_QUOTE_WARMUP_BATCH_LIMIT);
+    const limitedSnapshotQueue = snapshotQueue.slice(0, VISIBLE_SNAPSHOT_WARMUP_BATCH_LIMIT);
+    if (quoteQueue.length === 0 && limitedQuoteSnapshotQueue.length === 0 && limitedSnapshotQueue.length === 0) return;
 
     let cancelled = false;
     const runBatch = async (): Promise<void> => {
@@ -156,7 +164,7 @@ export function usePortfolioPaneStreaming({
         warmupAttemptRef.current.set(key, nowTimestamp);
         return [{ key, instrument }];
       });
-      const snapshotEntries = limitedSnapshotQueue.flatMap((ticker) => {
+      const forcedSnapshotEntries = limitedQuoteSnapshotQueue.flatMap((ticker) => {
         const instrument = instrumentFromTicker(ticker, ticker.metadata.ticker, instrumentOptions);
         if (!instrument) return [];
         const key = visibleWarmupKey("snapshot", ticker);
@@ -164,20 +172,31 @@ export function usePortfolioPaneStreaming({
         warmupAttemptRef.current.set(key, nowTimestamp);
         return [{ key, instrument }];
       });
-      if (quoteEntries.length === 0 && snapshotEntries.length === 0) return;
+      const normalSnapshotEntries = limitedSnapshotQueue.flatMap((ticker) => {
+        const instrument = instrumentFromTicker(ticker, ticker.metadata.ticker, instrumentOptions);
+        if (!instrument) return [];
+        const key = visibleWarmupKey("snapshot", ticker);
+        warmupInFlightRef.current.add(key);
+        warmupAttemptRef.current.set(key, nowTimestamp);
+        return [{ key, instrument }];
+      });
+      if (quoteEntries.length === 0 && forcedSnapshotEntries.length === 0 && normalSnapshotEntries.length === 0) return;
       try {
         await Promise.allSettled([
           quoteEntries.length > 0
             ? sharedCoordinator.loadQuotesBatch(quoteEntries.map((entry) => entry.instrument), { forceRefresh: true })
             : Promise.resolve(),
-          snapshotEntries.length > 0
-            ? sharedCoordinator.loadSnapshotsBatch(snapshotEntries.map((entry) => entry.instrument))
+          forcedSnapshotEntries.length > 0
+            ? sharedCoordinator.loadSnapshotsBatch(forcedSnapshotEntries.map((entry) => entry.instrument), { forceRefresh: true })
+            : Promise.resolve(),
+          normalSnapshotEntries.length > 0
+            ? sharedCoordinator.loadSnapshotsBatch(normalSnapshotEntries.map((entry) => entry.instrument))
             : Promise.resolve(),
         ]);
       } catch {
         // Best-effort warmup for visible rows only.
       } finally {
-        for (const entry of [...quoteEntries, ...snapshotEntries]) {
+        for (const entry of [...quoteEntries, ...forcedSnapshotEntries, ...normalSnapshotEntries]) {
           warmupInFlightRef.current.delete(entry.key);
         }
       }
@@ -191,18 +210,22 @@ export function usePortfolioPaneStreaming({
       cancelled = true;
       clearTimeout(timeoutId);
     };
-  }, [activeSort, appActive, financialsMap, focused, instrumentOptions, sharedCoordinator, sortedTickers, streamWindow, visibleFinancialTickers, visibleWarmupRequirements]);
+  }, [activeSort, appActive, financialsMap, instrumentOptions, sharedCoordinator, sortedTickers, streamWindow, visibleFinancialTickers, visibleWarmupRequirements]);
 
   useEffect(() => {
     if (!appActive) return;
-    if (!focused) return;
     if (!sharedCoordinator) return;
 
     let cancelled = false;
     const runWatchdog = async (): Promise<void> => {
       const nowTimestamp = Date.now();
-      const quoteEntries = visibleFinancialTickers.flatMap((ticker) => {
-        const financials = financialsMap.get(ticker.metadata.ticker);
+      const {
+        financialsMap: latestFinancialsMap,
+        instrumentOptions: latestInstrumentOptions,
+        visibleFinancialTickers: latestVisibleFinancialTickers,
+      } = watchdogInputsRef.current;
+      const quoteEntries = latestVisibleFinancialTickers.flatMap((ticker) => {
+        const financials = latestFinancialsMap.get(ticker.metadata.ticker);
         const key = visibleWarmupKey("quote", ticker);
         if (
           !needsVisibleQuoteWatchdogRefresh(financials, nowTimestamp)
@@ -211,7 +234,7 @@ export function usePortfolioPaneStreaming({
         ) {
           return [];
         }
-        const instrument = instrumentFromTicker(ticker, ticker.metadata.ticker, instrumentOptions);
+        const instrument = instrumentFromTicker(ticker, ticker.metadata.ticker, latestInstrumentOptions);
         if (!instrument) return [];
         warmupInFlightRef.current.add(key);
         warmupAttemptRef.current.set(key, nowTimestamp);
@@ -230,6 +253,7 @@ export function usePortfolioPaneStreaming({
       }
     };
 
+    void runWatchdog();
     const intervalId = setInterval(() => {
       if (!cancelled && mountedRef.current) void runWatchdog();
     }, VISIBLE_QUOTE_STREAM_WATCHDOG_MS);
@@ -238,7 +262,7 @@ export function usePortfolioPaneStreaming({
       cancelled = true;
       clearInterval(intervalId);
     };
-  }, [appActive, financialsMap, focused, instrumentOptions, sharedCoordinator, visibleFinancialTickers]);
+  }, [appActive, sharedCoordinator]);
 
   useQuoteStreaming(streamTargets);
 }

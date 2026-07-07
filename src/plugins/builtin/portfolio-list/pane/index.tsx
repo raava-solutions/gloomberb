@@ -306,12 +306,14 @@ export function PortfolioListPane({ focused, width, height }: PaneProps) {
   const effectiveStreamWindow = useMemo(() => (
     viewMode === "grid"
       ? { start: 0, end: Math.min(sortedTickers.length, 96) }
-      : streamWindow
-  ), [sortedTickers.length, streamWindow, viewMode]);
+      : {
+        start: streamWindow.start,
+        end: Math.min(sortedTickers.length, Math.max(streamWindow.end, height + 4)),
+      }
+  ), [height, sortedTickers.length, streamWindow, viewMode]);
 
   usePortfolioPaneStreaming({
     appActive,
-    focused,
     activeCollectionId: isPortfolioTab ? activeCollectionId : undefined,
     sortedTickers,
     cursorSymbol,

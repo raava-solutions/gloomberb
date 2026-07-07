@@ -6,7 +6,7 @@ import {
 } from "@stoqey/ib";
 import type { QuoteSubscriptionTarget } from "../../../types/data-provider";
 import type { Quote } from "../../../types/financials";
-import { canonicalExchange, normalizeSymbol } from "../../../utils/exchanges";
+import { normalizeSymbol } from "../../../utils/exchanges";
 import type { IbkrGatewayConfig } from "./types";
 import { getIbkrPriceDivisor, normalizeIbkrPriceValue } from "./price-normalization";
 
@@ -35,7 +35,7 @@ export function normalizeQuoteStreamTarget(target: QuoteSubscriptionTarget): Quo
   return {
     ...target,
     symbol,
-    exchange: canonicalExchange(target.exchange),
+    exchange: target.exchange?.trim().toUpperCase() ?? "",
   };
 }
 

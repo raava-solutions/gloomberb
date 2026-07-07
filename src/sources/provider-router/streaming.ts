@@ -1,6 +1,7 @@
 import type { DataProvider, MarketDataRequestContext, QuoteSubscriptionTarget } from "../../types/data-provider";
 import type { Quote } from "../../types/financials";
 import type { BrokerCandidate } from "./brokers";
+import { isProviderQuoteUsableForCurrentSession } from "./financials";
 
 export interface ProviderRouterStreamingDeps {
   providersInPriorityOrder(): DataProvider[];
@@ -67,7 +68,11 @@ export class ProviderRouterStreamingRoutes {
         providerId: streamingProvider.id,
         targetCount: providerTargets.length,
       });
-      unsubscribers.push(streamingProvider.subscribeQuotes(providerTargets, onQuote));
+      unsubscribers.push(streamingProvider.subscribeQuotes(providerTargets, (target, quote) => {
+        if (isProviderQuoteUsableForCurrentSession(quote, target.exchange)) {
+          onQuote(target, quote);
+        }
+      }));
     }
 
     if (unsubscribers.length === 0) {
