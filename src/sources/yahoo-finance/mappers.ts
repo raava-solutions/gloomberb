@@ -286,13 +286,14 @@ export function extractExtendedHoursPrices(
   timestamps: number[],
   closes: (number | null)[],
   marketState: MarketState,
+  regularCloseOverride?: number,
 ): ExtendedHoursData {
   const ctp = meta.currentTradingPeriod;
   if (!ctp || !timestamps.length) return {};
 
   const regStart = ctp.regular?.start ?? 0;
   const regEnd = ctp.regular?.end ?? Infinity;
-  const regularClose = meta.regularMarketPrice ?? meta.chartPreviousClose;
+  const regularClose = regularCloseOverride ?? meta.regularMarketPrice ?? meta.chartPreviousClose;
 
   if (marketState === "PRE") {
     for (let i = timestamps.length - 1; i >= 0; i--) {

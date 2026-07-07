@@ -100,10 +100,24 @@ function dailyReferenceRank(providerId?: string): number {
 
 function priceRank(quote: QuoteContribution): number {
   if (quote.providerId === "ibkr" && quote.dataSource === "live") return 0;
-  if (quote.providerId === "ibkr") return 1;
-  if (quote.providerId === "gloomberb-cloud") return 2;
-  if (quote.providerId === "yahoo") return 3;
-  return 4;
+  return 1;
+}
+
+function priceProviderTieRank(providerId?: string): number {
+  switch (providerId) {
+    case "gloomberb-cloud":
+      return 0;
+    case "yahoo":
+      return 1;
+    case "ibkr":
+      return 2;
+    default:
+      return 3;
+  }
+}
+
+function quoteUpdateTime(quote: QuoteContribution): number {
+  return quote.lastUpdated ?? quote.receivedAt ?? 0;
 }
 
 function sessionConfidenceRank(confidence?: SessionConfidence): number {
@@ -218,7 +232,13 @@ function buildAcceptedPriceCandidates(contributions: QuoteContribution[]): {
     .sort((left, right) => {
       const rankDelta = priceRank(left) - priceRank(right);
       if (rankDelta !== 0) return rankDelta;
-      return (right.lastUpdated ?? 0) - (left.lastUpdated ?? 0);
+      if (priceRank(left) > 0) {
+        const updateDelta = quoteUpdateTime(right) - quoteUpdateTime(left);
+        if (updateDelta !== 0) return updateDelta;
+      }
+      const providerDelta = priceProviderTieRank(left.providerId) - priceProviderTieRank(right.providerId);
+      if (providerDelta !== 0) return providerDelta;
+      return quoteUpdateTime(right) - quoteUpdateTime(left);
     });
 
   const accepted: QuoteContribution[] = [];

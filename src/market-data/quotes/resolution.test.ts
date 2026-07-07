@@ -113,6 +113,102 @@ describe("quote-resolution", () => {
     expect(quote?.provenance?.fields?.previousClose?.providerId).toBe("yahoo");
   });
 
+  test("prefers fresher/provider-ranked non-live price candidates", () => {
+    const now = Date.parse("2026-07-07T11:25:00Z");
+    const cases: Array<{
+      contributions: QuoteContributionMap;
+      expectedPrice: number;
+      expectedProvider: string;
+      expectedChangePercent?: number;
+      expectedRoute?: string;
+    }> = [
+      {
+        contributions: {
+          ibkr: {
+            symbol: "LPK",
+            providerId: "ibkr",
+            dataSource: "delayed",
+            price: 17.75,
+            currency: "EUR",
+            change: -1.85,
+            changePercent: -9.44,
+            previousClose: 19.6,
+            lastUpdated: Date.parse("2026-07-07T11:02:00Z"),
+            receivedAt: Date.parse("2026-07-07T11:02:01Z"),
+            listingExchangeName: "IBIS",
+            routingExchangeName: "SMART",
+            sessionConfidence: "unknown",
+          },
+          yahoo: {
+            symbol: "LPK.DE",
+            providerId: "yahoo",
+            dataSource: "delayed",
+            price: 17.85,
+            currency: "EUR",
+            change: -1.75,
+            changePercent: -8.93,
+            previousClose: 19.6,
+            lastUpdated: Date.parse("2026-07-07T11:24:00Z"),
+            listingExchangeName: "GER",
+            marketState: "REGULAR",
+            sessionConfidence: "derived",
+          },
+        },
+        expectedProvider: "yahoo",
+        expectedPrice: 17.85,
+        expectedChangePercent: ((17.85 - 19.6) / 19.6) * 100,
+        expectedRoute: "SMART",
+      },
+      {
+        contributions: {
+          "gloomberb-cloud": {
+            symbol: "3HNX",
+            providerId: "gloomberb-cloud",
+            dataSource: "delayed",
+            price: 5.81,
+            currency: "GBP",
+            change: -1.58,
+            changePercent: -21.42,
+            previousClose: 7.39,
+            lastUpdated: Date.parse("2026-07-07T11:18:00Z"),
+            listingExchangeName: "LSE",
+            marketState: "REGULAR",
+            sessionConfidence: "derived",
+          },
+          yahoo: {
+            symbol: "3HNX.L",
+            providerId: "yahoo",
+            dataSource: "delayed",
+            price: 5.9775,
+            currency: "GBP",
+            change: -1.4125,
+            changePercent: -19.09,
+            previousClose: 7.39,
+            lastUpdated: Date.parse("2026-07-07T11:24:00Z"),
+            listingExchangeName: "LSE",
+            marketState: "REGULAR",
+            sessionConfidence: "derived",
+          },
+        },
+        expectedProvider: "yahoo",
+        expectedPrice: 5.9775,
+      },
+    ];
+
+    for (const scenario of cases) {
+      const quote = resolveCanonicalQuote(scenario.contributions, now).quote;
+      expect(quote?.providerId).toBe(scenario.expectedProvider);
+      expect(quote?.price).toBe(scenario.expectedPrice);
+      expect(quote?.provenance?.price?.providerId).toBe(scenario.expectedProvider);
+      if (scenario.expectedChangePercent != null) {
+        expect(quote?.changePercent).toBeCloseTo(scenario.expectedChangePercent, 10);
+      }
+      if (scenario.expectedRoute) {
+        expect(quote?.routingExchangeName).toBe(scenario.expectedRoute);
+      }
+    }
+  });
+
   test("prefers yahoo day reference fields over stale cloud previous close data", () => {
     const now = Date.parse("2026-07-06T15:45:00Z");
     const contributions: QuoteContributionMap = {

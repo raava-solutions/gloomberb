@@ -103,8 +103,12 @@ export class YahooFinanceClient implements DataProvider {
   }
 
   /** Fetch extended hours data using 1d intraday chart with pre/post market included */
-  private async fetchExtendedHoursData(symbol: string, meta: NonNullable<ChartResult["meta"]>) {
-    return fetchYahooExtendedHoursData(this.http, symbol, meta);
+  private async fetchExtendedHoursData(
+    symbol: string,
+    meta: NonNullable<ChartResult["meta"]>,
+    regularClose?: number,
+  ) {
+    return fetchYahooExtendedHoursData(this.http, symbol, meta, regularClose);
   }
 
   private async fetchTimeseries(symbol: string, types: string[], period1 = "2010-01-01") {

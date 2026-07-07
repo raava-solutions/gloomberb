@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { buildQuoteStreamSubscriptionKey } from "./quote-streaming";
+import {
+  buildQuoteStreamSubscriptionKey,
+  normalizeQuoteStreamSubscriptionTarget,
+} from "./quote-streaming";
 
 describe("buildQuoteStreamSubscriptionKey", () => {
   test("includes broker context so identical symbols can stream independently", () => {
@@ -28,4 +31,14 @@ describe("buildQuoteStreamSubscriptionKey", () => {
     expect(workKey).not.toBe(personalKey);
   });
 
+  test("keeps saved exchange aliases in stream targets", () => {
+    const target = normalizeQuoteStreamSubscriptionTarget({
+      symbol: "lpk",
+      exchange: "ibis",
+    });
+
+    expect(target?.symbol).toBe("LPK");
+    expect(target?.exchange).toBe("IBIS");
+    expect(buildQuoteStreamSubscriptionKey(target!)).toContain("LPK|IBIS");
+  });
 });
