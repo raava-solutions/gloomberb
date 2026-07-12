@@ -1,5 +1,5 @@
 import type { ColumnConfig } from "../../../types/config";
-import type { AnalystResearchData, CorporateActionsData, TickerFinancials } from "../../../types/financials";
+import type { AnalystResearchData, CorporateActionsData, MarketState, TickerFinancials } from "../../../types/financials";
 import type { EarningsEvent } from "../../../types/data-provider";
 import type { TickerRecord } from "../../../types/ticker";
 import { priceColor } from "../../../theme/colors";
@@ -13,7 +13,13 @@ import {
   formatSignedMarketPrice,
   type MarketFormatOptions,
 } from "../../../market-data/market/format";
-import { getActiveQuoteDisplay, marketStateDot, type ActiveQuoteDisplay } from "../../../market-data/market/status";
+import {
+  getActiveQuoteDisplay,
+  marketChangeColor,
+  marketPriceColor,
+  marketStateDot,
+  type ActiveQuoteDisplay,
+} from "../../../market-data/market/status";
 import { formatOptionTicker } from "../../../utils/options";
 import { PRICE_SPARKLINE_COLUMN_ID } from "../../../components/price-sparkline/view";
 import {
@@ -159,13 +165,14 @@ function getActiveMarketValue(
 export function resolvePortfolioPriceValue(
   activeQuote: ActiveQuoteDisplay | null,
   brokerMarkPrice: number | undefined,
-  formatOptions: MarketFormatOptions,
+  formatOptions: MarketFormatOptions = {},
   maxWidth?: number,
+  marketState?: MarketState,
 ): { text: string; color?: string } {
   if (activeQuote) {
     return {
       text: formatMarketPrice(activeQuote.price, { ...formatOptions, maxWidth }),
-      color: priceColor(activeQuote.change),
+      color: marketPriceColor(activeQuote.change, marketState),
     };
   }
   if (brokerMarkPrice != null) {
@@ -229,12 +236,12 @@ export function getColumnValue(
     case "tags":
       return { text: ticker.metadata.tags.length > 0 ? ticker.metadata.tags.join(",") : "—" };
     case "price":
-      return resolvePortfolioPriceValue(activeQuote, brokerMarkPrice, formatOptions, col.width);
+      return resolvePortfolioPriceValue(activeQuote, brokerMarkPrice, formatOptions, col.width, quote?.marketState);
     case "change":
       if (!activeQuote) return { text: "—" };
       return {
         text: formatSignedMarketPrice(activeQuote.change, { ...formatOptions, maxWidth: col.width }),
-        color: priceColor(activeQuote.change),
+        color: marketChangeColor(activeQuote.change, quote?.marketState),
       };
     case "bid":
       return { text: quote?.bid != null ? formatMarketPrice(quote.bid, { ...formatOptions, maxWidth: col.width }) : "—" };
@@ -258,8 +265,8 @@ export function getColumnValue(
     }
     case "change_pct":
       return activeQuote
-        ? { text: formatPercentRaw(activeQuote.changePercent), color: priceColor(activeQuote.changePercent) }
-        : { text: quote ? formatPercentRaw(quote.changePercent) : "—", color: quote ? priceColor(quote.changePercent) : undefined };
+        ? { text: formatPercentRaw(activeQuote.changePercent), color: marketChangeColor(activeQuote.changePercent, quote?.marketState) }
+        : { text: quote ? formatPercentRaw(quote.changePercent) : "—", color: quote ? marketChangeColor(quote.changePercent, quote.marketState) : undefined };
     case "volume":
       return { text: finiteNumber(quote?.volume) ? formatCompact(quote.volume) : "—" };
     case "dollar_volume": {

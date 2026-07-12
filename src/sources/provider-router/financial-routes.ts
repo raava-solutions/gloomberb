@@ -43,6 +43,19 @@ export interface ProviderRouterFinancialRouteDeps extends Pick<
   primaryRoutes: ProviderRouterPrimaryRoutes;
 }
 
+function withoutSessionState(quote: Quote): Quote {
+  const fallback = { ...quote };
+  delete fallback.marketState;
+  delete fallback.sessionConfidence;
+  delete fallback.preMarketPrice;
+  delete fallback.preMarketChange;
+  delete fallback.preMarketChangePercent;
+  delete fallback.postMarketPrice;
+  delete fallback.postMarketChange;
+  delete fallback.postMarketChangePercent;
+  return fallback;
+}
+
 export class ProviderRouterFinancialRoutes {
   constructor(private readonly deps: ProviderRouterFinancialRouteDeps) {}
 
@@ -169,16 +182,21 @@ export class ProviderRouterFinancialRoutes {
     exchange?: string,
     context?: MarketDataRequestContext,
   ): Promise<Quote | null> {
-    const cached = this.readCachedProviderQuote(ticker, exchange, context);
+    const cached = context?.cacheMode === "refresh"
+      ? null
+      : this.readCachedProviderQuote(ticker, exchange, context);
     if (cached) return cached;
+    const staleFallback = this.readCachedProviderQuote(ticker, exchange, context, true);
     const providerQuote = await this.deps.primaryRoutes.fetchProviderQuote(ticker, exchange, context);
-    return providerQuote?.value ?? null;
+    if (providerQuote) return providerQuote.value;
+    return staleFallback ? withoutSessionState(staleFallback) : null;
   }
 
   private readCachedProviderQuote(
     ticker: string,
     exchange?: string,
     context?: MarketDataRequestContext,
+    includeStale = false,
   ): Quote | null {
     const entityKey = this.deps.getEntityKey(ticker, context?.instrument);
     const entityKeys = [...new Set([entityKey, normalizeTicker(ticker)])];
@@ -186,7 +204,11 @@ export class ProviderRouterFinancialRoutes {
     const sourceKeys = this.deps.getProviderSourceKeys();
     for (const candidateEntityKey of entityKeys) {
       const record = selectCachedResource<Quote>(this.deps.resources, "quote", candidateEntityKey, variantKeys, sourceKeys, false);
-      if (record && !isQuoteStaleForCurrentSession(quoteWithFreshnessExchange(record.value, exchange))) {
+      if (
+        record
+        && (includeStale || !record.stale)
+        && !isQuoteStaleForCurrentSession(quoteWithFreshnessExchange(record.value, exchange))
+      ) {
         return record.value;
       }
     }

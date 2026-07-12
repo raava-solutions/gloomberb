@@ -1,5 +1,7 @@
 import type { MarketState, Quote, QuoteFieldProvenance } from "../../types/financials";
-import { colors } from "../../theme/colors";
+import { blendHex, colors, priceColor } from "../../theme/colors";
+
+const CLOSED_CHANGE_MUTING_RATIO = 0.55;
 
 export interface ActiveQuoteDisplay {
   price: number;
@@ -43,6 +45,22 @@ export function marketStateDot(state?: MarketState): string {
     default:
       return "\u25CC";
   }
+}
+
+export function isClosedMarketState(state?: MarketState): boolean {
+  return state === "CLOSED" || state === "PREPRE" || state === "POSTPOST";
+}
+
+/** Closed prices are final snapshots, so they should not look live or directional. */
+export function marketPriceColor(change: number, state?: MarketState): string {
+  return isClosedMarketState(state) ? colors.textDim : priceColor(change);
+}
+
+/** Preserve a closed session's direction while visually distinguishing it from a live move. */
+export function marketChangeColor(change: number, state?: MarketState): string {
+  const directionalColor = priceColor(change);
+  if (!isClosedMarketState(state) || change === 0) return directionalColor;
+  return blendHex(directionalColor, colors.textDim, CLOSED_CHANGE_MUTING_RATIO);
 }
 
 /** Short exchange display name */

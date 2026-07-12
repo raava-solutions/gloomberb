@@ -135,28 +135,38 @@ describe("YahooFinanceClient exchange aliases", () => {
 
   test("maps IBKR option symbols to Yahoo option quote marks", async () => {
     const provider = new YahooFinanceClient() as any;
-    provider.getOptionsChain = async (ticker: string, _exchange: string, expirationDate: number) => ({
-      underlyingSymbol: ticker,
-      expirationDates: [expirationDate],
-      calls: [{
-        contractSymbol: "AMD270917C00230000",
-        strike: 230,
-        currency: "USD",
-        lastPrice: 251,
-        change: 1.5,
-        percentChange: 0.6,
-        volume: 10,
-        openInterest: 20,
-        bid: 250.25,
-        ask: 254.5,
-        impliedVolatility: 0.4,
-        inTheMoney: false,
-        expiration: expirationDate,
-        lastTradeDate: 1_800_000_000,
-      }],
-      puts: [],
+    const expiration = 1_821_139_200;
+    let underlyingMarketState = "POST";
+    provider.http.fetchJsonWithCrumb = async () => ({
+      optionChain: {
+        result: [{
+          underlyingSymbol: "AMD",
+          expirationDates: [expiration],
+          quote: { marketState: underlyingMarketState },
+          options: [{
+            calls: [{
+              contractSymbol: "AMD270917C00230000",
+              strike: 230,
+              currency: "USD",
+              lastPrice: 251,
+              change: 1.5,
+              percentChange: 0.6,
+              volume: 10,
+              openInterest: 20,
+              bid: 250.25,
+              ask: 254.5,
+              impliedVolatility: 0.4,
+              inTheMoney: false,
+              expiration,
+              lastTradeDate: 1_800_000_000,
+            }],
+            puts: [],
+          }],
+        }],
+      },
     });
 
+    const requestedAt = Date.now();
     const quote = await provider.getQuote("AMD   270917C00230000");
 
     expect(quote).toMatchObject({
@@ -166,8 +176,17 @@ describe("YahooFinanceClient exchange aliases", () => {
       bid: 250.25,
       ask: 254.5,
       providerId: "yahoo",
+      marketState: "CLOSED",
+      sessionConfidence: "derived",
     });
-    expect(quote.lastUpdated).toBe(1_800_000_000_000);
+    expect(quote.lastUpdated).toBeGreaterThanOrEqual(requestedAt);
+
+    underlyingMarketState = "REGULAR";
+    const regularQuote = await provider.getQuote("AMD   270917C00230000");
+    expect(regularQuote).toMatchObject({
+      marketState: "REGULAR",
+      sessionConfidence: "derived",
+    });
   });
 
   test("preserves analyst rating price targets from upgrade history", async () => {
