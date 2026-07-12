@@ -40,7 +40,11 @@ afterEach(async () => {
   testSetup = undefined;
 });
 
-function createChannelPane(controller: ReturnType<typeof createController>, initialChannelId = "equities") {
+function createChannelPane(
+  controller: ReturnType<typeof createController>,
+  initialChannelId = "equities",
+  onChannelChange?: (channelId: string) => void,
+) {
   const state = createInitialState(createDefaultConfig("/tmp/gloomberb-chat"));
 
   return function ChannelPane() {
@@ -54,7 +58,10 @@ function createChannelPane(controller: ReturnType<typeof createController>, init
             height={12}
             focused
             channelId={channelId}
-            onChannelChange={setChannelId}
+            onChannelChange={(nextChannelId) => {
+              onChannelChange?.(nextChannelId);
+              setChannelId(nextChannelId);
+            }}
           />
         </PluginRenderProvider>
       </AppContext>
@@ -240,7 +247,10 @@ describe("ChatContent channel sidebar", () => {
         dmUser: { id: "u2", username: "bob", displayName: "Bob" },
       };
     };
-    const ChannelPane = createChannelPane(controller, "everyone");
+    const selectedChannels: string[] = [];
+    const ChannelPane = createChannelPane(controller, "everyone", (channelId) => {
+      selectedChannels.push(channelId);
+    });
 
     try {
       await act(async () => {
@@ -275,6 +285,7 @@ describe("ChatContent channel sidebar", () => {
       await flushFrame();
 
       expect(openedTargets).toEqual([{ username: "bob" }]);
+      expect(selectedChannels).toEqual(["dm:bob"]);
       expect(setup().captureCharFrame()).toContain("@bob");
       expect(setup().captureCharFrame()).not.toContain("New DM");
     } finally {
