@@ -31,6 +31,7 @@ import {
 import {
   getYahooOptionQuote,
   loadYahooOptionsChain,
+  loadYahooOptionsChainResult,
 } from "./yahoo-finance/options";
 import {
   loadYahooAnalystResearch,
@@ -155,8 +156,13 @@ export class YahooFinanceClient implements DataProvider {
     if (parseOptionSymbol(ticker)) {
       return getYahooOptionQuote({
         context,
-        getOptionsChain: (underlying, requestExchange, expirationDate, requestContext) => (
-          this.getOptionsChain(underlying, requestExchange, expirationDate, requestContext)
+        getOptionsChainResult: (underlying, requestExchange, expirationDate) => (
+          loadYahooOptionsChainResult({
+            exchange: requestExchange ?? "",
+            expirationDate,
+            fetchJsonWithCrumb: (url) => this.http.fetchJsonWithCrumb(url),
+            ticker: underlying,
+          })
         ),
         providerId: this.id,
         ticker,

@@ -367,6 +367,119 @@ describe("AssetDataRouter", () => {
     expect(quote.provenance?.fields?.previousClose?.providerId).toBe("yahoo");
   });
 
+  test("refreshes broker option session references across the market close", async () => {
+    const dbPath = createTempDbPath("option-session-transition");
+    const persistence = new AppPersistence(dbPath);
+    const optionSymbol = "IBIT  281215C00030000";
+    const entityKey = `contract:${optionSymbol}`;
+    const providerSourceKey = "provider:yahoo";
+    const cacheKey = {
+      namespace: "market",
+      kind: "quote",
+      entityKey,
+      variantKey: "",
+      sourceKey: providerSourceKey,
+    };
+    const regularReference = makeQuote({
+      symbol: optionSymbol,
+      providerId: "yahoo",
+      price: 15.775,
+      change: 0.29,
+      changePercent: 1.87,
+      previousClose: 15.485,
+      listingExchangeName: "OPTIONS",
+      marketState: "REGULAR",
+      sessionConfidence: "derived",
+    });
+    let providerCalls = 0;
+    let providerAvailable = true;
+    const provider: DataProvider = {
+      ...fallbackProvider,
+      id: "yahoo",
+      name: "Yahoo",
+      async getQuote() {
+        providerCalls += 1;
+        if (!providerAvailable) throw new Error("temporary provider outage");
+        return {
+          ...regularReference,
+          marketState: "CLOSED",
+          lastUpdated: Date.now(),
+        };
+      },
+    };
+    const broker: BrokerAdapter = {
+      id: "ibkr",
+      name: "IBKR",
+      configSchema: [],
+      async validate() {
+        return true;
+      },
+      async importPositions() {
+        return [];
+      },
+      async getQuote() {
+        return {
+          ...regularReference,
+          providerId: "ibkr",
+          previousClose: 99,
+          marketState: undefined,
+          sessionConfidence: "unknown",
+          dataSource: "live",
+          lastUpdated: Date.now(),
+        };
+      },
+    };
+
+    try {
+      persistence.resources.set(cacheKey, regularReference, {
+        cachePolicy: { staleMs: 60_000, expireMs: 24 * 60 * 60_000 },
+        fetchedAt: Date.now() - 2 * 60_000,
+      });
+      const router = new AssetDataRouter(provider, [], persistence.resources);
+      attachTestRegistry(router, { brokers: [["ibkr", broker]] });
+      setBrokerInstances(router, [brokerInstance()]);
+      const context = {
+        brokerId: "ibkr",
+        brokerInstanceId: "ibkr-work",
+        instrument: {
+          brokerId: "ibkr",
+          brokerInstanceId: "ibkr-work",
+          symbol: "IBIT",
+          localSymbol: optionSymbol,
+          secType: "OPT",
+        },
+      } as const;
+
+      const staleTransition = await router.getQuote(optionSymbol, "", context);
+      expect(staleTransition.marketState).toBe("CLOSED");
+      expect(providerCalls).toBe(1);
+
+      persistence.resources.set(cacheKey, regularReference, {
+        cachePolicy: { staleMs: 60_000, expireMs: 24 * 60 * 60_000 },
+        fetchedAt: Date.now(),
+      });
+      const forcedTransition = await router.getQuote(optionSymbol, "", {
+        ...context,
+        cacheMode: "refresh",
+      });
+      expect(forcedTransition.marketState).toBe("CLOSED");
+      expect(providerCalls).toBe(2);
+
+      providerAvailable = false;
+      persistence.resources.set(cacheKey, regularReference, {
+        cachePolicy: { staleMs: 60_000, expireMs: 24 * 60 * 60_000 },
+        fetchedAt: Date.now() - 2 * 60_000,
+      });
+      const outageFallback = await router.getQuote(optionSymbol, "", context);
+      expect(outageFallback.previousClose).toBe(15.485);
+      expect(outageFallback.provenance?.fields?.previousClose?.providerId).toBe("yahoo");
+      expect(outageFallback.marketState).toBeUndefined();
+      expect(providerCalls).toBe(3);
+    } finally {
+      persistence.close();
+    }
+  });
+
   test("prefers broker options chains for broker-context targets", async () => {
     const chain = {
       underlyingSymbol: "AAPL",
