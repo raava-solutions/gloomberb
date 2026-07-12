@@ -311,11 +311,10 @@ export function ChatContent({
       ? await controller.openDirectChannel({ username: usernames[0] })
       : await controller.openGroupChannel({ usernames });
     setDirectExpanded(true);
-    channelIdRef.current = channel.id;
     selectSidebarChannel(channel.id);
     setSidebarFocused(false);
     closeNewDmDialog();
-  }, [channelIdRef, closeNewDmDialog, controller, selectSidebarChannel, setDirectExpanded, setSidebarFocused]);
+  }, [closeNewDmDialog, controller, selectSidebarChannel, setDirectExpanded, setSidebarFocused]);
 
   useEffect(() => {
     if (!focused && newDmOpen) {
