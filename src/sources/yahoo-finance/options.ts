@@ -1,5 +1,5 @@
 import type { MarketDataRequestContext } from "../../types/data-provider";
-import type { OptionContract, OptionsChain, Quote } from "../../types/financials";
+import type { MarketState, OptionContract, OptionsChain, Quote } from "../../types/financials";
 import { parseOptionSymbol } from "../../utils/options";
 import { getYahooSymbolsToTry } from "./symbols";
 
@@ -14,14 +14,38 @@ interface LoadYahooOptionsChainOptions {
 
 interface GetYahooOptionQuoteOptions {
   context?: MarketDataRequestContext;
-  getOptionsChain: (
+  getOptionsChainResult: (
     ticker: string,
     exchange?: string,
     expirationDate?: number,
     context?: MarketDataRequestContext,
-  ) => Promise<OptionsChain>;
+  ) => Promise<YahooOptionsChainResult>;
   providerId: string;
   ticker: string;
+}
+
+export interface YahooOptionsChainResult {
+  chain: OptionsChain;
+  underlyingMarketState?: MarketState;
+}
+
+const MARKET_STATES = new Set<MarketState>([
+  "PRE",
+  "REGULAR",
+  "POST",
+  "PREPRE",
+  "POSTPOST",
+  "CLOSED",
+]);
+
+function normalizeYahooMarketState(value: unknown): MarketState | undefined {
+  const normalized = typeof value === "string" ? value.toUpperCase() as MarketState : undefined;
+  return normalized && MARKET_STATES.has(normalized) ? normalized : undefined;
+}
+
+function deriveOptionMarketState(underlyingMarketState?: MarketState): MarketState | undefined {
+  if (!underlyingMarketState) return undefined;
+  return underlyingMarketState === "REGULAR" ? "REGULAR" : "CLOSED";
 }
 
 function mapYahooOptionContract(raw: Record<string, any>): OptionContract {
@@ -43,12 +67,12 @@ function mapYahooOptionContract(raw: Record<string, any>): OptionContract {
   };
 }
 
-export async function loadYahooOptionsChain({
+export async function loadYahooOptionsChainResult({
   exchange,
   expirationDate,
   fetchJsonWithCrumb,
   ticker,
-}: LoadYahooOptionsChainOptions): Promise<OptionsChain> {
+}: LoadYahooOptionsChainOptions): Promise<YahooOptionsChainResult> {
   const symbolsToTry = getYahooSymbolsToTry(ticker, exchange);
   let lastError: any;
 
@@ -62,6 +86,7 @@ export async function loadYahooOptionsChain({
           result?: Array<{
             underlyingSymbol?: string;
             expirationDates?: number[];
+            quote?: { marketState?: unknown };
             options?: Array<{
               calls?: Array<Record<string, any>>;
               puts?: Array<Record<string, any>>;
@@ -75,10 +100,13 @@ export async function loadYahooOptionsChain({
 
       const opts = result.options?.[0];
       return {
-        underlyingSymbol: result.underlyingSymbol ?? symbol,
-        expirationDates: result.expirationDates ?? [],
-        calls: (opts?.calls ?? []).map((contract) => mapYahooOptionContract(contract)),
-        puts: (opts?.puts ?? []).map((contract) => mapYahooOptionContract(contract)),
+        chain: {
+          underlyingSymbol: result.underlyingSymbol ?? symbol,
+          expirationDates: result.expirationDates ?? [],
+          calls: (opts?.calls ?? []).map((contract) => mapYahooOptionContract(contract)),
+          puts: (opts?.puts ?? []).map((contract) => mapYahooOptionContract(contract)),
+        },
+        underlyingMarketState: normalizeYahooMarketState(result.quote?.marketState),
       };
     } catch (err) {
       lastError = err;
@@ -87,15 +115,26 @@ export async function loadYahooOptionsChain({
   throw lastError || new Error(`No options chain for ${ticker}`);
 }
 
+export async function loadYahooOptionsChain(
+  options: LoadYahooOptionsChainOptions,
+): Promise<OptionsChain> {
+  return (await loadYahooOptionsChainResult(options)).chain;
+}
+
 export async function getYahooOptionQuote({
   context,
-  getOptionsChain,
+  getOptionsChainResult,
   providerId,
   ticker,
 }: GetYahooOptionQuoteOptions): Promise<Quote> {
   const parsed = parseOptionSymbol(ticker);
   if (!parsed) throw new Error(`Unsupported option symbol ${ticker}`);
-  const chain = await getOptionsChain(parsed.underlying, "", parsed.expTs, context);
+  const { chain, underlyingMarketState } = await getOptionsChainResult(
+    parsed.underlying,
+    "",
+    parsed.expTs,
+    context,
+  );
   const contracts = parsed.side === "C" ? chain.calls : chain.puts;
   const contract = contracts.find((candidate) =>
     Math.abs(candidate.strike - parsed.strike) < 0.001 &&
@@ -110,6 +149,12 @@ export async function getYahooOptionQuote({
       : contract.ask > 0
         ? contract.ask
         : undefined;
+  const marketState = deriveOptionMarketState(underlyingMarketState);
+  const lastUpdated = mark != null
+    ? Date.now()
+    : contract.lastTradeDate > 0
+      ? contract.lastTradeDate * 1000
+      : Date.now();
   return {
     symbol: ticker,
     providerId,
@@ -122,13 +167,13 @@ export async function getYahooOptionQuote({
     ask: contract.ask,
     mark,
     name: contract.contractSymbol,
-    lastUpdated: contract.lastTradeDate > 0
-      ? contract.lastTradeDate * 1000
-      : Date.now(),
+    lastUpdated,
     exchangeName: "OPTIONS",
     fullExchangeName: "OPTIONS",
     listingExchangeName: "OPTIONS",
     listingExchangeFullName: "OPTIONS",
+    marketState,
+    sessionConfidence: marketState ? "derived" : "unknown",
     dataSource: "delayed",
   };
 }

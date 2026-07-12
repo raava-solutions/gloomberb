@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { CollectionSortPreference } from "../../../state/app/context";
 import type { ColumnConfig } from "../../../types/config";
-import type { TickerFinancials } from "../../../types/financials";
+import type { Quote, TickerFinancials } from "../../../types/financials";
 import type { TickerRecord } from "../../../types/ticker";
+import { blendHex, colors } from "../../../theme/colors";
 import {
   calculatePortfolioSummaryTotals,
   getColumnValue,
@@ -29,8 +30,15 @@ function createTicker(overrides: Partial<TickerRecord["metadata"]> = {}): Ticker
   };
 }
 
-function createFinancials(overrides: Partial<TickerFinancials> = {}): TickerFinancials {
+function createFinancials(
+  overrides: Omit<Partial<TickerFinancials>, "quote"> & { quote?: Partial<Quote> } = {},
+): TickerFinancials {
+  const { quote: quoteOverrides, ...financialOverrides } = overrides;
   return {
+    annualStatements: [],
+    quarterlyStatements: [],
+    priceHistory: [],
+    ...financialOverrides,
     quote: {
       symbol: "AAPL",
       price: 120,
@@ -39,12 +47,8 @@ function createFinancials(overrides: Partial<TickerFinancials> = {}): TickerFina
       changePercent: 4.35,
       previousClose: 115,
       lastUpdated: 1_700_000_000_000,
-      ...overrides.quote,
+      ...quoteOverrides,
     },
-    annualStatements: [],
-    quarterlyStatements: [],
-    priceHistory: [],
-    ...overrides,
   };
 }
 
@@ -80,6 +84,39 @@ describe("portfolio-metrics", () => {
     expect(resolvePortfolioPriceValue(null, 382.5)).toEqual({
       text: "382.5",
     });
+  });
+
+  test("mutes completed-session prices and changes without discarding their direction", () => {
+    const ticker = createTicker({
+      positions: [{ portfolio: "main", shares: 10, avgCost: 100, broker: "manual" }],
+    });
+    const priceColumn: ColumnConfig = { id: "price", label: "LAST", width: 10, align: "right" };
+    const changeColumn: ColumnConfig = { id: "change", label: "CHG", width: 8, align: "right" };
+    const changePctColumn: ColumnConfig = { id: "change_pct", label: "CHG%", width: 8, align: "right" };
+    const financials = createFinancials({ quote: { marketState: "CLOSED" } });
+    const mutedPositive = blendHex(colors.positive, colors.textDim, 0.55);
+
+    expect(getColumnValue(priceColumn, ticker, financials, defaultColumnContext)).toEqual({
+      text: "120",
+      color: colors.textDim,
+    });
+    expect(getColumnValue(changeColumn, ticker, financials, defaultColumnContext)).toEqual({
+      text: "+5",
+      color: mutedPositive,
+    });
+    expect(getColumnValue(changePctColumn, ticker, financials, defaultColumnContext)).toEqual({
+      text: "+4.35%",
+      color: mutedPositive,
+    });
+    const unchanged = createFinancials({ quote: { change: 0, changePercent: 0, previousClose: 120, marketState: "CLOSED" } });
+    expect(getColumnValue(changePctColumn, ticker, unchanged, defaultColumnContext)).toEqual({
+      text: "0.00%",
+      color: colors.neutral,
+    });
+
+    const open = createFinancials({ quote: { marketState: "REGULAR" } });
+    expect(getColumnValue(priceColumn, ticker, open, defaultColumnContext).color).toBe(colors.positive);
+    expect(getColumnValue(changePctColumn, ticker, open, defaultColumnContext).color).toBe(colors.positive);
   });
 
   test("calculates portfolio totals from live quotes", () => {
