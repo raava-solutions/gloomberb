@@ -16,6 +16,7 @@ import {
   LAST_VISITED_CHAT_CHANNEL_KEY,
   normalizeChannelId,
 } from "./channels";
+import { clearChatPaneTargetMessage, setChatPaneChannel } from "./pane-state";
 
 interface ChatPaneContentProps {
   width: number;
@@ -63,10 +64,7 @@ export function createChatPane(ChatContent: (props: ChatPaneContentProps) => Rea
       const layout = updatePaneInstance(currentState.config.layout, paneId, (instance) => ({
         ...instance,
         title: nextTitleValue ?? instance.title,
-        settings: (() => {
-          const { targetMessageId: _targetMessageId, ...settings } = instance.settings ?? {};
-          return { ...settings, channelId: nextChannelId };
-        })(),
+        settings: setChatPaneChannel(instance.settings, nextChannelId),
       }));
       const pluginConfig = {
         ...currentState.config.pluginConfig,
@@ -122,10 +120,10 @@ export function createChatPane(ChatContent: (props: ChatPaneContentProps) => Rea
     const clearTargetMessage = useCallback(() => {
       if (!targetMessageId) return;
       const currentState = stateRef.current;
-      const layout = updatePaneInstance(currentState.config.layout, paneId, (instance) => {
-        const { targetMessageId: _targetMessageId, ...settings } = instance.settings ?? {};
-        return { ...instance, settings };
-      });
+      const layout = updatePaneInstance(currentState.config.layout, paneId, (instance) => ({
+        ...instance,
+        settings: clearChatPaneTargetMessage(instance.settings),
+      }));
       const nextConfig = { ...currentState.config, layout };
       const syncedConfig = syncConfigActiveLayoutState(
         nextConfig,
