@@ -16,6 +16,7 @@ import {
   LAST_VISITED_CHAT_CHANNEL_KEY,
   normalizeChannelId,
 } from "./channels";
+import { clearChatPaneTargetMessage, setChatPaneChannel } from "./pane-state";
 
 interface ChatPaneContentProps {
   width: number;
@@ -24,6 +25,8 @@ interface ChatPaneContentProps {
   channelId?: string;
   onChannelChange?: (channelId: string) => void;
   onChannelTitleChange?: (title: string) => void;
+  targetMessageId?: string;
+  onTargetMessageHandled?: () => void;
 }
 
 export function createChatPane(ChatContent: (props: ChatPaneContentProps) => ReactNode) {
@@ -33,6 +36,9 @@ export function createChatPane(ChatContent: (props: ChatPaneContentProps) => Rea
     const paneId = usePaneInstanceId();
     const pane = usePaneInstance();
     const rawPaneChannelId = typeof pane?.settings?.channelId === "string" ? pane.settings.channelId : null;
+    const targetMessageId = typeof pane?.settings?.targetMessageId === "string"
+      ? pane.settings.targetMessageId
+      : undefined;
     const lastVisitedChannelId = useAppSelector((state) => (
       (state.config.pluginConfig["gloomberb-cloud"]?.[LAST_VISITED_CHAT_CHANNEL_KEY] as string | undefined) ??
       DEFAULT_CHAT_CHANNEL_ID
@@ -58,10 +64,7 @@ export function createChatPane(ChatContent: (props: ChatPaneContentProps) => Rea
       const layout = updatePaneInstance(currentState.config.layout, paneId, (instance) => ({
         ...instance,
         title: nextTitleValue ?? instance.title,
-        settings: {
-          ...(instance.settings ?? {}),
-          channelId: nextChannelId,
-        },
+        settings: setChatPaneChannel(instance.settings, nextChannelId),
       }));
       const pluginConfig = {
         ...currentState.config.pluginConfig,
@@ -114,6 +117,24 @@ export function createChatPane(ChatContent: (props: ChatPaneContentProps) => Rea
       persistChatPaneState(channelId, nextTitle);
     }, [channelId, persistChatPaneState]);
 
+    const clearTargetMessage = useCallback(() => {
+      if (!targetMessageId) return;
+      const currentState = stateRef.current;
+      const layout = updatePaneInstance(currentState.config.layout, paneId, (instance) => ({
+        ...instance,
+        settings: clearChatPaneTargetMessage(instance.settings),
+      }));
+      const nextConfig = { ...currentState.config, layout };
+      const syncedConfig = syncConfigActiveLayoutState(
+        nextConfig,
+        currentState.paneState,
+        currentState.focusedPaneId,
+        currentState.activePanel,
+      );
+      dispatch({ type: "SET_CONFIG", config: syncedConfig });
+      scheduleConfigSave(syncedConfig);
+    }, [dispatch, paneId, stateRef, targetMessageId]);
+
     return (
       <ChatContent
         width={width}
@@ -122,6 +143,8 @@ export function createChatPane(ChatContent: (props: ChatPaneContentProps) => Rea
         channelId={channelId}
         onChannelChange={setChannelId}
         onChannelTitleChange={setChannelTitle}
+        targetMessageId={targetMessageId}
+        onTargetMessageHandled={clearTargetMessage}
       />
     );
   };
