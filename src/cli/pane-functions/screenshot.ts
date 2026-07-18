@@ -74,6 +74,49 @@ export interface PaneScreenshotExpectedChartEvidence {
   sourceSeries: PaneScreenshotChartSeriesEvidence[];
 }
 
+export interface PaneScreenshotPriceComparisonEvidence {
+  kind: "price-comparison";
+  symbols: string[];
+  range: string;
+  series: Array<{
+    symbol: string;
+    base: { date: string; value: number };
+    latest: { date: string; value: number };
+    returnPercent: number;
+  }>;
+}
+
+export interface PaneScreenshotFundamentalSeriesEvidence {
+  kind: "fundamental-series";
+  metric: string;
+  period: FundamentalPeriod;
+  series: Array<{
+    symbol: string;
+    rows: Array<{ date: string; value: number }>;
+  }>;
+}
+
+export interface PaneScreenshotFinancialStatementEvidence {
+  kind: "financial-statement";
+  symbol: string;
+  statement: string;
+  period: FundamentalPeriod;
+  latest: {
+    date: string;
+    metrics: Array<{
+      id: string;
+      key: string;
+      label: string;
+      value: number;
+    }>;
+  };
+}
+
+export type PaneScreenshotDataEvidence =
+  | PaneScreenshotPriceComparisonEvidence
+  | PaneScreenshotFundamentalSeriesEvidence
+  | PaneScreenshotFinancialStatementEvidence;
+
 export interface PaneScreenshotResult {
   kind: "pane-screenshot";
   target: string;
@@ -92,6 +135,7 @@ export interface PaneScreenshotResult {
   unavailableSymbols: string[];
   semanticMismatch: boolean;
   usable: boolean;
+  dataEvidence: PaneScreenshotDataEvidence | null;
   outputPath: string;
   render: DesktopPaneShotRenderResult & {
     expectedText: string[];
@@ -258,6 +302,7 @@ export async function renderDesktopShot({
     expectedSelections,
   );
   const expectedChart = shotExpectedChart(resolved, payload);
+  const dataEvidence = shotDataEvidenceFor(resolved, payload);
   const chartEvidenceMismatches = expectedChart
     ? chartEvidenceMismatchesFor(render.semanticUi, expectedChart)
     : [];
@@ -268,7 +313,8 @@ export async function renderDesktopShot({
   const usable = resolved.capability.botSafe
     && resolved.capability.screenshotReadiness === "ready"
     && !empty
-    && complete;
+    && complete
+    && (!requiresStructuredDataEvidence(resolved) || dataEvidence !== null);
   return {
     kind: "pane-screenshot",
     target: resolved.token,
@@ -287,6 +333,7 @@ export async function renderDesktopShot({
     unavailableSymbols,
     semanticMismatch,
     usable,
+    dataEvidence,
     outputPath,
     render: {
       ...render,
@@ -298,6 +345,138 @@ export async function renderDesktopShot({
       chartEvidenceMismatches,
     },
   };
+}
+
+function requiresStructuredDataEvidence(resolved: ResolvedPaneFunction): boolean {
+  return ["price-comparison", "fundamental-series", "financial-statements"]
+    .includes(resolved.capability.id);
+}
+
+const STATEMENT_EVIDENCE_KEYS: Record<string, ReadonlySet<string>> = {
+  income: new Set([
+    "totalRevenue",
+    "grossProfit",
+    "operatingIncome",
+    "netIncome",
+    "netIncomeCommonStockholders",
+    "eps",
+    "basicEps",
+  ]),
+  cashflow: new Set([
+    "operatingCashFlow",
+    "capitalExpenditure",
+    "freeCashFlow",
+  ]),
+  balance: new Set([
+    "totalAssets",
+    "totalLiabilities",
+    "cashAndCashEquivalents",
+    "totalDebt",
+    "totalEquity",
+    "commonStockEquity",
+  ]),
+};
+
+export function shotDataEvidenceFor(
+  resolved: ResolvedPaneFunction,
+  payload: DesktopPaneShotPayload,
+): PaneScreenshotDataEvidence | null {
+  if (resolved.capability.id === "price-comparison") {
+    const range = String(resolved.options.rangePreset ?? "1Y") as TimeRange;
+    const normalizedSeries = payload.financials.map(([symbol, financials]) => ({
+      symbol,
+      points: normalizeChartSeries(symbol, financials, range).points,
+    }));
+    const latestTimestamp = Math.max(
+      ...normalizedSeries.flatMap(({ points }) => points.map(({ date }) => date.getTime())),
+    );
+    if (!Number.isFinite(latestTimestamp)) return null;
+    const projectionStart = subtractTimeRange(new Date(latestTimestamp), range).getTime();
+    const series = normalizedSeries.flatMap(({ symbol, points }) => {
+      const projectionPoints = points.filter(({ date }) => date.getTime() >= projectionStart);
+      const base = projectionPoints[0];
+      const latest = projectionPoints.at(-1);
+      if (!base || !latest || !Number.isFinite(base.close) || !Number.isFinite(latest.close) || base.close === 0) {
+        return [];
+      }
+      return [{
+        symbol,
+        base: { date: base.date.toISOString(), value: base.close },
+        latest: { date: latest.date.toISOString(), value: latest.close },
+        returnPercent: ((latest.close - base.close) / base.close) * 100,
+      }];
+    });
+    if (series.length !== normalizedSeries.length) return null;
+    return {
+      kind: "price-comparison",
+      symbols: series.map(({ symbol }) => symbol),
+      range,
+      series,
+    };
+  }
+
+  if (resolved.capability.id === "fundamental-series") {
+    const metric = resolved.options.metric as GraphMetricKey;
+    const period = resolved.options.period as FundamentalPeriod;
+    const periodCount = resolved.options.periods == null ? null : Number(resolved.options.periods);
+    const evidencePeriodCount = Math.min(
+      periodCount ?? (period === "annual" ? 6 : 8),
+      period === "annual" ? 6 : 8,
+    );
+    const series = payload.financials.map(([symbol, financials]) => ({
+      symbol,
+      rows: limitGraphRowsBySymbol(
+        graphRowsForFinancials(financials, "fundamental", metric, period, symbol),
+        evidencePeriodCount,
+      )
+        .sort((left, right) => left.date.localeCompare(right.date))
+        .map(({ date, value }) => ({ date, value })),
+    }));
+    if (series.some(({ rows }) => rows.length === 0)) return null;
+    return { kind: "fundamental-series", metric, period, series };
+  }
+
+  if (resolved.capability.id === "financial-statements") {
+    const [symbol, financials] = payload.financials[0] ?? [];
+    if (!symbol || !financials) return null;
+    const table = buildFinancialTableModel(financials, {
+      period: resolved.options.period as FundamentalPeriod,
+      statement: String(resolved.options.statement),
+    });
+    if (!table || table.statements.length === 0) return null;
+    const allowedKeys = STATEMENT_EVIDENCE_KEYS[table.subTab.key] ?? new Set<string>();
+    const latestPopulated = table.statements.flatMap((statement, statementIndex) => {
+      const seenKeys = new Set<string>();
+      const metrics = table.rows.flatMap((row) => {
+        const key = String(row.key ?? row.summaryKey ?? "");
+        const value = row.cells[statementIndex]?.value;
+        if (!allowedKeys.has(key) || seenKeys.has(key) || typeof value !== "number" || !Number.isFinite(value)) {
+          return [];
+        }
+        seenKeys.add(key);
+        return [{
+          id: row.id,
+          key,
+          label: row.unitLabel,
+          value,
+        }];
+      });
+      return metrics.length > 0 ? [{ statement, metrics }] : [];
+    })[0];
+    if (!latestPopulated) return null;
+    return {
+      kind: "financial-statement",
+      symbol,
+      statement: table.subTab.key,
+      period: table.period,
+      latest: {
+        date: latestPopulated.statement.date,
+        metrics: latestPopulated.metrics,
+      },
+    };
+  }
+
+  return null;
 }
 
 function normalizeChartSeries(
