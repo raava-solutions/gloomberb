@@ -3,9 +3,12 @@ import type { RemoteUiNodeSnapshot } from "../../remote/types";
 import {
   chartEvidenceMismatchesFor,
   missingActiveTabSelections,
+  shotDataEvidenceFor,
   type PaneScreenshotExpectedChartEvidence,
   type PaneScreenshotExpectedSelection,
 } from "./screenshot";
+import type { DesktopPaneShotPayload } from "../desktop-pane-shot";
+import type { ResolvedPaneFunction } from "./resolver";
 
 describe("pane screenshot active-state verification", () => {
   const expected: PaneScreenshotExpectedSelection[] = [
@@ -66,6 +69,139 @@ describe("pane screenshot chart-data verification", () => {
     ]);
   });
 });
+
+describe("pane screenshot structured data evidence", () => {
+  test("captures the exact comparison projection inputs and return", () => {
+    const evidence = shotDataEvidenceFor(
+      resolved("price-comparison", { rangePreset: "1Y", axisMode: "percent" }),
+      payload([
+        ["AAPL", {
+          priceHistory: [
+            { date: "2025-07-01", close: 100 },
+            { date: "2026-07-01", close: 150 },
+          ],
+        }],
+        ["NVDA", {
+          priceHistory: [
+            { date: "2025-07-01", close: 200 },
+            { date: "2026-07-01", close: 220 },
+          ],
+        }],
+      ]),
+    );
+
+    expect(evidence).toEqual({
+      kind: "price-comparison",
+      symbols: ["AAPL", "NVDA"],
+      range: "1Y",
+      series: [
+        {
+          symbol: "AAPL",
+          base: { date: "2025-07-01T00:00:00.000Z", value: 100 },
+          latest: { date: "2026-07-01T00:00:00.000Z", value: 150 },
+          returnPercent: 50,
+        },
+        {
+          symbol: "NVDA",
+          base: { date: "2025-07-01T00:00:00.000Z", value: 200 },
+          latest: { date: "2026-07-01T00:00:00.000Z", value: 220 },
+          returnPercent: 10,
+        },
+      ],
+    });
+  });
+
+  test("captures rendered fundamental rows and headline statement values", () => {
+    const financials = {
+      priceHistory: [],
+      annualStatements: [
+        {
+          date: "2025-01-31",
+          totalRevenue: 100,
+          operatingCashFlow: 30,
+          capitalExpenditure: -10,
+          freeCashFlow: 20,
+        },
+        {
+          date: "2026-01-31",
+          totalRevenue: 120,
+          operatingCashFlow: 42,
+          capitalExpenditure: -12,
+          freeCashFlow: 30,
+        },
+      ],
+      quarterlyStatements: [],
+    };
+    const graphEvidence = shotDataEvidenceFor(
+      resolved("fundamental-series", {
+        metric: "operatingCashFlow",
+        period: "annual",
+        periods: 2,
+      }),
+      payload([["NVDA", financials]]),
+    );
+    expect(graphEvidence).toEqual({
+      kind: "fundamental-series",
+      metric: "operatingCashFlow",
+      period: "annual",
+      series: [{
+        symbol: "NVDA",
+        rows: [
+          { date: "2025-01-31", value: 30 },
+          { date: "2026-01-31", value: 42 },
+        ],
+      }],
+    });
+
+    const statementEvidence = shotDataEvidenceFor(
+      resolved("financial-statements", { statement: "cashflow", period: "annual" }),
+      payload([["NVDA", financials]]),
+    );
+    expect(statementEvidence).toMatchObject({
+      kind: "financial-statement",
+      symbol: "NVDA",
+      statement: "cashflow",
+      period: "annual",
+      latest: {
+        date: "2026-01-31",
+        metrics: expect.arrayContaining([
+          expect.objectContaining({ key: "operatingCashFlow", value: 42 }),
+          expect.objectContaining({ key: "capitalExpenditure", value: -12 }),
+          expect.objectContaining({ key: "freeCashFlow", value: 30 }),
+        ]),
+      },
+    });
+  });
+});
+
+function resolved(
+  capabilityId: string,
+  options: Record<string, string | number>,
+): ResolvedPaneFunction {
+  return {
+    capability: { id: capabilityId },
+    options,
+  } as unknown as ResolvedPaneFunction;
+}
+
+function payload(
+  financials: Array<[string, Record<string, unknown>]>,
+): DesktopPaneShotPayload {
+  return {
+    financials: financials.map(([symbol, value]) => [
+      symbol,
+      {
+        quote: null,
+        fundamentals: null,
+        profile: null,
+        annualStatements: [],
+        quarterlyStatements: [],
+        priceHistory: [],
+        ...value,
+      },
+    ]),
+  } as unknown as DesktopPaneShotPayload;
+}
 
 function renderedTabs(statement: string, period: string): RemoteUiNodeSnapshot[] {
   return [
