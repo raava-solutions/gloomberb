@@ -147,9 +147,12 @@ export function LocalAgentWorkspacePane({ focused, width, height }: PaneProps) {
     setStatusMessage(null);
     try {
       const status = await checkAiProviderStatus(provider);
-      if (!status.available || !status.authenticated) {
+      if (!status.available || (!status.authenticated && !status.inconclusive)) {
         setStatusMessage(status.message ?? `${provider.name} is not ready.`);
         return;
+      }
+      if (status.inconclusive) {
+        setStatusMessage(status.message ?? `Couldn't verify ${provider.name} sign-in; attempting anyway.`);
       }
       updateWorkspace((current) => createLocalAgentThread(
         current,
@@ -254,7 +257,7 @@ export function LocalAgentWorkspacePane({ focused, width, height }: PaneProps) {
     setCheckingProviderId(provider.id);
     try {
       const providerStatus = await checkAiProviderStatus(provider);
-      if (!providerStatus.available || !providerStatus.authenticated) {
+      if (!providerStatus.available || (!providerStatus.authenticated && !providerStatus.inconclusive)) {
         setStatusMessage(providerStatus.message ?? `${provider.name} is not ready.`);
         busyRef.current = false;
         return;

@@ -5,6 +5,8 @@ import { resolveAiCliCommand } from "./command-resolution";
 import type { AiProvider } from "./providers";
 import { AiStructuredStreamParser } from "./stream-events";
 
+const AUTH_CHECK_TIMEOUT_MS = 15_000;
+
 export class AiRunCancelledError extends Error {
   constructor() {
     super("AI run cancelled");
@@ -32,6 +34,8 @@ export interface AiRunHost {
 export interface AiProviderStatus {
   available: boolean;
   authenticated: boolean;
+  /** True when the check could not determine auth state, such as a timeout or spawn failure. */
+  inconclusive?: boolean;
   message: string | null;
 }
 
@@ -61,7 +65,10 @@ function sanitizeRuntimeError(value: string): string {
     .slice(0, 2_000);
 }
 
-async function checkStatusWithBun(provider: AiProvider): Promise<AiProviderStatus> {
+export async function checkStatusWithBun(
+  provider: AiProvider,
+  timeoutMs: number = AUTH_CHECK_TIMEOUT_MS,
+): Promise<AiProviderStatus> {
   if (typeof Bun === "undefined" || typeof Bun.spawn !== "function") {
     return { available: false, authenticated: false, message: "Local AI status checks require a native Bun host." };
   }
@@ -73,22 +80,23 @@ async function checkStatusWithBun(provider: AiProvider): Promise<AiProviderStatu
     return { available: true, authenticated: true, message: null };
   }
 
-  const proc = Bun.spawn([resolvedCommand.executable, ...provider.authCheckArgs], {
-    env: resolvedCommand.env,
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "ignore",
-  });
   let timer: ReturnType<typeof setTimeout> | null = null;
   try {
+    const proc = Bun.spawn([resolvedCommand.executable, ...provider.authCheckArgs], {
+      env: resolvedCommand.env,
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
         try { proc.kill(); } catch { /* ignore cleanup failures */ }
         reject(new Error(`${provider.name} authentication check timed out.`));
-      }, 5_000);
+      }, timeoutMs);
     });
     const exitCode = await Promise.race([proc.exited, timeout]);
     const statusText = await new Response(proc.stdout).text();
+    const errorText = await new Response(proc.stderr).text();
     let authenticated = exitCode === 0;
     if (provider.id === "claude" && exitCode === 0) {
       try {
@@ -98,14 +106,22 @@ async function checkStatusWithBun(provider: AiProvider): Promise<AiProviderStatu
         authenticated = false;
       }
     }
-    return authenticated
-      ? { available: true, authenticated: true, message: null }
-      : { available: true, authenticated: false, message: remediationFor(provider, "unauthenticated") };
-  } catch (error) {
+    if (authenticated) {
+      return { available: true, authenticated: true, message: null };
+    }
+    const stderrSuffix = errorText.trim() ? ` (${sanitizeRuntimeError(errorText)})` : "";
     return {
       available: true,
       authenticated: false,
-      message: error instanceof Error ? error.message : `${provider.name} authentication check failed.`,
+      message: `${remediationFor(provider, "unauthenticated")}${stderrSuffix}`,
+    };
+  } catch (error) {
+    const fallbackMessage = `${provider.name} authentication check failed.`;
+    return {
+      available: true,
+      authenticated: false,
+      inconclusive: true,
+      message: sanitizeRuntimeError(error instanceof Error ? error.message : fallbackMessage),
     };
   } finally {
     if (timer) clearTimeout(timer);
