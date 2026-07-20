@@ -586,6 +586,8 @@ export const zhCN: Record<string, string> = {
   'Portfolio "{name}" created': "已创建组合“{name}”",
   "{broker} connected. Imported {count} {label}": "{broker} 已连接，导入 {count} 个持仓",
   "No tickers.": "暂无股票。",
+  "No portfolio positions": "暂无组合持仓",
+  "No watchlist tickers": "自选列表暂无股票",
   "No tickers in {name}.": "{name} 中暂无股票。",
   "this collection": "此集合",
   "Press Ctrl+P to add one.": "按 Ctrl+P 添加。",
