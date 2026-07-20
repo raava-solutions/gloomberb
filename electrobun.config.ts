@@ -1,7 +1,7 @@
 import type { ElectrobunConfig } from "electrobun/bun";
 import pkg from "./package.json";
 
-const RELEASE_BASE_URL = "https://github.com/vincelwt/gloomberb/releases/latest/download";
+const RELEASE_BASE_URL = "https://github.com/raava-solutions/gloomberb/releases/latest/download";
 const GENERATE_RELEASE_PATCH = process.platform !== "win32";
 
 const config: ElectrobunConfig = {
@@ -37,7 +37,7 @@ const config: ElectrobunConfig = {
     mac: {
       codesign: true,
       createDmg: true,
-      notarize: true,
+      notarize: !!process.env.GLOOMBERB_NOTARIZE,
       icons: "icon.iconset",
       defaultRenderer: "native",
     },
