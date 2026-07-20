@@ -41,3 +41,4 @@ src-tauri/gen
 
 .codex/
 paseo.json
+.omx/

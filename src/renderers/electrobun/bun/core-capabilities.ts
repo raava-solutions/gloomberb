@@ -8,8 +8,9 @@ import {
   type PluginCapability,
 } from "../../../capabilities";
 import type { AppServices } from "../../../core/app-services";
+import { resolveAiCliCommand } from "../../../plugins/builtin/ai/command-resolution";
 import { getAiProviderDefinitions } from "../../../plugins/builtin/ai/providers";
-import { isAiRunCancelled, runAiPrompt } from "../../../plugins/builtin/ai/runner";
+import { checkAiProviderStatus, isAiRunCancelled, runAiPrompt } from "../../../plugins/builtin/ai/runner";
 import type { BrokerAdapter } from "../../../types/broker";
 import type { AppConfig, BrokerInstanceConfig } from "../../../types/config";
 
@@ -267,9 +268,8 @@ function createNotesFilesCapability(): PluginCapability {
 
 function getAiProviderAvailability(): Record<string, boolean> {
   const availability: Record<string, boolean> = {};
-  const hasBunWhich = typeof Bun !== "undefined" && typeof Bun.which === "function";
   for (const definition of getAiProviderDefinitions()) {
-    availability[definition.id] = hasBunWhich ? !!Bun.which(definition.command) : false;
+    availability[definition.id] = resolveAiCliCommand(definition.command) !== null;
   }
   return availability;
 }
@@ -281,6 +281,15 @@ function createAiRunnerCapability(options: CoreCapabilityOptions): PluginCapabil
     name: "AI Runner",
     operations: {
       getProviderAvailability: op(() => getAiProviderAvailability()),
+      checkProviderStatus: op(async (input: any) => {
+        const providerId = requireString(input.providerId, "AI provider");
+        const providerDefinition = getAiProviderDefinitions().find((entry) => entry.id === providerId);
+        if (!providerDefinition) throw new Error(`Unknown AI provider: ${providerId}`);
+        return checkAiProviderStatus({
+          ...providerDefinition,
+          available: resolveAiCliCommand(providerDefinition.command) !== null,
+        });
+      }),
       run: stream((input: any, emit) => {
         const providerId = requireString(input.providerId, "AI provider");
         const prompt = requireString(input.prompt, "AI prompt");
@@ -288,7 +297,7 @@ function createAiRunnerCapability(options: CoreCapabilityOptions): PluginCapabil
         if (!providerDefinition) {
           throw new Error(`Unknown AI provider: ${providerId}`);
         }
-        if (typeof Bun === "undefined" || typeof Bun.which !== "function" || !Bun.which(providerDefinition.command)) {
+        if (!resolveAiCliCommand(providerDefinition.command)) {
           throw new Error(`${providerDefinition.name} is not installed on this system.`);
         }
 
@@ -300,6 +309,8 @@ function createAiRunnerCapability(options: CoreCapabilityOptions): PluginCapabil
           },
           prompt,
           cwd: optionalString(input.cwd) ?? options.getConfig().dataDir,
+          outputMode: input.outputMode === "structured" ? "structured" : "plain",
+          isolatedWorkspace: input.isolatedWorkspace === true,
           onChunk: (output) => {
             if (!disposed) emit({ kind: "chunk", output });
           },
