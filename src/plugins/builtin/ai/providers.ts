@@ -1,9 +1,14 @@
+import { resolveAiCliCommand } from "./command-resolution";
+
 export interface AiProvider {
   id: string;
   name: string;
   command: string;
   available: boolean;
   buildArgs: (prompt: string) => string[];
+  buildStructuredArgs?: (prompt: string) => string[];
+  authCheckArgs?: string[];
+  authLoginCommand?: string;
 }
 
 export interface AiProviderDefinition extends Omit<AiProvider, "available"> {}
@@ -14,6 +19,22 @@ const PROVIDER_DEFS: AiProviderDefinition[] = [
     name: "Claude",
     command: "claude",
     buildArgs: (prompt) => ["-p", prompt],
+    buildStructuredArgs: (prompt) => [
+      "--print",
+      prompt,
+      "--verbose",
+      "--output-format",
+      "stream-json",
+      "--include-partial-messages",
+      "--no-session-persistence",
+      "--safe-mode",
+      "--tools",
+      "",
+      "--permission-mode",
+      "manual",
+    ],
+    authCheckArgs: ["auth", "status"],
+    authLoginCommand: "claude auth login",
   },
   {
     id: "gemini",
@@ -26,6 +47,21 @@ const PROVIDER_DEFS: AiProviderDefinition[] = [
     name: "Codex",
     command: "codex",
     buildArgs: (prompt) => ["exec", "--skip-git-repo-check", prompt],
+    buildStructuredArgs: (prompt) => [
+      "exec",
+      "--skip-git-repo-check",
+      "--ephemeral",
+      "--ignore-user-config",
+      "--ignore-rules",
+      "--disable",
+      "shell_tool",
+      "--sandbox",
+      "read-only",
+      "--json",
+      prompt,
+    ],
+    authCheckArgs: ["login", "status"],
+    authLoginCommand: "codex login",
   },
 ];
 
@@ -33,13 +69,10 @@ let detectedProviders: AiProvider[] | null = null;
 
 function commandExists(command: string): boolean {
   try {
-    if (typeof Bun !== "undefined" && typeof Bun.which === "function") {
-      return !!Bun.which(command);
-    }
+    return resolveAiCliCommand(command) !== null;
   } catch {
     return false;
   }
-  return false;
 }
 
 export function detectProviders(): AiProvider[] {
@@ -54,6 +87,10 @@ export function detectProviders(): AiProvider[] {
 
 export function getAvailableProviders(providers = detectProviders()): AiProvider[] {
   return providers.filter((provider) => provider.available);
+}
+
+export function getLocalWorkspaceProviders(providers = detectProviders()): AiProvider[] {
+  return providers.filter((provider) => provider.id === "claude" || provider.id === "codex");
 }
 
 export function getAiProvider(providerId: string | null | undefined, providers = detectProviders()): AiProvider | null {
