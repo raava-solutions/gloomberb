@@ -830,6 +830,75 @@ describe("Shell", () => {
     expect({ x: committedPane!.x, y: committedPane!.y, width: committedPane!.width, height: committedPane!.height }).toEqual(expected);
   });
 
+  test("center-swaps a snapped floating pane through pointer preview, release, and rendered geometry", async () => {
+    const config = createDefaultConfig("/tmp/gloomberb-shell-snapped-center-drop-test");
+    const dockedPane = requireLayoutInstance(config, "portfolio-list:main");
+    const floatingPane = requireLayoutInstance(config, "ticker-detail:main");
+    const snappedRect = {
+      instanceId: floatingPane.instanceId,
+      x: 80,
+      y: 4,
+      width: 20,
+      height: 10,
+      zIndex: 75,
+      fixedGeometry: true,
+    };
+    const layout: LayoutConfig = {
+      dockRoot: { kind: "pane", instanceId: dockedPane.instanceId },
+      instances: [{ ...dockedPane }, { ...floatingPane }],
+      floating: [snappedRect],
+      detached: [],
+    };
+    const controls: {
+      state?: ReturnType<typeof createInitialState>;
+      transientLayout: TransientLayoutState | null;
+    } = { transientLayout: null };
+    testSetup = await testRender(
+      <ShellTransientHarness
+        initialState={createShellStateWithLayout(config, layout, floatingPane.instanceId)}
+        registry={createShellPluginRegistry()}
+        controls={controls}
+      />,
+      { width: 120, height: 61 },
+    );
+    await testSetup.renderOnce();
+
+    await act(async () => {
+      await testSetup!.mockMouse.pressDown(82, 5);
+      await testSetup!.renderOnce();
+      await testSetup!.mockMouse.moveTo(59, 30);
+      await testSetup!.renderOnce();
+      await testSetup!.renderOnce();
+    });
+
+    const dockPreview = testSetup.renderer.root.findDescendantById(`drag-preview:${floatingPane.instanceId}`) as BoxRenderable | undefined;
+    expect(dockPreview).toBeDefined();
+    expect({ x: dockPreview!.x, y: dockPreview!.y, width: dockPreview!.width, height: dockPreview!.height })
+      .toEqual({ x: 0, y: 0, width: 120, height: 59 });
+    const floatingPreview = testSetup.renderer.root.findDescendantById(`floating-pane:${dockedPane.instanceId}`) as BoxRenderable | undefined;
+    expect(floatingPreview).toBeDefined();
+    expect({ x: floatingPreview!.x, y: floatingPreview!.y, width: floatingPreview!.width, height: floatingPreview!.height })
+      .toEqual({ x: 80, y: 4, width: 20, height: 10 });
+
+    await act(async () => {
+      await testSetup!.mockMouse.release(59, 30);
+      await testSetup!.renderOnce();
+      await testSetup!.renderOnce();
+    });
+
+    expect(controls.state?.config.layout.dockRoot).toEqual({
+      kind: "pane",
+      instanceId: floatingPane.instanceId,
+    });
+    expect(controls.state?.config.layout.floating).toEqual([
+      { ...snappedRect, instanceId: dockedPane.instanceId },
+    ]);
+    const committedPane = testSetup.renderer.root.findDescendantById(`floating-pane:${dockedPane.instanceId}`) as BoxRenderable | undefined;
+    expect(committedPane).toBeDefined();
+    expect({ x: committedPane!.x, y: committedPane!.y, width: committedPane!.width, height: committedPane!.height })
+      .toEqual({ x: 80, y: 4, width: 20, height: 10 });
+  });
+
   test("keeps the focused textarea cursor visible when it is not covered", async () => {
     const config = createDefaultConfig("/tmp/gloomberb-shell-cursor-visible-test");
     const mainPane = requireLayoutInstance(config, "portfolio-list:main");

@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { shouldConsumeWebAppKeyDown, shouldDispatchWebAppKeyDown } from "./key-event";
+import {
+  shouldConsumeWebAppKeyDown,
+  shouldDispatchWebAppKeyDown,
+  shouldDispatchWebNativeKeyDown,
+} from "./key-event";
 
 function keyEvent(overrides: Record<string, unknown>) {
   return {
@@ -46,16 +50,34 @@ describe("shouldConsumeWebAppKeyDown", () => {
 
   test("bypasses app shortcut dispatch for native control activation keys", () => {
     const button = { tagName: "BUTTON" };
+    const link = { tagName: "A", getAttribute: (name: string) => name === "href" ? "/details" : null };
     const buttonChild = {
       tagName: "SVG",
       closest: (selector: string) => selector.includes("button") ? button : null,
     };
 
     for (const key of ["Enter", "Return", " "]) {
-      expect(shouldDispatchWebAppKeyDown(keyEvent({ key, target: button }))).toBe(false);
-      expect(shouldDispatchWebAppKeyDown(keyEvent({ key, target: buttonChild }))).toBe(false);
+      for (const target of [button, buttonChild, link, { tagName: "SUMMARY" }]) {
+        expect(shouldDispatchWebAppKeyDown(keyEvent({ key, target }))).toBe(false);
+      }
     }
 
     expect(shouldDispatchWebAppKeyDown(keyEvent({ key: "+", target: button }))).toBe(true);
+    expect(shouldDispatchWebAppKeyDown(keyEvent({ key: "Enter", target: { tagName: "A", getAttribute: () => null } }))).toBe(true);
+  });
+
+  test("keeps native renderer keypresses out of editable DOM controls", () => {
+    const editableTargets = [
+      { tagName: "INPUT" },
+      { tagName: "TEXTAREA" },
+      { tagName: "SELECT" },
+      { tagName: "DIV", isContentEditable: true },
+      { tagName: "SPAN", closest: (selector: string) => selector.includes("contenteditable") ? {} : null },
+    ];
+
+    for (const target of editableTargets) {
+      expect(shouldDispatchWebNativeKeyDown(keyEvent({ key: "x", target }))).toBe(false);
+      expect(shouldDispatchWebNativeKeyDown(keyEvent({ key: "Enter", target }))).toBe(false);
+    }
   });
 });

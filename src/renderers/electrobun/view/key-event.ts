@@ -59,7 +59,8 @@ function isNativeKeyboardControlTarget(target: EventTarget | null): boolean {
   if (!element) return false;
 
   const tagName = getTargetTagName(element);
-  if (tagName === "BUTTON" || tagName === "A" || tagName === "SUMMARY") return true;
+  if (tagName === "BUTTON" || tagName === "SUMMARY") return true;
+  if (tagName === "A" && element.getAttribute?.("href") != null) return true;
 
   return targetHasClosest(element, "button, a[href], summary");
 }
@@ -83,6 +84,10 @@ export function shouldDispatchWebAppKeyDown(event: WebKeyDefaultEvent): boolean 
     || !!event.ctrlKey
     || !!event.metaKey
     || !!event.altKey;
+}
+
+export function shouldDispatchWebNativeKeyDown(event: WebKeyDefaultEvent): boolean {
+  return !isEditableKeyboardTarget(event.target) && shouldDispatchWebAppKeyDown(event);
 }
 
 export function shouldConsumeWebAppKeyDown(event: WebKeyDefaultEvent): boolean {

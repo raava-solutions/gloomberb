@@ -81,6 +81,7 @@ interface ShortcutEntry {
   handlerRef: { current: (event: KeyEventLike) => void };
   enabledRef: { current: boolean };
   allowEditableRef: { current: boolean };
+  interceptNativeRef: { current: boolean };
   phase: NonNullable<ShortcutOptions["phase"]>;
   order: number;
 }
@@ -103,28 +104,46 @@ function getViewport() {
   return viewportSnapshot;
 }
 
+function dispatchShortcutEntries(
+  shortcutEvent: KeyEventLike,
+  entries: readonly ShortcutEntry[],
+  nativeInterceptionOnly = false,
+): void {
+  for (const phase of ["before", "normal", "after"] as const) {
+    if (phase === "after" && (shortcutEvent.defaultPrevented || shortcutEvent.propagationStopped)) break;
+    const phaseEntries = entries
+      .filter((entry) => entry.phase === phase)
+      .sort((left, right) => (
+        phase === "before" && left.interceptNativeRef.current !== right.interceptNativeRef.current
+          ? Number(right.interceptNativeRef.current) - Number(left.interceptNativeRef.current)
+          : left.order - right.order
+      ));
+    for (const entry of phaseEntries) {
+      if (!entry.enabledRef.current) continue;
+      if (nativeInterceptionOnly && (phase !== "before" || !entry.interceptNativeRef.current)) continue;
+      if (!shouldDeliverShortcut(shortcutEvent, entry.allowEditableRef.current)) continue;
+      entry.handlerRef.current(shortcutEvent);
+      if (shortcutEvent.propagationStopped) break;
+    }
+    if (shortcutEvent.propagationStopped) break;
+  }
+}
+
+export function dispatchWebAppKeyDown(event: KeyboardEvent, entries: readonly ShortcutEntry[]): void {
+  if (event.defaultPrevented || event.isComposing) return;
+  const shortcutEvent = toKeyEventLike(event);
+  const nativeInterceptionOnly = !shouldDispatchWebAppKeyDown(event);
+
+  dispatchShortcutEntries(shortcutEvent, entries, nativeInterceptionOnly);
+  if (!nativeInterceptionOnly && shouldConsumeWebAppKeyDown(event)) event.preventDefault();
+}
+
 export function WebInputHostProvider({ children }: { children: ReactNode }) {
   const shortcutsRef = useRef<ShortcutEntry[]>([]);
 
-  const dispatchShortcut = (shortcutEvent: KeyEventLike) => {
-    for (const phase of ["before", "normal", "after"] as const) {
-      if (phase === "after" && (shortcutEvent.defaultPrevented || shortcutEvent.propagationStopped)) break;
-      for (const entry of shortcutsRef.current) {
-        if (entry.phase !== phase || !entry.enabledRef.current) continue;
-        if (!shouldDeliverShortcut(shortcutEvent, entry.allowEditableRef.current)) continue;
-        entry.handlerRef.current(shortcutEvent);
-        if (shortcutEvent.propagationStopped) break;
-      }
-      if (shortcutEvent.propagationStopped) break;
-    }
-  };
-
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!shouldDispatchWebAppKeyDown(event)) return;
-      const shortcutEvent = toKeyEventLike(event);
-      dispatchShortcut(shortcutEvent);
-      if (shouldConsumeWebAppKeyDown(event)) event.preventDefault();
+      dispatchWebAppKeyDown(event, shortcutsRef.current);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -140,7 +159,7 @@ export function WebInputHostProvider({ children }: { children: ReactNode }) {
       if (!isMouseBackNavigationButton(event.button)) return;
       event.preventDefault();
       event.stopPropagation();
-      dispatchShortcut(toMouseBackKeyEventLike(event));
+      dispatchShortcutEntries(toMouseBackKeyEventLike(event), shortcutsRef.current);
     };
 
     window.addEventListener("mousedown", preventBrowserBack, true);
@@ -158,15 +177,18 @@ export function WebInputHostProvider({ children }: { children: ReactNode }) {
       const handlerRef = useRef(handler);
       const enabledRef = useRef(options?.enabled !== false);
       const allowEditableRef = useRef(options?.allowEditable === true);
+      const interceptNativeRef = useRef(options?.interceptNative === true);
       handlerRef.current = handler;
       enabledRef.current = options?.enabled !== false;
       allowEditableRef.current = options?.allowEditable === true;
+      interceptNativeRef.current = options?.interceptNative === true;
 
       useLayoutEffect(() => {
         const entry: ShortcutEntry = {
           handlerRef,
           enabledRef,
           allowEditableRef,
+          interceptNativeRef,
           phase: options?.phase ?? "normal",
           order: nextShortcutOrder++,
         };

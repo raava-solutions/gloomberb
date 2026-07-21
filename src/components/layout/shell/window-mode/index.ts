@@ -259,7 +259,12 @@ export function useShellWindowMode({
       event.preventDefault();
       event.stopPropagation();
     }
-  }, { phase: "before", enabled: !!windowMode });
+  }, {
+    phase: "before",
+    enabled: !!windowMode,
+    allowEditable: true,
+    interceptNative: true,
+  });
 
   return {
     activeLayout,
