@@ -28,12 +28,19 @@ class FocusableControl extends EventTarget {
     private readonly onFocus: (control: FocusableControl) => void,
     readonly onNativeActivate: () => void = () => {},
     readonly onKeyDown: (event: TestKeyboardEvent) => void = () => {},
+    readonly runDefaultAction: (event: TestKeyboardEvent) => void = () => {},
   ) {
     super();
   }
 
   focus(): void {
     this.onFocus(this);
+  }
+}
+
+class TestForm extends EventTarget {
+  requestSubmit(): void {
+    this.dispatchEvent(new Event("submit", { cancelable: true }));
   }
 }
 
@@ -78,6 +85,14 @@ class TestWindow {
     }, onNativeActivate, onKeyDown);
   }
 
+  createFormInput(form: TestForm, onKeyDown: (event: TestKeyboardEvent) => void): FocusableControl {
+    return new FocusableControl("INPUT", (control) => {
+      this.activeElement = control;
+    }, undefined, onKeyDown, (event) => {
+      if (event.key === "Enter") form.requestSubmit();
+    });
+  }
+
   emitKeyDown(key: string, options: { shift?: boolean } = {}): TestKeyboardEvent {
     if (!this.activeElement) throw new Error("focus a control before emitting a key");
     const event = {
@@ -106,6 +121,7 @@ class TestWindow {
         else listener.handleEvent(event);
       }
     }
+    if (!event.defaultPrevented) this.activeElement.runDefaultAction(event);
     return event;
   }
 }
@@ -214,6 +230,7 @@ describe("WebInputHostProvider Window Edit registration", () => {
       startWindowMode?: (paneId?: string, mode?: "move" | "resize") => void;
       windowMode?: WindowEditState | null;
     } = {};
+    const inactiveEnterPath: string[] = [];
 
     function Harness() {
       const result = useShellWindowMode({
@@ -255,13 +272,23 @@ describe("WebInputHostProvider Window Edit registration", () => {
       await testSetup!.renderOnce();
     });
 
-    const formInput = testWindow.createControl("INPUT", () => {}, (event) => {
-      inputKeyDowns += 1;
-      if (event.key !== "Enter") return;
-      event.preventDefault();
+    const form = new TestForm();
+    form.addEventListener("submit", () => {
+      inactiveEnterPath.push("submit");
       formSubmits += 1;
     });
+    const formInput = testWindow.createFormInput(form, (event) => {
+      inputKeyDowns += 1;
+      if (event.key === "Enter") inactiveEnterPath.push("target");
+    });
     formInput.focus();
+    testWindow.addEventListener("keydown", (event) => {
+      const keyboardEvent = event as TestKeyboardEvent;
+      if (keyboardEvent.key !== "Enter") return;
+      expect(keyboardEvent.defaultPrevented).toBe(false);
+      expect(keyboardEvent.propagationStopped).toBe(false);
+      inactiveEnterPath.push("bubble");
+    });
     await act(async () => {
       testWindow.emitKeyDown("ArrowUp");
       await testSetup!.renderOnce();
@@ -292,7 +319,8 @@ describe("WebInputHostProvider Window Edit registration", () => {
 
     const inactiveEnter = testWindow.emitKeyDown("Enter");
     expect({ inputKeyDowns, formSubmits }).toEqual({ inputKeyDowns: 1, formSubmits: 1 });
-    expect(inactiveEnter.defaultPrevented).toBe(true);
+    expect(inactiveEnterPath).toEqual(["target", "bubble", "submit"]);
+    expect(inactiveEnter.defaultPrevented).toBe(false);
     expect(inactiveEnter.propagationStopped).toBe(false);
   });
 
