@@ -51,10 +51,13 @@ function createPointerEvent(
   };
 }
 
-function createDragRuntime(): ShellDragRuntimeState {
+function createDragRuntime(): ShellDragRuntimeState & {
+  dragFloatingRects: Array<ShellDragRuntimeState["dragFloatingRect"]>;
+} {
   const dragRef = { current: null } as ShellDragRuntimeState["dragRef"];
   const dividerPreviewRef = { current: null } as ShellDragRuntimeState["dividerPreviewRef"];
   const dockPreviewRef = { current: null } as ShellDragRuntimeState["dockPreviewRef"];
+  const dragFloatingRects: Array<ShellDragRuntimeState["dragFloatingRect"]> = [];
   return {
     cancelActiveDrag() {
       dragRef.current = null;
@@ -67,12 +70,13 @@ function createDragRuntime(): ShellDragRuntimeState {
     dockPreviewRef,
     dragCursor: null,
     dragFloatingRect: null,
+    dragFloatingRects,
     dragRef,
     hasActiveDrag: () => dragRef.current != null,
     setDragCursor() {},
     updateDividerPreview(next) { dividerPreviewRef.current = next; },
     updateDockPreview(next) { dockPreviewRef.current = next; },
-    updateDragFloatingRect() {},
+    updateDragFloatingRect(next) { dragFloatingRects.push(next); },
   };
 }
 
@@ -260,6 +264,53 @@ describe("useShellNativePointerRuntime", () => {
     expect(toggleDown.defaultPrevented).toBe(true);
     expect(toggleDown.propagationStopped).toBe(true);
     expect(dragRef.current).toBeNull();
+  });
+
+  test("resizes a small snapped pane without expanding it or losing fixed geometry", () => {
+    const snappedRect = {
+      instanceId: "source:main",
+      x: 80,
+      y: 4,
+      width: 6,
+      height: 3,
+      zIndex: 75,
+      fixedGeometry: true,
+    };
+    const layout: LayoutConfig = {
+      dockRoot: null,
+      instances: [createPaneInstance("source", { instanceId: "source:main" })],
+      floating: [snappedRect],
+      detached: [],
+    };
+    const { dragRuntime, persistedLayouts, runtime } = renderIntegratedPointerRuntime(layout);
+    const down = createPointerEvent(
+      "down",
+      snappedRect.x + snappedRect.width,
+      snappedRect.y + snappedRect.height + NATIVE_APP_HEADER_HEIGHT,
+    );
+
+    runtime.startNativeFloatResize("source:main", snappedRect, "bottom-right", down);
+    const drag = createPointerEvent("drag", down.x + 2, down.preciseY! + 1);
+    runtime.handleNativeDrag(drag);
+
+    expect(dragRuntime.dragFloatingRects.at(-1)).toEqual({
+      paneId: "source:main",
+      rect: { x: 80, y: 4, width: 8, height: 4, zIndex: 75, fixedGeometry: true },
+    });
+
+    const release = createPointerEvent("drag-end", drag.x, drag.preciseY!);
+    runtime.handleNativeDrag(release);
+
+    expect(persistedLayouts).toHaveLength(1);
+    expect(persistedLayouts[0]!.floating).toEqual([{
+      instanceId: "source:main",
+      x: 80,
+      y: 4,
+      width: 8,
+      height: 4,
+      zIndex: 75,
+      fixedGeometry: true,
+    }]);
   });
 
   for (const operation of [

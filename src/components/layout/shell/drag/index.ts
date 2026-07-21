@@ -215,6 +215,8 @@ export function resolveFloatResizeRect(
 ): FloatingRect {
   const dx = pointerX - drag.startX;
   const dy = pointerY - drag.startY;
+  const minWidth = drag.origRect.fixedGeometry ? 1 : MIN_FLOAT_WIDTH;
+  const minHeight = drag.origRect.fixedGeometry ? 1 : MIN_FLOAT_HEIGHT;
   let left = drag.origRect.x;
   let top = drag.origRect.y;
   let right = drag.origRect.x + drag.origRect.width;
@@ -225,15 +227,15 @@ export function resolveFloatResizeRect(
   const affectsBottom = drag.corner === "bottom-left" || drag.corner === "bottom-right" || drag.corner === "bottom";
 
   if (affectsLeft) {
-    left = Math.max(0, Math.min(left + dx, right - MIN_FLOAT_WIDTH));
+    left = Math.max(0, Math.min(left + dx, right - minWidth));
   } else if (affectsRight) {
-    right = Math.min(totalWidth, Math.max(right + dx, left + MIN_FLOAT_WIDTH));
+    right = Math.min(totalWidth, Math.max(right + dx, left + minWidth));
   }
 
   if (affectsTop) {
-    top = Math.max(0, Math.min(top + dy, bottom - MIN_FLOAT_HEIGHT));
+    top = Math.max(0, Math.min(top + dy, bottom - minHeight));
   } else if (affectsBottom) {
-    bottom = Math.min(totalHeight, Math.max(bottom + dy, top + MIN_FLOAT_HEIGHT));
+    bottom = Math.min(totalHeight, Math.max(bottom + dy, top + minHeight));
   }
 
   return constrainFloatingRectToBounds({
@@ -242,6 +244,7 @@ export function resolveFloatResizeRect(
     width: right - left,
     height: bottom - top,
     zIndex: drag.origRect.zIndex,
+    fixedGeometry: drag.origRect.fixedGeometry,
   }, totalWidth, totalHeight);
 }
 

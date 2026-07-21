@@ -164,6 +164,43 @@ describe("window edit mode", () => {
     expect(cornerNext.dirty).toBe(true);
   });
 
+  test("resizes a small snapped pane without applying ordinary float minimums", () => {
+    const layout: LayoutConfig = {
+      dockRoot: null,
+      instances: [pane("float-a")],
+      floating: [{
+        instanceId: "float-a",
+        x: 20,
+        y: 8,
+        width: 6,
+        height: 3,
+        zIndex: 50,
+        fixedGeometry: true,
+      }],
+      detached: [],
+    };
+    const state: WindowEditState = {
+      paneId: "float-a",
+      previewLayout: layout,
+      mode: "resize",
+      focus: { kind: "floating-resize", corner: "bottom-right" },
+      dirty: false,
+    };
+
+    const next = applyWindowEditDirection(state, "right", false, bounds, {});
+
+    expect(next.previewLayout.floating[0]).toEqual({
+      instanceId: "float-a",
+      x: 20,
+      y: 8,
+      width: 8,
+      height: 3,
+      zIndex: 50,
+      fixedGeometry: true,
+    });
+    expect(next.dirty).toBe(true);
+  });
+
   test("cycles through all eight floating resize handles", () => {
     const layout: LayoutConfig = {
       dockRoot: null,
