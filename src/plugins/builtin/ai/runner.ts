@@ -1,4 +1,5 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveAiCliCommand } from "./command-resolution";
@@ -15,20 +16,28 @@ export class AiRunCancelledError extends Error {
 }
 
 export interface AiRunController {
-  done: Promise<string>;
+  done: Promise<AiRunResult>;
   cancel: () => void;
+}
+
+export interface AiRunResult {
+  output: string;
+  sessionId: string | null;
 }
 
 export interface AiRunHost {
   run(options: {
     provider: AiProvider;
     prompt: string;
+    sessionId?: string;
     cwd?: string;
-    onChunk?: (output: string) => void;
+    onChunk?: (delta: string) => void;
     outputMode?: "plain" | "structured";
     isolatedWorkspace?: boolean;
   }): AiRunController;
   checkStatus?(provider: AiProvider): Promise<AiProviderStatus>;
+  ensureThreadWorkspace?(threadId: string): Promise<string>;
+  removeThreadWorkspace?(threadId: string): Promise<void>;
 }
 
 export interface AiProviderStatus {
@@ -40,9 +49,13 @@ export interface AiProviderStatus {
 }
 
 let configuredHost: AiRunHost | null = null;
+const providerStatusCache = new Map<string, Promise<AiProviderStatus>>();
+const isolatedThreadWorkspaces = new Map<string, Promise<string>>();
+const AUTH_FAILURE_PATTERN = /not authenticated|authentication required|not logged in|login required|credential(?:s)? (?:expired|required)|refresh token/i;
 
 export function setAiRunHost(host: AiRunHost | null): void {
   configuredHost = host;
+  providerStatusCache.clear();
 }
 
 export function isAiRunCancelled(error: unknown): boolean {
@@ -129,21 +142,58 @@ export async function checkStatusWithBun(
 }
 
 export function checkAiProviderStatus(provider: AiProvider): Promise<AiProviderStatus> {
-  return configuredHost?.checkStatus?.(provider) ?? checkStatusWithBun(provider);
+  const cached = providerStatusCache.get(provider.id);
+  if (cached) return cached;
+  const pending = configuredHost?.checkStatus?.(provider) ?? checkStatusWithBun(provider);
+  providerStatusCache.set(provider.id, pending);
+  void pending.then((status) => {
+    if (!status.available || (!status.authenticated && !status.inconclusive)) {
+      providerStatusCache.delete(provider.id);
+    }
+  }, () => {
+    providerStatusCache.delete(provider.id);
+  });
+  return pending;
+}
+
+export function ensureIsolatedThreadWorkspace(threadId: string): Promise<string> {
+  if (configuredHost?.ensureThreadWorkspace) return configuredHost.ensureThreadWorkspace(threadId);
+  const existing = isolatedThreadWorkspaces.get(threadId);
+  if (existing) return existing;
+  const workspaceId = createHash("sha256").update(threadId).digest("hex");
+  const path = join(tmpdir(), "gloomberb-local-agent-threads", workspaceId);
+  const pending = mkdir(path, { recursive: true }).then(() => path);
+  isolatedThreadWorkspaces.set(threadId, pending);
+  void pending.catch(() => isolatedThreadWorkspaces.delete(threadId));
+  return pending;
+}
+
+export async function removeIsolatedThreadWorkspace(threadId: string): Promise<void> {
+  if (configuredHost?.removeThreadWorkspace) {
+    await configuredHost.removeThreadWorkspace(threadId);
+    return;
+  }
+  const pending = isolatedThreadWorkspaces.get(threadId);
+  isolatedThreadWorkspaces.delete(threadId);
+  if (!pending) return;
+  const path = await pending.catch(() => null);
+  if (path) await rm(path, { recursive: true, force: true }).catch(() => {});
 }
 
 function runWithBun({
   provider,
   prompt,
-  cwd = typeof process !== "undefined" ? process.cwd() : ".",
+  sessionId,
+  cwd,
   onChunk,
   outputMode = "plain",
   isolatedWorkspace = false,
 }: {
   provider: AiProvider;
   prompt: string;
+  sessionId?: string;
   cwd?: string;
-  onChunk?: (output: string) => void;
+  onChunk?: (delta: string) => void;
   outputMode?: "plain" | "structured";
   isolatedWorkspace?: boolean;
 }): AiRunController {
@@ -166,20 +216,22 @@ function runWithBun({
     }
 
     const args = outputMode === "structured"
-      ? provider.buildStructuredArgs?.(prompt)
+      ? sessionId
+        ? provider.buildResumeArgs?.(prompt, sessionId) ?? provider.buildStructuredArgs?.(prompt)
+        : provider.buildStructuredArgs?.(prompt)
       : provider.buildArgs(prompt);
     if (!args) {
       throw new Error(`${provider.name} does not support structured non-interactive output.`);
     }
 
-    const isolatedCwd = isolatedWorkspace
+    const ownedIsolatedCwd = isolatedWorkspace && !cwd
       ? await mkdtemp(join(tmpdir(), "gloomberb-local-agent-"))
       : null;
     let proc: BunSubprocess | null = null;
     try {
       if (cancelled) throw new AiRunCancelledError();
       proc = Bun.spawn([resolvedCommand.executable, ...args], {
-        cwd: isolatedCwd ?? cwd,
+        cwd: ownedIsolatedCwd ?? cwd ?? (typeof process !== "undefined" ? process.cwd() : "."),
         env: resolvedCommand.env,
         stdin: "ignore",
         stdout: "pipe",
@@ -201,23 +253,29 @@ function runWithBun({
         if (cancelled) throw new AiRunCancelledError();
         const decoded = decoder.decode(value, { stream: true });
         if (structuredParser) {
-          const nextOutput = structuredParser.push(decoded).transcript;
-          if (nextOutput !== fullOutput) {
-            fullOutput = nextOutput;
-            onChunk?.(fullOutput);
-          }
+          fullOutput = structuredParser.push(decoded).transcript;
+          const delta = structuredParser.takeDelta();
+          if (delta) onChunk?.(delta);
         } else {
           fullOutput += decoded;
-          onChunk?.(fullOutput);
+          onChunk?.(decoded);
         }
       }
 
       const tail = decoder.decode();
-      if (structuredParser && tail) structuredParser.push(tail);
+      if (structuredParser && tail) {
+        fullOutput = structuredParser.push(tail).transcript;
+        const delta = structuredParser.takeDelta();
+        if (delta) onChunk?.(delta);
+      } else if (tail) {
+        fullOutput += tail;
+        onChunk?.(tail);
+      }
       const structuredResult = structuredParser?.finish();
-      if (structuredResult && structuredResult.transcript !== fullOutput) {
+      if (structuredResult) {
         fullOutput = structuredResult.transcript;
-        onChunk?.(fullOutput);
+        const delta = structuredParser?.takeDelta() ?? "";
+        if (delta) onChunk?.(delta);
       }
 
       const exitCode = await proc.exited;
@@ -226,7 +284,8 @@ function runWithBun({
       if (cancelled) throw new AiRunCancelledError();
       if (exitCode !== 0 || structuredResult?.terminalError) {
         const errorText = sanitizeRuntimeError(structuredResult?.terminalError || stderr || fullOutput);
-        if (/not authenticated|authentication required|not logged in|login required|credential(?:s)? (?:expired|required)|refresh token/i.test(errorText)) {
+        if (AUTH_FAILURE_PATTERN.test(errorText)) {
+          providerStatusCache.delete(provider.id);
           throw new Error(remediationFor(provider, "unauthenticated"));
         }
         throw new Error(errorText || `${provider.name} exited with status ${exitCode}.`);
@@ -237,7 +296,7 @@ function runWithBun({
         throw new Error(stderr || `${provider.name} returned an empty response.`);
       }
 
-      return finalOutput;
+      return { output: finalOutput, sessionId: structuredParser?.sessionId() ?? sessionId ?? null };
     } catch (error) {
       try { proc?.kill(); } catch { /* ignore cleanup failures */ }
       await proc?.exited.catch(() => {});
@@ -245,7 +304,7 @@ function runWithBun({
       throw error;
     } finally {
       processRef = null;
-      if (isolatedCwd) await rm(isolatedCwd, { recursive: true, force: true }).catch(() => {});
+      if (ownedIsolatedCwd) await rm(ownedIsolatedCwd, { recursive: true, force: true }).catch(() => {});
     }
   })();
 
@@ -265,6 +324,7 @@ function runWithBun({
 export function runAiPrompt({
   provider,
   prompt,
+  sessionId,
   cwd,
   onChunk,
   outputMode,
@@ -272,10 +332,28 @@ export function runAiPrompt({
 }: {
   provider: AiProvider;
   prompt: string;
+  sessionId?: string;
   cwd?: string;
-  onChunk?: (output: string) => void;
+  onChunk?: (delta: string) => void;
   outputMode?: "plain" | "structured";
   isolatedWorkspace?: boolean;
 }): AiRunController {
-  return (configuredHost ?? { run: runWithBun }).run({ provider, prompt, cwd, onChunk, outputMode, isolatedWorkspace });
+  const controller = (configuredHost ?? { run: runWithBun }).run({
+    provider,
+    prompt,
+    sessionId,
+    cwd,
+    onChunk,
+    outputMode,
+    isolatedWorkspace,
+  });
+  return {
+    ...controller,
+    done: controller.done.catch((error) => {
+      if (AUTH_FAILURE_PATTERN.test(error instanceof Error ? error.message : String(error))) {
+        providerStatusCache.delete(provider.id);
+      }
+      throw error;
+    }),
+  };
 }

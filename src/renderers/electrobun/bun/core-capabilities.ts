@@ -10,7 +10,13 @@ import {
 import type { AppServices } from "../../../core/app-services";
 import { resolveAiCliCommand } from "../../../plugins/builtin/ai/command-resolution";
 import { getAiProviderDefinitions } from "../../../plugins/builtin/ai/providers";
-import { checkAiProviderStatus, isAiRunCancelled, runAiPrompt } from "../../../plugins/builtin/ai/runner";
+import {
+  checkAiProviderStatus,
+  ensureIsolatedThreadWorkspace,
+  isAiRunCancelled,
+  removeIsolatedThreadWorkspace,
+  runAiPrompt,
+} from "../../../plugins/builtin/ai/runner";
 import type { BrokerAdapter } from "../../../types/broker";
 import type { AppConfig, BrokerInstanceConfig } from "../../../types/config";
 
@@ -281,6 +287,13 @@ function createAiRunnerCapability(options: CoreCapabilityOptions): PluginCapabil
     name: "AI Runner",
     operations: {
       getProviderAvailability: op(() => getAiProviderAvailability()),
+      ensureThreadWorkspace: op((input: any) => ensureIsolatedThreadWorkspace(
+        requireString(input.threadId, "AI thread"),
+      ), "action"),
+      removeThreadWorkspace: op(async (input: any) => {
+        await removeIsolatedThreadWorkspace(requireString(input.threadId, "AI thread"));
+        return null;
+      }, "action"),
       checkProviderStatus: op(async (input: any) => {
         const providerId = requireString(input.providerId, "AI provider");
         const providerDefinition = getAiProviderDefinitions().find((entry) => entry.id === providerId);
@@ -308,16 +321,17 @@ function createAiRunnerCapability(options: CoreCapabilityOptions): PluginCapabil
             available: true,
           },
           prompt,
+          sessionId: optionalString(input.sessionId),
           cwd: optionalString(input.cwd) ?? options.getConfig().dataDir,
           outputMode: input.outputMode === "structured" ? "structured" : "plain",
           isolatedWorkspace: input.isolatedWorkspace === true,
-          onChunk: (output) => {
-            if (!disposed) emit({ kind: "chunk", output });
+          onChunk: (delta) => {
+            if (!disposed) emit({ kind: "chunk", delta });
           },
         });
 
-        controller.done.then((output) => {
-          if (!disposed) emit({ kind: "done", output });
+        controller.done.then((result) => {
+          if (!disposed) emit({ kind: "done", ...result });
         }).catch((error) => {
           if (disposed) return;
           if (isAiRunCancelled(error)) {

@@ -11,7 +11,14 @@ import { colors, hoverBg } from "../../../../theme/colors";
 import { usePluginState } from "../../../runtime";
 import { buildTickerAiContext } from "../ticker-context";
 import { detectProviders, getLocalWorkspaceProviders, type AiProvider } from "../providers";
-import { checkAiProviderStatus, isAiRunCancelled, runAiPrompt, type AiRunController } from "../runner";
+import {
+  checkAiProviderStatus,
+  ensureIsolatedThreadWorkspace,
+  isAiRunCancelled,
+  removeIsolatedThreadWorkspace,
+  runAiPrompt,
+  type AiRunController,
+} from "../runner";
 import {
   EMPTY_LOCAL_AGENT_WORKSPACE,
   appendLocalAgentMessages,
@@ -20,6 +27,7 @@ import {
   normalizeLocalAgentWorkspace,
   removeLocalAgentMessages,
   selectLocalAgentThread,
+  updateLocalAgentThread,
   type LocalAgentAttachmentPayload,
   type LocalAgentProviderId,
   type LocalAgentWorkspaceState,
@@ -154,11 +162,19 @@ export function LocalAgentWorkspacePane({ focused, width, height }: PaneProps) {
       if (status.inconclusive) {
         setStatusMessage(status.message ?? `Couldn't verify ${provider.name} sign-in; attempting anyway.`);
       }
+      const evictedThreadId = workspace.threads.length >= 50
+        ? workspace.threads.at(-1)?.id
+        : undefined;
       updateWorkspace((current) => createLocalAgentThread(
         current,
         provider.id as LocalAgentProviderId,
         threadId ? { id: threadId } : {},
       ));
+      if (evictedThreadId && evictedThreadId !== threadId) {
+        await removeIsolatedThreadWorkspace(evictedThreadId).catch((error) => {
+          setStatusMessage(error instanceof Error ? error.message : "An old thread workspace could not be removed.");
+        });
+      }
       clearDraft();
       setCreating(false);
     } catch (error) {
@@ -167,7 +183,7 @@ export function LocalAgentWorkspacePane({ focused, width, height }: PaneProps) {
       busyRef.current = false;
       setCheckingProviderId(null);
     }
-  }, [clearDraft, updateWorkspace]);
+  }, [clearDraft, updateWorkspace, workspace.threads]);
 
   useEffect(() => {
     if (seededRef.current) return;
@@ -245,6 +261,24 @@ export function LocalAgentWorkspacePane({ focused, width, height }: PaneProps) {
     runRef.current?.controller.cancel();
   }, []);
 
+  const resetSession = useCallback(async () => {
+    if (!activeThread || busyRef.current || runRef.current) return;
+    busyRef.current = true;
+    const threadId = activeThread.id;
+    updateWorkspace((current) => updateLocalAgentThread(current, threadId, (thread) => {
+      const { sessionId: _sessionId, ...resetThread } = thread;
+      return resetThread;
+    }));
+    try {
+      await removeIsolatedThreadWorkspace(threadId);
+      setStatusMessage("Local session reset. The next turn will resend the visible transcript.");
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "The local session reset could not remove its workspace.");
+    } finally {
+      busyRef.current = false;
+    }
+  }, [activeThread, updateWorkspace]);
+
   const sendMessage = useCallback(async (text: string) => {
     if (!activeThread || runRef.current || busyRef.current) return;
     const provider = providers.find((entry) => entry.id === activeThread.providerId);
@@ -291,25 +325,32 @@ export function LocalAgentWorkspacePane({ focused, width, height }: PaneProps) {
 
     let streamedOutput = "";
     try {
+      const cwd = await ensureIsolatedThreadWorkspace(activeThread.id);
       const controller = runAiPrompt({
         provider,
         prompt,
+        sessionId: activeThread.sessionId,
+        cwd,
         outputMode: "structured",
         isolatedWorkspace: true,
-        onChunk: (output) => {
-          streamedOutput = output;
-          setStreamingOutput(output);
+        onChunk: (delta) => {
+          streamedOutput += delta;
+          setStreamingOutput(streamedOutput);
         },
       });
       runRef.current = { controller, threadId: activeThread.id, assistantMessageId };
-      const output = await controller.done;
-      updateWorkspace((current) => appendLocalAgentMessages(current, activeThread.id, [{
-        id: assistantMessageId,
-        role: "assistant",
-        content: output,
-        createdAt: Date.now(),
-        status: "complete",
-      }]));
+      const result = await controller.done;
+      updateWorkspace((current) => updateLocalAgentThread(
+        appendLocalAgentMessages(current, activeThread.id, [{
+          id: assistantMessageId,
+          role: "assistant",
+          content: result.output,
+          createdAt: Date.now(),
+          status: "complete",
+        }]),
+        activeThread.id,
+        (thread) => result.sessionId ? { ...thread, sessionId: result.sessionId } : thread,
+      ));
     } catch (error) {
       if (isAiRunCancelled(error)) {
         updateWorkspace((current) => appendLocalAgentMessages(current, activeThread.id, [{
@@ -374,6 +415,7 @@ export function LocalAgentWorkspacePane({ focused, width, height }: PaneProps) {
     if (event.name === "a") attachSelectedTicker();
     if (event.name === "x") removeAttachments();
     if (event.name === "c" && runRef.current) cancelRun();
+    if (event.name === "r" && activeThread.sessionId) void resetSession();
     if (event.name === "[") cycleThread(-1);
     if (event.name === "]") cycleThread(1);
   }, { allowEditable: true });
@@ -468,6 +510,15 @@ export function LocalAgentWorkspacePane({ focused, width, height }: PaneProps) {
         <Box height={1} paddingX={1} flexDirection="row">
           <Text fg={colors.positive} attributes={TextAttributes.BOLD}>{providerLabel(activeThread.providerId)}</Text>
           <Text fg={colors.textDim}> · local thread</Text>
+          {activeThread.sessionId && (
+            <Text
+              fg={colors.textBright}
+              onMouseDown={() => { void resetSession(); }}
+              style={{ cursor: "pointer" }}
+            >
+              {" · Reset session"}
+            </Text>
+          )}
           {!showSidebar && (
             <>
               <Text fg={colors.textDim}> · </Text>
