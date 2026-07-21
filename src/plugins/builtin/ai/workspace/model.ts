@@ -1,4 +1,36 @@
+import { normalizeLocalAgentSessionId } from "../session-id";
+
 export type LocalAgentProviderId = "claude" | "codex" | "pi";
+export type LocalAgentToolMode = "confined" | "yolo";
+
+export const LOCAL_AGENT_YOLO_WARNING = "YOLO mode - runs shell, edits real files, reaches network";
+
+export function getLocalAgentToolPosture(mode: LocalAgentToolMode | undefined): {
+  mode: LocalAgentToolMode;
+  footer: string;
+  warning: string | null;
+} {
+  const resolvedMode = mode ?? "confined";
+  return resolvedMode === "yolo"
+    ? { mode: resolvedMode, footer: "Tools: YOLO · Network: on", warning: LOCAL_AGENT_YOLO_WARNING }
+    : { mode: resolvedMode, footer: "Tools: confined · Network: off", warning: null };
+}
+
+export function getLocalAgentConfinedCaveat(providerId: LocalAgentProviderId): string {
+  return providerId === "claude"
+    ? "Confined: writes stay in disposable workspace; network off; host reads blocked"
+    : "Confined: writes stay in disposable workspace; network off; host reads possible";
+}
+
+export function resolveLocalAgentToolModeToggle(
+  mode: LocalAgentToolMode | undefined,
+  yoloConfirmationArmed: boolean,
+): { shouldToggle: boolean; yoloConfirmationArmed: boolean } {
+  if ((mode ?? "confined") === "yolo" || yoloConfirmationArmed) {
+    return { shouldToggle: true, yoloConfirmationArmed: false };
+  }
+  return { shouldToggle: false, yoloConfirmationArmed: true };
+}
 
 export interface LocalAgentAttachmentMetadata {
   id: string;
@@ -24,10 +56,19 @@ export interface LocalAgentThread {
   id: string;
   providerId: LocalAgentProviderId;
   sessionId?: string;
+  toolMode?: LocalAgentToolMode;
   title: string;
   createdAt: number;
   updatedAt: number;
   messages: LocalAgentMessage[];
+}
+
+export function toggleLocalAgentToolMode(thread: LocalAgentThread): LocalAgentThread {
+  const { sessionId: _sessionId, ...resetThread } = thread;
+  return {
+    ...resetThread,
+    toolMode: (thread.toolMode ?? "confined") === "yolo" ? "confined" : "yolo",
+  };
 }
 
 export interface LocalAgentWorkspaceState {
@@ -90,6 +131,7 @@ function isThread(value: unknown): value is LocalAgentThread {
   return typeof thread.id === "string"
     && isProviderId(thread.providerId)
     && (thread.sessionId === undefined || typeof thread.sessionId === "string")
+    && (thread.toolMode === undefined || thread.toolMode === "confined" || thread.toolMode === "yolo")
     && typeof thread.title === "string"
     && typeof thread.createdAt === "number"
     && typeof thread.updatedAt === "number"
@@ -102,13 +144,18 @@ export function normalizeLocalAgentWorkspace(value: unknown): LocalAgentWorkspac
   const threads = Array.isArray(candidate.threads)
     ? candidate.threads
       .filter(isThread)
-      .map((thread) => ({
-        ...thread,
-        messages: thread.messages
-          .map(normalizeMessage)
-          .filter((message): message is LocalAgentMessage => message !== null)
-          .slice(-MAX_MESSAGES_PER_THREAD),
-      }))
+      .map((thread) => {
+        const { sessionId, ...threadWithoutSession } = thread;
+        const normalizedSessionId = normalizeLocalAgentSessionId(sessionId);
+        return {
+          ...threadWithoutSession,
+          ...(normalizedSessionId ? { sessionId: normalizedSessionId } : {}),
+          messages: thread.messages
+            .map(normalizeMessage)
+            .filter((message): message is LocalAgentMessage => message !== null)
+            .slice(-MAX_MESSAGES_PER_THREAD),
+        };
+      })
       .slice(0, MAX_THREADS)
     : [];
   const activeThreadId = typeof candidate.activeThreadId === "string"
@@ -128,6 +175,7 @@ export function createLocalAgentThread(
   const thread: LocalAgentThread = {
     id,
     providerId,
+    toolMode: "confined",
     title: `New ${PROVIDER_TITLES[providerId]} thread`,
     createdAt: now,
     updatedAt: now,

@@ -45,7 +45,7 @@ export async function installElectrobunAiHost(): Promise<void> {
         payload: { providerId: provider.id },
       });
     },
-    run({ provider, prompt, sessionId, cwd, onChunk, outputMode, isolatedWorkspace }) {
+    run({ provider, prompt, sessionId, threadId, toolMode, cwd, onChunk, outputMode, isolatedWorkspace }) {
       const subscriptionId = `ai-run:${nextRunId++}`;
       let disposed = false;
       let settled = false;
@@ -100,6 +100,8 @@ export async function installElectrobunAiHost(): Promise<void> {
           providerId: provider.id,
           prompt,
           sessionId,
+          threadId,
+          toolMode,
           cwd,
           outputMode,
           isolatedWorkspace,
