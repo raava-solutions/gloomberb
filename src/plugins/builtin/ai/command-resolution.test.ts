@@ -62,6 +62,6 @@ describe("AI CLI command resolution", () => {
     expect(resolveAiCliCommand("claude")?.executable).toBe(join(binDir, "claude"));
 
     const run = runAiPrompt({ provider: provider!, prompt: "AAPL" });
-    expect(await run.done).toBe("resolved:AAPL");
+    expect(await run.done).toEqual({ output: "resolved:AAPL", sessionId: null });
   });
 });

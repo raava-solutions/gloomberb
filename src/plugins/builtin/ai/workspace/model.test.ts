@@ -75,6 +75,42 @@ describe("local agent workspace model", () => {
     expect(withContext).toContain("Company: Apple Inc. (AAPL)");
   });
 
+  test("sends only the current turn and explicit attachments when resuming", () => {
+    const state = createLocalAgentThread(EMPTY_LOCAL_AGENT_WORKSPACE, "claude", { id: "thread-1", now: 10 });
+    const withHistory = appendLocalAgentMessages(state, "thread-1", [
+      { id: "m1", role: "user", content: "Old question", createdAt: 11 },
+      { id: "m2", role: "assistant", content: "Old answer", createdAt: 12, status: "complete" },
+    ]);
+    const thread = { ...withHistory.threads[0]!, sessionId: "session-1" };
+
+    const prompt = buildLocalAgentPrompt(thread, "New question", [{
+      id: "ticker:AAPL:13",
+      kind: "ticker",
+      label: "Ticker AAPL",
+      preview: "Apple",
+      content: "Attached facts",
+    }]);
+
+    expect(prompt).not.toContain("Old question");
+    expect(prompt).not.toContain("Old answer");
+    expect(prompt).toContain("Attached facts");
+    expect(prompt).toContain("Current user request:\nNew question");
+  });
+
+  test("replays the visible transcript when there is no resumable session", () => {
+    const state = createLocalAgentThread(EMPTY_LOCAL_AGENT_WORKSPACE, "codex", { id: "thread-1", now: 10 });
+    const withHistory = appendLocalAgentMessages(state, "thread-1", [
+      { id: "m1", role: "user", content: "Old question", createdAt: 11 },
+      { id: "m2", role: "assistant", content: "Old answer", createdAt: 12, status: "complete" },
+    ]);
+
+    const prompt = buildLocalAgentPrompt(withHistory.threads[0]!, "New question", []);
+
+    expect(prompt).toContain("User: Old question");
+    expect(prompt).toContain("Assistant: Old answer");
+    expect(prompt).toContain("Current user request:\nNew question");
+  });
+
   test("drops malformed persisted threads and preserves ordered messages", () => {
     const normalized = normalizeLocalAgentWorkspace({
       activeThreadId: "thread-1",
@@ -93,5 +129,35 @@ describe("local agent workspace model", () => {
 
     expect(normalized.threads).toHaveLength(1);
     expect(normalized.threads[0]?.messages.map((message) => message.content)).toEqual(["First", "Second"]);
+  });
+
+  test("preserves an optional opaque session id and rejects malformed values", () => {
+    const valid = normalizeLocalAgentWorkspace({
+      activeThreadId: "thread-1",
+      threads: [{
+        id: "thread-1",
+        providerId: "pi",
+        sessionId: "session-1",
+        title: "Research",
+        createdAt: 1,
+        updatedAt: 1,
+        messages: [],
+      }],
+    });
+    const invalid = normalizeLocalAgentWorkspace({
+      activeThreadId: "thread-2",
+      threads: [{
+        id: "thread-2",
+        providerId: "pi",
+        sessionId: 42,
+        title: "Research",
+        createdAt: 1,
+        updatedAt: 1,
+        messages: [],
+      }],
+    });
+
+    expect(valid.threads[0]?.sessionId).toBe("session-1");
+    expect(invalid.threads).toHaveLength(0);
   });
 });

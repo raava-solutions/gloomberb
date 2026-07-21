@@ -7,6 +7,7 @@ export interface AiProvider {
   available: boolean;
   buildArgs: (prompt: string) => string[];
   buildStructuredArgs?: (prompt: string) => string[];
+  buildResumeArgs?: (prompt: string, sessionId: string) => string[];
   authCheckArgs?: string[];
   authLoginCommand?: string;
 }
@@ -26,12 +27,26 @@ const PROVIDER_DEFS: AiProviderDefinition[] = [
       "--output-format",
       "stream-json",
       "--include-partial-messages",
-      "--no-session-persistence",
       "--safe-mode",
       "--tools",
       "",
       "--permission-mode",
       "manual",
+    ],
+    buildResumeArgs: (prompt, sessionId) => [
+      "--print",
+      prompt,
+      "--verbose",
+      "--output-format",
+      "stream-json",
+      "--include-partial-messages",
+      "--safe-mode",
+      "--tools",
+      "",
+      "--permission-mode",
+      "manual",
+      "--resume",
+      sessionId,
     ],
     authCheckArgs: ["auth", "status"],
     authLoginCommand: "claude auth login",
@@ -50,7 +65,6 @@ const PROVIDER_DEFS: AiProviderDefinition[] = [
     buildStructuredArgs: (prompt) => [
       "exec",
       "--skip-git-repo-check",
-      "--ephemeral",
       "--ignore-user-config",
       "--ignore-rules",
       "--disable",
@@ -58,6 +72,20 @@ const PROVIDER_DEFS: AiProviderDefinition[] = [
       "--sandbox",
       "read-only",
       "--json",
+      prompt,
+    ],
+    buildResumeArgs: (prompt, sessionId) => [
+      "exec",
+      "--sandbox",
+      "read-only",
+      "resume",
+      "--skip-git-repo-check",
+      "--ignore-user-config",
+      "--ignore-rules",
+      "--disable",
+      "shell_tool",
+      "--json",
+      sessionId,
       prompt,
     ],
     authCheckArgs: ["login", "status"],
@@ -68,7 +96,8 @@ const PROVIDER_DEFS: AiProviderDefinition[] = [
     name: "Pi",
     command: "pi",
     buildArgs: (prompt) => ["-p", "--mode", "text", "--offline", "--no-tools", "--no-session", "-nc", "-ne", "-ns", prompt],
-    buildStructuredArgs: (prompt) => ["-p", "--mode", "json", "--offline", "--no-tools", "--no-session", "-nc", "-ne", "-ns", prompt],
+    buildStructuredArgs: (prompt) => ["-p", "--mode", "json", "--offline", "--no-tools", "-nc", "-ne", "-ns", prompt],
+    buildResumeArgs: (prompt, sessionId) => ["-p", "--mode", "json", "--offline", "--no-tools", "-nc", "-ne", "-ns", "--session-id", sessionId, prompt],
     // No authCheckArgs: pi authenticates via config/env (no auth-status subcommand);
     // an inconclusive/unauthenticated state surfaces at run time.
   },

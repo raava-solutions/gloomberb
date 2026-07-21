@@ -12,6 +12,20 @@ describe("AI structured stream parser", () => {
     expect(final.terminalError).toBeNull();
   });
 
+  test("captures provider-owned session ids from structured envelopes", () => {
+    const claude = new AiStructuredStreamParser("claude");
+    claude.push('{"type":"system","subtype":"init","session_id":"claude-session"}\n');
+    expect(claude.sessionId()).toBe("claude-session");
+
+    const codex = new AiStructuredStreamParser("codex");
+    codex.push('{"type":"thread.started","thread_id":"codex-session"}\n');
+    expect(codex.sessionId()).toBe("codex-session");
+
+    const pi = new AiStructuredStreamParser("pi");
+    pi.push('{"type":"session","id":"pi-session"}\n');
+    expect(pi.sessionId()).toBe("pi-session");
+  });
+
   test("replaces Codex in-progress agent messages and ignores reasoning events", () => {
     const parser = new AiStructuredStreamParser("codex");
     parser.push([
