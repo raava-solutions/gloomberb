@@ -199,9 +199,12 @@ export function Shell({
     width,
   });
   const transientFocusActive = !windowMode && transientFocusLayoutState?.active === true;
-  const activeLayout = transientFocusActive && transientFocusLayoutState
+  const interactionLayout = transientFocusActive && transientFocusLayoutState
     ? transientFocusLayoutState.layout
     : windowModeLayout;
+  const activeLayout = !windowMode && dockPreview?.kind === "compact"
+    ? dockPreview.layout
+    : interactionLayout;
   const transientFocusPaneId = transientFocusActive ? transientFocusLayoutState?.paneId ?? null : null;
 
   useEffect(() => {
@@ -385,6 +388,10 @@ export function Shell({
     toggleFocusedPaneFloating,
   });
 
+  const interactionDockLeafLayouts = useMemo(
+    () => getDockLeafLayouts(interactionLayout, bounds, dockGeometryOptions),
+    [bounds, dockGeometryOptions, interactionLayout],
+  );
   const dockLeafLayouts = useMemo(() => getDockLeafLayouts(activeLayout, bounds, dockGeometryOptions), [activeLayout, bounds, dockGeometryOptions]);
   const dockDividerLayouts = useMemo(() => getDockDividerLayouts(activeLayout, bounds, dockGeometryOptions), [activeLayout, bounds, dockGeometryOptions]);
   const snapGuides = useMemo(() => makeSnapGuides(width, contentHeight), [contentHeight, width]);
@@ -393,8 +400,8 @@ export function Shell({
     [bounds, desktopDockPreview],
   );
   const activePaneDrag = dragRef.current?.type === "pane-drag" ? dragRef.current : null;
-  const activeHoverOverlay = activePaneDrag && dragCursor
-    ? resolveHoverOverlay(dragCursor.x, dragCursor.y, dockLeafLayouts, activePaneDrag.paneId)
+  const activeHoverOverlay = activePaneDrag && dragCursor && dockPreview?.kind !== "compact"
+    ? resolveHoverOverlay(dragCursor.x, dragCursor.y, interactionDockLeafLayouts, activePaneDrag.paneId)
     : null;
   const effectiveDockPreview = dockPreview ?? externalDockPreview;
   useShellNativeSurfaceWindowState({
@@ -438,6 +445,7 @@ export function Shell({
     };
     const items = menuForPane(
       pane,
+      rect,
       visibleLayout,
       width,
       contentHeight,
@@ -491,7 +499,7 @@ export function Shell({
     dispatch,
     dockGeometryOptions,
     dockDividerLayouts,
-    dockLeafLayouts,
+    dockLeafLayouts: interactionDockLeafLayouts,
     dragRuntime,
     focusPane,
     focusedPaneId,

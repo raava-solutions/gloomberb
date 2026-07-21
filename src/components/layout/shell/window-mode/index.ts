@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useShortcut } from "../../../../react/input";
 import {
-  dockPane,
-  floatPane,
+  dockFloatingPaneAtCurrentRect,
+  floatAtRect,
+  getDockLeafLayouts,
   isPaneInLayout,
   type DockGeometryOptions,
   type LayoutBounds,
@@ -200,9 +201,15 @@ export function useShellWindowMode({
           const paneDef = paneInstance ? pluginRegistry.panes.get(paneInstance.paneId) : undefined;
           if (!paneDef) return current;
           const isFloating = current.previewLayout.floating.some((entry) => entry.instanceId === current.paneId);
+          const tiledRect = isFloating
+            ? null
+            : getDockLeafLayouts(current.previewLayout, bounds, dockGeometryOptions)
+              .find((leaf) => leaf.instanceId === current.paneId)?.rect;
           const nextLayout = isFloating
-            ? dockPane(current.previewLayout, current.paneId)
-            : floatPane(current.previewLayout, current.paneId, width, contentHeight, paneDef);
+            ? dockFloatingPaneAtCurrentRect(current.previewLayout, current.paneId, bounds)
+            : tiledRect
+              ? floatAtRect(current.previewLayout, current.paneId, tiledRect)
+              : current.previewLayout;
           return {
             ...current,
             previewLayout: nextLayout,

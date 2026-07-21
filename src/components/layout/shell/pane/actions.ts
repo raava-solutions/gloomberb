@@ -1,8 +1,9 @@
 import { useCallback } from "react";
 import type { DesktopWindowBridge } from "../../../../types/desktop-window";
 import {
-  applyDrop,
-  floatPane,
+  dockFloatingPaneAtCurrentRect,
+  floatAtRect,
+  getDockLeafLayouts,
   gridlockAllPanes,
   isPaneInLayout,
   removeFloatingPanes,
@@ -110,13 +111,22 @@ export function useShellPaneActions({
     if (!focusedPaneId) return false;
     const pane = paneMap.get(focusedPaneId);
     if (!pane) return false;
+    const bounds = { x: 0, y: 0, width, height: contentHeight };
+    const tiledRect = pane.floating
+      ? null
+      : getDockLeafLayouts(
+          visibleLayout,
+          bounds,
+          nativePaneChrome ? { precise: true } : { reserveDividerGutters: true },
+        ).find((leaf) => leaf.instanceId === pane.instance.instanceId)?.rect;
+    if (!pane.floating && !tiledRect) return false;
     const nextLayout = pane.floating
-      ? applyDrop(visibleLayout, pane.instance.instanceId, { kind: "frame", edge: "right" })
-      : floatPane(visibleLayout, pane.instance.instanceId, width, contentHeight, pane.def);
+      ? dockFloatingPaneAtCurrentRect(visibleLayout, pane.instance.instanceId, bounds)
+      : floatAtRect(visibleLayout, pane.instance.instanceId, tiledRect!);
     persistLayout(nextLayout);
     focusPane(pane.instance.instanceId);
     return true;
-  }, [contentHeight, focusPane, focusedPaneId, paneMap, persistLayout, visibleLayout, width]);
+  }, [contentHeight, focusPane, focusedPaneId, nativePaneChrome, paneMap, persistLayout, visibleLayout, width]);
 
   const popOutFocusedPane = useCallback(() => {
     if (!focusedPaneId || desktopWindowBridge?.kind !== "main" || !desktopWindowBridge.popOutPane) return false;

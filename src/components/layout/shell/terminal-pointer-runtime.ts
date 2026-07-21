@@ -110,6 +110,7 @@ export function useShellTerminalPointerRuntime({
     dragFloatingRect,
     dragRef,
     updateDividerPreview,
+    updateDockPreview,
     updateDragFloatingRect,
   } = dragRuntime;
 
@@ -247,6 +248,7 @@ export function useShellTerminalPointerRuntime({
           return;
         }
         if (relativeY === 0) {
+          updateDockPreview(null);
           dragRef.current = {
             type: "pane-drag",
             paneId,
@@ -314,6 +316,7 @@ export function useShellTerminalPointerRuntime({
           return;
         }
         if (relativeY === 0) {
+          updateDockPreview(null);
           dragRef.current = {
             type: "pane-drag",
             paneId: leaf.instanceId,
@@ -353,6 +356,7 @@ export function useShellTerminalPointerRuntime({
     setMenuState,
     transientFocusActive,
     updateDividerPreview,
+    updateDockPreview,
     updateDragFloatingRect,
     visibleFloatingPanes,
     windowMode,

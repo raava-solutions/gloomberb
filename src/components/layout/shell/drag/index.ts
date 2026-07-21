@@ -40,6 +40,11 @@ export interface SnapGuide {
 
 export type DragPreview =
   | {
+    kind: "compact";
+    layout: LayoutConfig;
+    rect: LayoutBounds;
+  }
+  | {
     kind: "dock";
     target: DropTarget;
     rect: LayoutBounds;
@@ -301,6 +306,13 @@ export function finalizePaneDragRelease(
   previewRect: FloatingRect,
   dockPreview: DragPreview | null,
 ): PaneDragReleaseResult {
+  if (dockPreview?.kind === "compact") {
+    return {
+      nextLayout: dockPreview.layout,
+      shouldShowGridlockTip: false,
+    };
+  }
+
   if (dockPreview?.kind === "dock") {
     return {
       nextLayout: applyDrop(layout, paneId, dockPreview.target),
