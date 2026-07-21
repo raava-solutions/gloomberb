@@ -1,6 +1,7 @@
+import { useState } from "react";
 import { Box, Text } from "../../../../ui";
 import { TextAttributes } from "../../../../ui";
-import { colors } from "../../../../theme/colors";
+import { colors, hoverBg } from "../../../../theme/colors";
 import type { ChatUserSummary, PublicPortfolioAnalytics } from "../../../../api-client";
 import { formatNumber } from "../../../../utils/format";
 import { truncateChannelLabel } from "../channels";
@@ -20,6 +21,14 @@ function hasPortfolioAnalytics(analytics: PublicPortfolioAnalytics | null | unde
 export function hasPublicChatProfileInfo(user: ChatUserSummary): boolean {
   if (user.profilePublic === false) return false;
   return Boolean(user.bio?.trim() || user.title?.trim() || user.company?.trim() || hasPortfolioAnalytics(user.portfolioAnalytics));
+}
+
+export function hasChatProfileDetails(user: ChatUserSummary): boolean {
+  return Boolean(user.bio?.trim() || user.title?.trim() || user.company?.trim());
+}
+
+export function shouldOfferChatProfileSetup(user: ChatUserSummary, isOwnProfile: boolean): boolean {
+  return isOwnProfile && !hasChatProfileDetails(user);
 }
 
 function formatSignedPercent(value: number): string {
@@ -118,12 +127,17 @@ export function UserProfilePopover({
   width,
   onClose,
   onKeepOpen,
+  isOwnProfile = false,
+  onSetUpProfile,
 }: {
   user: ChatUserSummary;
   width: number;
   onClose: () => void;
   onKeepOpen: () => void;
+  isOwnProfile?: boolean;
+  onSetUpProfile?: () => void;
 }) {
+  const [setupHovered, setSetupHovered] = useState(false);
   const popoverWidth = Math.max(24, Math.min(38, width - 4));
   const meta = [user.title, user.company].filter(Boolean).join(" · ");
   const bio = user.bio?.trim();
@@ -135,6 +149,7 @@ export function UserProfilePopover({
     ? Math.min(headerMetricsNaturalWidth(metrics), maxStatsWidth)
     : 0;
   const usernameWidth = Math.max(1, headerWidth - (statsWidth > 0 ? statsWidth + 1 : 0));
+  const showSetupAction = shouldOfferChatProfileSetup(user, isOwnProfile) && !!onSetUpProfile;
 
   return (
     <Box
@@ -170,6 +185,28 @@ export function UserProfilePopover({
         <Text fg={colors.text} wrapText width={popoverWidth - 2}>
           {bio}
         </Text>
+      ) : null}
+      {showSetupAction ? (
+        <Box
+          height={1}
+          width={headerWidth}
+          backgroundColor={setupHovered ? hoverBg() : undefined}
+          onMouseOver={() => setSetupHovered(true)}
+          onMouseOut={() => setSetupHovered(false)}
+          onMouseDown={(event: { preventDefault?: () => void; stopPropagation?: () => void }) => {
+            event?.preventDefault?.();
+            event?.stopPropagation?.();
+            onSetUpProfile?.();
+          }}
+          style={{ cursor: "pointer" }}
+        >
+          <Text
+            fg={setupHovered ? colors.text : colors.textMuted}
+            attributes={setupHovered ? TextAttributes.BOLD : 0}
+          >
+            Set up profile
+          </Text>
+        </Box>
       ) : null}
     </Box>
   );

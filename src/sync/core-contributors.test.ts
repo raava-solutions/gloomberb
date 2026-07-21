@@ -248,4 +248,39 @@ describe("core sync contributors", () => {
     });
     expect(payload.analyticsByPortfolio.preview).not.toHaveProperty("marketValue");
   });
+
+  test("preserves pulled profile analytics before local market data is ready", async () => {
+    const config = createDefaultConfig("/tmp/gloomberb-sync-test");
+    config.portfolios = [{ id: "main", name: "Main", currency: "USD" }];
+    const state = createInitialState(config);
+
+    await coreCollectionsSyncContributor.apply?.({
+      analyticsByPortfolio: {
+        main: { oneYearReturn: 0.27, spyBeta: 1.1 },
+      },
+      tickers: [],
+    }, {
+      snapshot: {
+        schemaVersion: 1,
+        appId: "gloomberb",
+        clientId: "test-client",
+        createdAt: "2026-07-21T22:03:59.832Z",
+        contributors: {},
+      },
+      baselineState: state,
+      state,
+      getState: () => state,
+      isCurrent: () => true,
+      dispatch: () => {},
+      tickerRepository: {} as never,
+    });
+
+    const payload = await coreCollectionsSyncContributor.collect({ state }) as any;
+    setSyncedProfileAnalytics("main", null);
+
+    expect(payload.analyticsByPortfolio.main).toEqual({
+      oneYearReturn: 0.27,
+      spyBeta: 1.1,
+    });
+  });
 });
