@@ -154,6 +154,7 @@ export function ShellDragOverlays({
       {effectiveDockPreview && effectiveDockPreview.rects.map((preview, index) => (
         <Box
           key={`drag-preview:${preview.instanceId}`}
+          id={`drag-preview:${preview.instanceId}`}
           position="absolute"
           left={preview.rect.x}
           top={preview.rect.y}

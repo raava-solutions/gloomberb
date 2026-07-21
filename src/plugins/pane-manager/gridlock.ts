@@ -116,7 +116,7 @@ export function snapPaneToGridRect(
 ): LayoutConfig {
   const visibleIds = new Set(visiblePaneIds(layout));
   if (!visibleIds.has(instanceId)) return layout;
-  return floatAtRect(layout, instanceId, targetRect);
+  return floatAtRect(layout, instanceId, { ...targetRect, fixedGeometry: true });
 }
 
 export function compactDockedPaneAtRect(

@@ -9,6 +9,7 @@ type KeyboardTargetLike = EventTarget & {
 };
 
 type WebKeyDefaultEvent = Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "shiftKey" | "target"> & {
+  altKey?: boolean;
   defaultPrevented?: boolean;
   isComposing?: boolean;
 };
@@ -76,8 +77,16 @@ function isNativeControlActivationKey(event: WebKeyDefaultEvent): boolean {
   return key === "return" || key === "enter" || key === "space";
 }
 
+export function shouldDispatchWebAppKeyDown(event: WebKeyDefaultEvent): boolean {
+  return normalizeWebKeyName(event.key) !== "tab"
+    || !!event.ctrlKey
+    || !!event.metaKey
+    || !!event.altKey;
+}
+
 export function shouldConsumeWebAppKeyDown(event: WebKeyDefaultEvent): boolean {
   if (event.defaultPrevented || event.isComposing) return false;
+  if (!shouldDispatchWebAppKeyDown(event)) return false;
   if (isEditableKeyboardTarget(event.target)) return false;
   if (isBrowserModifierShortcut(event)) return false;
   if (isNativeKeyboardControlTarget(event.target) && isNativeControlActivationKey(event)) return false;

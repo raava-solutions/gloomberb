@@ -129,13 +129,18 @@ export function useShellActiveDrag({
           updateDockPreview(createLeafDropPreview(baseLayout, drag.paneId, target, bounds, dockGeometryOptions));
         } else if (drag.mode === "docked" && occupiedDockLeaf) {
           const compactedLayout = compactDockedPaneAtRect(baseLayout, drag.paneId, nextRect, bounds);
-          const compactedRect = getLeafRect(compactedLayout, drag.paneId, bounds);
+          const changedRects = compactedLayout === baseLayout
+            ? []
+            : changedDockPreviewRects(baseLayout, compactedLayout, bounds, dockGeometryOptions);
+          const compactedRect = changedRects.length > 0
+            ? getLeafRect(compactedLayout, drag.paneId, bounds)
+            : null;
           updateDockPreview(compactedRect
             ? {
               kind: "compact",
               layout: compactedLayout,
               rect: compactedRect,
-              rects: changedDockPreviewRects(baseLayout, compactedLayout, bounds, dockGeometryOptions),
+              rects: changedRects,
             }
             : null);
         } else {

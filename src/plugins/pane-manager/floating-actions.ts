@@ -17,6 +17,7 @@ import {
 } from "./floating";
 import type { LayoutBounds } from "./dock-tree";
 import { inferCompactedDockTree } from "./gridlock-inference";
+import { dockPane } from "./docking";
 import type { FloatingResizeCorner } from "./types";
 import { detachPane, ensurePaneInstance, finalizeLayout } from "./layout-state";
 
@@ -54,6 +55,7 @@ export function floatAtRect(layout: LayoutConfig, instanceId: string, rect: Floa
         width: rect.width,
         height: rect.height,
         zIndex: rect.zIndex ?? maxFloatingZ(layout) + 1,
+        fixedGeometry: rect.fixedGeometry,
       },
     ],
   });
@@ -67,7 +69,7 @@ export function dockFloatingPaneAtCurrentRect(
   const floating = layout.floating.find((entry) => entry.instanceId === instanceId);
   if (!floating) return layout;
   const dockRoot = inferCompactedDockTree(layout, instanceId, floating, bounds);
-  if (!dockRoot) return layout;
+  if (!dockRoot) return dockPane(layout, instanceId);
   return finalizeLayout({
     ...layout,
     dockRoot,

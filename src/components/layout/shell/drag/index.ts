@@ -153,8 +153,8 @@ export function constrainFloatingRectToBounds(
 ): FloatingRect {
   const boundsWidth = Math.max(1, Number.isFinite(totalWidth) ? totalWidth : 1);
   const boundsHeight = Math.max(1, Number.isFinite(totalHeight) ? totalHeight : 1);
-  const width = fitFloatingDimension(rect.width, MIN_FLOAT_WIDTH, boundsWidth);
-  const height = fitFloatingDimension(rect.height, MIN_FLOAT_HEIGHT, boundsHeight);
+  const width = fitFloatingDimension(rect.width, rect.fixedGeometry ? 1 : MIN_FLOAT_WIDTH, boundsWidth);
+  const height = fitFloatingDimension(rect.height, rect.fixedGeometry ? 1 : MIN_FLOAT_HEIGHT, boundsHeight);
   const maxX = Math.max(0, boundsWidth - width);
   const maxY = Math.max(0, boundsHeight - height);
 
@@ -198,6 +198,7 @@ export function resolvePaneDragFloatingRect(
   }
 
   return constrainFloatingRectToBounds({
+    ...drag.origRect,
     x: drag.origRect.x + (pointerX - drag.startX),
     y: drag.origRect.y + (pointerY - drag.startY),
     width: drag.origRect.width,

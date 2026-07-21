@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { UiHostProvider } from "../../ui";
 import type { RendererHost, UiHost } from "../../ui/host";
 import { FloatingPaneWrapper } from "./floating-pane";
-import { handleDesktopPaneButtonKeyDown } from "./pane/header";
+import { DesktopPaneButton } from "./pane/header";
 
 const rendererHost: RendererHost = {
   requestExit() {},
@@ -49,6 +49,10 @@ describe("FloatingPaneWrapper", () => {
           height={10}
           zIndex={75}
           focused
+          showActions
+          onFloatToggleMouseDown={() => {}}
+          onActionMouseDown={() => {}}
+          onCloseMouseDown={() => {}}
         >
           <span>body</span>
         </FloatingPaneWrapper>
@@ -71,24 +75,44 @@ describe("FloatingPaneWrapper", () => {
         expect.objectContaining({ top: 0, right: 0, width: 2, height: 1 }),
       ]);
     expect(markup).toContain('<button type="button"');
-    expect(markup).toContain('data-gloom-role="pane-float-toggle"');
+    expect(markup.match(/<button type="button"/g)).toHaveLength(3);
+    expect(markup.indexOf('data-gloom-role="pane-float-toggle"'))
+      .toBeLessThan(markup.indexOf('data-gloom-role="pane-action"'));
+    expect(markup.indexOf('data-gloom-role="pane-action"'))
+      .toBeLessThan(markup.indexOf('data-gloom-role="pane-close"'));
+    expect(markup).not.toContain("tabindex=");
     expect(markup).toContain('aria-label="Pane is floating — tile pane"');
   });
 
-  test("activates native pane-header controls with Enter or Space without bubbling into header drag", () => {
-    for (const key of ["Enter", " "]) {
-      let presses = 0;
-      let prevented = false;
-      let stopped = false;
-      handleDesktopPaneButtonKeyDown({
-        key,
-        preventDefault() { prevented = true; },
-        stopPropagation() { stopped = true; },
-      }, () => { presses += 1; });
+  test("lets native pane-header buttons focus on mouse down and activate on click", () => {
+    let activations = 0;
+    let stopped = false;
+    let prevented = false;
+    const button = DesktopPaneButton({
+      label: "Tile pane",
+      icon: null,
+      role: "pane-float-toggle",
+      onActivate: () => { activations += 1; },
+    });
+    const props = button.props as {
+      onClick?: (event: unknown) => void;
+      onKeyDown?: (event: unknown) => void;
+      onMouseDown?: (event: { stopPropagation(): void; preventDefault(): void }) => void;
+      tabIndex?: number;
+    };
 
-      expect(presses).toBe(1);
-      expect(prevented).toBe(true);
-      expect(stopped).toBe(true);
-    }
+    props.onMouseDown?.({
+      stopPropagation() { stopped = true; },
+      preventDefault() { prevented = true; },
+    });
+
+    expect(stopped).toBe(true);
+    expect(prevented).toBe(false);
+    expect(activations).toBe(0);
+    expect(props.tabIndex).toBeUndefined();
+    expect(props.onKeyDown).toBeUndefined();
+
+    props.onClick?.({});
+    expect(activations).toBe(1);
   });
 });

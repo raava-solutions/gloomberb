@@ -17,6 +17,7 @@ import {
   isEditableKeyboardTarget,
   normalizeWebKeyName,
   shouldConsumeWebAppKeyDown,
+  shouldDispatchWebAppKeyDown,
   webKeySequence,
 } from "./key-event";
 
@@ -120,6 +121,7 @@ export function WebInputHostProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (!shouldDispatchWebAppKeyDown(event)) return;
       const shortcutEvent = toKeyEventLike(event);
       dispatchShortcut(shortcutEvent);
       if (shouldConsumeWebAppKeyDown(event)) event.preventDefault();

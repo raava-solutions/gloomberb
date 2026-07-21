@@ -88,6 +88,7 @@ export function FloatingPaneWrapper({
 
   return (
     <Box
+      id={`floating-pane:${paneId}`}
       position="absolute"
       top={y}
       left={x}

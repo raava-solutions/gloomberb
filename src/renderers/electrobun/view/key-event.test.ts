@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { shouldConsumeWebAppKeyDown } from "./key-event";
+import { shouldConsumeWebAppKeyDown, shouldDispatchWebAppKeyDown } from "./key-event";
 
 function keyEvent(overrides: Record<string, unknown>) {
   return {
@@ -30,5 +30,17 @@ describe("shouldConsumeWebAppKeyDown", () => {
     expect(shouldConsumeWebAppKeyDown(keyEvent({ key: "c", ctrlKey: true }))).toBe(false);
     expect(shouldConsumeWebAppKeyDown(keyEvent({ key: "c", metaKey: true }))).toBe(false);
     expect(shouldConsumeWebAppKeyDown(keyEvent({ key: "c", ctrlKey: true, shiftKey: true }))).toBe(true);
+  });
+
+  test("leaves native Tab focus traversal available from the app root and its controls", () => {
+    const root = { tagName: "DIV", getAttribute: (name: string) => name === "id" ? "root" : null };
+    const button = { tagName: "BUTTON" };
+
+    for (const target of [root, button]) {
+      const event = keyEvent({ key: "Tab", target });
+      expect(shouldDispatchWebAppKeyDown(event)).toBe(false);
+      expect(shouldConsumeWebAppKeyDown(event)).toBe(false);
+    }
+    expect(shouldDispatchWebAppKeyDown(keyEvent({ key: "Tab", shiftKey: true, target: button }))).toBe(false);
   });
 });

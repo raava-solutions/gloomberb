@@ -13,7 +13,7 @@ import {
 import { cloneLayout, createDefaultConfig, TICKER_RESEARCH_PANE_ID, type LayoutConfig } from "../../../types/config";
 import type { PluginRegistry } from "../../../plugins/registry";
 import type { PaneProps } from "../../../types/plugin";
-import { Textarea } from "../../../ui";
+import { Textarea, type BoxRenderable } from "../../../ui";
 import {
   buildNativeWindowState,
   resolvePaneManagementShortcut,
@@ -27,9 +27,11 @@ import { getDockLeafLayouts } from "../../../plugins/pane-manager";
 
 let testSetup: Awaited<ReturnType<typeof testRender>> | undefined;
 
-afterEach(() => {
+afterEach(async () => {
   if (testSetup) {
-    testSetup.renderer.destroy();
+    await act(async () => {
+      testSetup!.renderer.destroy();
+    });
     testSetup = undefined;
   }
 });
@@ -581,7 +583,7 @@ describe("Shell", () => {
     ]);
   });
 
-  test("previews and commits one compacted layout while dragging a tiled pane over occupied space", async () => {
+  test("treats an ambiguous occupied auto-compact drag as a free-float move", async () => {
     const config = createDefaultConfig("/tmp/gloomberb-shell-live-compact-drag-test");
     const mainPane = requireLayoutInstance(config, "portfolio-list:main");
     const detailPane = requireLayoutInstance(config, "ticker-detail:main");
@@ -609,10 +611,6 @@ describe("Shell", () => {
       createShellStateWithLayout(config, layout, mainPane.instanceId),
       { width: 80, height: 18 },
     );
-    const beforeRows = testSetup!.captureCharFrame().split("\n");
-    const beforeMainRow = beforeRows.findIndex((row) => row.includes("Main Portfolio"));
-    const beforeMainColumn = beforeRows[beforeMainRow]?.indexOf("Main Portfolio") ?? -1;
-
     await act(async () => {
       await testSetup!.mockMouse.pressDown(5, 1);
       await testSetup!.renderOnce();
@@ -621,12 +619,8 @@ describe("Shell", () => {
       await testSetup!.renderOnce();
     });
 
-    const previewRows = testSetup!.captureCharFrame().split("\n");
-    const previewMainRow = previewRows.findIndex((row) => row.includes("Main Portfolio"));
-    const previewMainColumn = previewRows[previewMainRow]?.indexOf("Main Portfolio") ?? -1;
     expect(actions.some((action) => action.type === "UPDATE_LAYOUT")).toBe(false);
-    expect({ row: previewMainRow, column: previewMainColumn })
-      .not.toEqual({ row: beforeMainRow, column: beforeMainColumn });
+    expect(testSetup!.renderer.root.findDescendantById(`drag-preview:${mainPane.instanceId}`)).toBeUndefined();
 
     await act(async () => {
       await testSetup!.mockMouse.release(68, 13);
@@ -639,8 +633,124 @@ describe("Shell", () => {
     const nextLayout = updates[0]?.layout as LayoutConfig | undefined;
     expect(historyPushes).toHaveLength(1);
     expect(updates).toHaveLength(1);
-    expect(nextLayout?.floating).toEqual(layout.floating);
-    expect(getDockLeafLayouts(nextLayout!, { x: 0, y: 0, width: 80, height: 17 })).toHaveLength(3);
+    expect(nextLayout?.floating.find((entry) => entry.instanceId === floatingDetailPane.instanceId)).toEqual(layout.floating[0]);
+    expect(nextLayout?.floating.some((entry) => entry.instanceId === mainPane.instanceId)).toBe(true);
+    expect(getDockLeafLayouts(nextLayout!, { x: 0, y: 0, width: 80, height: 17 })).toHaveLength(2);
+  });
+
+  test("keeps an occupied directional overlay target-relative through pointer preview and commit", async () => {
+    const config = createDefaultConfig("/tmp/gloomberb-shell-directional-drag-test");
+    const mainPane = requireLayoutInstance(config, "portfolio-list:main");
+    const detailPane = requireLayoutInstance(config, "ticker-detail:main");
+    const lowerDetailPane = { ...detailPane, instanceId: "ticker-detail:lower" };
+    const layout: LayoutConfig = {
+      dockRoot: {
+        kind: "split",
+        axis: "horizontal",
+        ratio: 0.5,
+        first: { kind: "pane", instanceId: mainPane.instanceId },
+        second: {
+          kind: "split",
+          axis: "vertical",
+          ratio: 0.5,
+          first: { kind: "pane", instanceId: detailPane.instanceId },
+          second: { kind: "pane", instanceId: lowerDetailPane.instanceId },
+        },
+      },
+      instances: [{ ...mainPane }, { ...detailPane }, lowerDetailPane],
+      floating: [],
+      detached: [],
+    };
+    const { actions } = await renderShellForWindowModeTest(
+      createShellStateWithLayout(config, layout, mainPane.instanceId),
+      { width: 120, height: 61 },
+    );
+    const expected = [
+      { instanceId: mainPane.instanceId, rect: { x: 0, y: 0, width: 120, height: 14 } },
+      { instanceId: detailPane.instanceId, rect: { x: 0, y: 15, width: 120, height: 14 } },
+      { instanceId: lowerDetailPane.instanceId, rect: { x: 0, y: 30, width: 120, height: 29 } },
+    ];
+
+    await act(async () => {
+      await testSetup!.mockMouse.pressDown(5, 1);
+      await testSetup!.renderOnce();
+      await testSetup!.mockMouse.moveTo(88, 12);
+      await testSetup!.renderOnce();
+      await testSetup!.renderOnce();
+    });
+
+    expect(actions.some((action) => action.type === "UPDATE_LAYOUT")).toBe(false);
+    for (const preview of expected) {
+      const renderable = testSetup!.renderer.root.findDescendantById(`drag-preview:${preview.instanceId}`) as BoxRenderable | undefined;
+      expect(renderable).toBeDefined();
+      expect({ x: renderable!.x, y: renderable!.y, width: renderable!.width, height: renderable!.height })
+        .toEqual(preview.rect);
+    }
+
+    await act(async () => {
+      await testSetup!.mockMouse.release(88, 12);
+      await testSetup!.renderOnce();
+      await testSetup!.renderOnce();
+    });
+
+    const updates = actions.filter((action) => action.type === "UPDATE_LAYOUT");
+    expect(updates).toHaveLength(1);
+    expect(getDockLeafLayouts(
+      updates[0]!.layout,
+      { x: 0, y: 0, width: 120, height: 59 },
+      { reserveDividerGutters: true },
+    ).map(({ instanceId, rect }) => ({ instanceId, rect })))
+      .toEqual(expected);
+  });
+
+  test("renders and commits the exact selected 6x6 cell when the only dock leaf becomes floating", async () => {
+    const config = createDefaultConfig("/tmp/gloomberb-shell-cell-snap-test");
+    const mainPane = requireLayoutInstance(config, "portfolio-list:main");
+    const layout: LayoutConfig = {
+      dockRoot: { kind: "pane", instanceId: mainPane.instanceId },
+      instances: [{ ...mainPane }],
+      floating: [],
+      detached: [],
+    };
+    const controls: {
+      state?: ReturnType<typeof createInitialState>;
+      transientLayout: TransientLayoutState | null;
+    } = { transientLayout: null };
+    testSetup = await testRender(
+      <ShellTransientHarness
+        initialState={createShellStateWithLayout(config, layout, mainPane.instanceId)}
+        registry={createShellPluginRegistry()}
+        controls={controls}
+      />,
+      { width: 60, height: 37 },
+    );
+    await testSetup.renderOnce();
+    const expected = { x: 50, y: 29, width: 10, height: 6 };
+
+    await act(async () => {
+      await testSetup!.mockMouse.pressDown(5, 1);
+      await testSetup!.renderOnce();
+      await testSetup!.mockMouse.moveTo(55, 34);
+      await testSetup!.renderOnce();
+      await testSetup!.renderOnce();
+    });
+
+    const livePreview = testSetup.renderer.root.findDescendantById(`drag-preview:${mainPane.instanceId}`) as BoxRenderable | undefined;
+    expect(livePreview).toBeDefined();
+    expect({ x: livePreview!.x, y: livePreview!.y, width: livePreview!.width, height: livePreview!.height }).toEqual(expected);
+
+    await act(async () => {
+      await testSetup!.mockMouse.release(55, 34);
+      await testSetup!.renderOnce();
+      await testSetup!.renderOnce();
+    });
+
+    expect(controls.state?.config.layout.dockRoot).toBeNull();
+    expect(controls.state?.config.layout.floating).toEqual([
+      expect.objectContaining({ instanceId: mainPane.instanceId, ...expected, fixedGeometry: true }),
+    ]);
+    const committedPane = testSetup.renderer.root.findDescendantById(`floating-pane:${mainPane.instanceId}`) as BoxRenderable | undefined;
+    expect({ x: committedPane!.x, y: committedPane!.y, width: committedPane!.width, height: committedPane!.height }).toEqual(expected);
   });
 
   test("keeps the focused textarea cursor visible when it is not covered", async () => {

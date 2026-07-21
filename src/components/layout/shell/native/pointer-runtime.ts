@@ -91,9 +91,9 @@ export function useShellNativePointerRuntime({
       mode: "floating",
       startX: pointer.x,
       startY: pointer.y,
-      origRect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+      origRect: { ...rect },
     };
-    updateDragFloatingRect({ paneId, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } });
+    updateDragFloatingRect({ paneId, rect: { ...rect } });
     event.preventDefault();
   }, [dragRef, focusNativePane, getShellPointer, nativePaneChrome, transientFocusActive, updateDockPreview, updateDragFloatingRect, windowMode]);
 
@@ -138,9 +138,9 @@ export function useShellNativePointerRuntime({
       corner,
       startX: pointer.x,
       startY: pointer.y,
-      origRect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+      origRect: { ...rect },
     };
-    updateDragFloatingRect({ paneId, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } });
+    updateDragFloatingRect({ paneId, rect: { ...rect } });
     event.stopPropagation();
     event.preventDefault();
   }, [dragRef, focusNativePane, getShellPointer, nativePaneChrome, selectWindowModePane, transientFocusActive, updateDragFloatingRect, windowMode]);

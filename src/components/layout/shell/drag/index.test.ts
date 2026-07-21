@@ -4,6 +4,7 @@ import { getDockLeafLayouts } from "../../../../plugins/pane-manager";
 import {
   createLeafDropPreview,
   createSnapDropPreview,
+  constrainFloatingRectToBounds,
   LAYOUT_GRID_COLUMNS,
   LAYOUT_GRID_ROWS,
   makeLayoutGridCells,
@@ -124,8 +125,17 @@ describe("layout construction grid", () => {
       expect(preview.rect).toEqual(target);
       expect(preview.layout.dockRoot).toBeNull();
       expect(preview.layout.floating.find((entry) => entry.instanceId === "a:main"))
-        .toEqual(expect.objectContaining(target));
+        .toEqual(expect.objectContaining({ ...target, fixedGeometry: true }));
       expect(preview.rects).toEqual([{ instanceId: "a:main", rect: target }]);
     }
+  });
+
+  test("preserves fixed cells without weakening ordinary floating minimums", () => {
+    const selectedCell = { x: 50, y: 30, width: 10, height: 3 };
+
+    expect(constrainFloatingRectToBounds({ ...selectedCell, fixedGeometry: true }, 60, 36))
+      .toEqual({ ...selectedCell, fixedGeometry: true });
+    expect(constrainFloatingRectToBounds(selectedCell, 60, 36))
+      .toEqual({ x: 45, y: 30, width: 15, height: 6 });
   });
 });

@@ -150,9 +150,9 @@ export function useShellTerminalPointerRuntime({
             corner: resizeHandle,
             startX: preciseX,
             startY: preciseShellY,
-            origRect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+            origRect: { ...rect },
           };
-          updateDragFloatingRect({ paneId, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } });
+          updateDragFloatingRect({ paneId, rect: { ...rect } });
         }
 
         event.stopPropagation();
@@ -254,9 +254,9 @@ export function useShellTerminalPointerRuntime({
             corner: resizeHandle,
             startX: preciseX,
             startY: preciseShellY,
-            origRect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+            origRect: { ...rect },
           };
-          updateDragFloatingRect({ paneId, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } });
+          updateDragFloatingRect({ paneId, rect: { ...rect } });
           event.stopPropagation();
           event.preventDefault();
           return;
@@ -269,9 +269,9 @@ export function useShellTerminalPointerRuntime({
             mode: "floating",
             startX: preciseX,
             startY: preciseShellY,
-            origRect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+            origRect: { ...rect },
           };
-          updateDragFloatingRect({ paneId, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } });
+          updateDragFloatingRect({ paneId, rect: { ...rect } });
           event.stopPropagation();
           event.preventDefault();
           return;

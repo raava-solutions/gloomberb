@@ -9,6 +9,13 @@ export interface GridlockRect {
   height: number;
 }
 
+function rectsOverlap(left: LayoutBounds, right: LayoutBounds): boolean {
+  return left.x < right.x + right.width
+    && left.x + left.width > right.x
+    && left.y < right.y + right.height
+    && left.y + left.height > right.y;
+}
+
 export function boundsForRects(rects: GridlockRect[]): LayoutBounds {
   const minX = Math.min(...rects.map((rect) => rect.x));
   const minY = Math.min(...rects.map((rect) => rect.y));
@@ -131,6 +138,12 @@ export function inferCompactedDockTree(
   targetRect: LayoutBounds,
   bounds: LayoutBounds,
 ): DockLayoutNode | null {
+  const siblingLeaves = getDockLeafLayouts(layout, bounds)
+    .filter((leaf) => leaf.instanceId !== draggedInstanceId);
+  if (siblingLeaves.some((leaf) => rectsOverlap(targetRect, leaf.rect))) {
+    return null;
+  }
+
   let replacedDraggedPane = false;
   const rects: GridlockRect[] = getDockLeafLayouts(layout, bounds).map((leaf) => {
     if (leaf.instanceId !== draggedInstanceId) {

@@ -45,24 +45,24 @@ function captureTerminalPointerDrag(renderer: unknown, renderable: unknown): voi
   capture.call(renderer, renderable);
 }
 
-function DesktopPaneButton({
+export function DesktopPaneButton({
   label,
   icon,
-  onMouseDown,
+  onActivate,
   role,
 }: {
   label: string;
   icon: ReactNode;
-  onMouseDown?: (event: any) => void;
+  onActivate?: (event: any) => void;
   role: string;
 }) {
   return (
     <button
       type="button"
-      onMouseDown={onMouseDown}
-      onKeyDown={(event) => handleDesktopPaneButtonKeyDown(event, onMouseDown)}
+      onMouseDown={(event) => event.stopPropagation()}
+      onClick={onActivate}
       data-gloom-role={role}
-      data-gloom-interactive={onMouseDown ? "true" : undefined}
+      data-gloom-interactive={onActivate ? "true" : undefined}
       aria-label={label}
       title={label}
       style={{
@@ -76,7 +76,7 @@ function DesktopPaneButton({
         minWidth: 20,
         paddingInline: 4,
         backgroundColor: "transparent",
-        cursor: onMouseDown ? "pointer" : "default",
+        cursor: onActivate ? "pointer" : "default",
       }}
     >
       <Span
@@ -93,16 +93,6 @@ function DesktopPaneButton({
       </Span>
     </button>
   );
-}
-
-export function handleDesktopPaneButtonKeyDown(
-  event: { key?: string; preventDefault?: () => void; stopPropagation?: () => void },
-  onActivate?: (event: any) => void,
-): void {
-  if (event.key !== "Enter" && event.key !== " ") return;
-  event.stopPropagation?.();
-  event.preventDefault?.();
-  onActivate?.(event);
 }
 
 function TerminalPaneButton({
@@ -217,7 +207,7 @@ export function PaneHeader({
           ) : (
             <DesktopPaneButton
               label={floatToggleLabel}
-              onMouseDown={onFloatToggleMouseDown}
+              onActivate={onFloatToggleMouseDown}
               role="pane-float-toggle"
               icon={floating ? (
                 <svg viewBox="0 0 12 12" width="12" height="12" fill="none" aria-hidden="true">
@@ -238,7 +228,7 @@ export function PaneHeader({
             ) : (
               <DesktopPaneButton
                 label="Pane actions"
-                onMouseDown={onActionMouseDown}
+                onActivate={onActionMouseDown}
                 role="pane-action"
                 icon={(
                   <svg viewBox="0 0 12 12" width="12" height="12" fill="none" aria-hidden="true">
@@ -258,7 +248,7 @@ export function PaneHeader({
             ) : (
               <DesktopPaneButton
                 label="Close pane"
-                onMouseDown={onCloseMouseDown}
+                onActivate={onCloseMouseDown}
                 role="pane-close"
                 icon={(
                   <svg viewBox="0 0 12 12" width="12" height="12" fill="none" aria-hidden="true">
