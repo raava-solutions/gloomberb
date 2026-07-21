@@ -1,6 +1,8 @@
 import { useCallback, type Dispatch } from "react";
 import {
+  compactDockedPaneAtRect,
   floatAtRect,
+  getLeafRect,
   getRememberedFloatingRect,
   resizeSplitAtPath,
   simulateDrop,
@@ -115,23 +117,34 @@ export function useShellActiveDrag({
         updateDragFloatingRect({ paneId: drag.paneId, rect: nextRect });
         setDragCursor({ x: hitX, y: hitShellY });
 
-        const hoveredOverlay = resolveHoverOverlay(hitX, hitShellY, dockLeafLayouts, drag.paneId);
-        if (hoveredOverlay) {
-          const hoveredCell = hoveredOverlay.cells.find((cell) => pointInRect(cell.rect, hitX, hitShellY));
-          if (hoveredCell) {
-            const target: DropTarget = { kind: "leaf", targetId: hoveredOverlay.targetId, position: hoveredCell.position };
-            const simulation = simulateDrop(baseLayout, drag.paneId, target, bounds, dockGeometryOptions);
-            if (simulation.previewRect) {
-              updateDockPreview({ kind: "dock", target, rect: simulation.previewRect });
+        const occupiedDockLeaf = dockLeafLayouts.find((leaf) => (
+          leaf.instanceId !== drag.paneId && pointInRect(leaf.rect, hitX, hitShellY)
+        ));
+        if (drag.mode === "docked" && occupiedDockLeaf) {
+          const compactedLayout = compactDockedPaneAtRect(baseLayout, drag.paneId, nextRect, bounds);
+          const compactedRect = getLeafRect(compactedLayout, drag.paneId, bounds);
+          updateDockPreview(compactedRect
+            ? { kind: "compact", layout: compactedLayout, rect: compactedRect }
+            : null);
+        } else {
+          const hoveredOverlay = resolveHoverOverlay(hitX, hitShellY, dockLeafLayouts, drag.paneId);
+          if (hoveredOverlay) {
+            const hoveredCell = hoveredOverlay.cells.find((cell) => pointInRect(cell.rect, hitX, hitShellY));
+            if (hoveredCell) {
+              const target: DropTarget = { kind: "leaf", targetId: hoveredOverlay.targetId, position: hoveredCell.position };
+              const simulation = simulateDrop(baseLayout, drag.paneId, target, bounds, dockGeometryOptions);
+              if (simulation.previewRect) {
+                updateDockPreview({ kind: "dock", target, rect: simulation.previewRect });
+              } else {
+                updateDockPreview(null);
+              }
             } else {
               updateDockPreview(null);
             }
           } else {
-            updateDockPreview(null);
+            const snapGuide = resolveSnapGuide(hitX, hitShellY, snapGuides);
+            updateDockPreview(snapGuide ? { kind: "snap", position: snapGuide.position, rect: snapGuide.previewRect } : null);
           }
-        } else {
-          const snapGuide = resolveSnapGuide(hitX, hitShellY, snapGuides);
-          updateDockPreview(snapGuide ? { kind: "snap", position: snapGuide.position, rect: snapGuide.previewRect } : null);
         }
       } else if (drag.type === "float-resize") {
         updateDragFloatingRect({

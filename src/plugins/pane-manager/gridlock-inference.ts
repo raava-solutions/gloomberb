@@ -1,5 +1,5 @@
-import type { DockLayoutNode } from "../../types/config";
-import type { LayoutBounds } from "./dock-tree";
+import type { DockLayoutNode, LayoutConfig } from "../../types/config";
+import { getDockLeafLayouts, type LayoutBounds } from "./dock-tree";
 
 export interface GridlockRect {
   instanceId: string;
@@ -123,4 +123,26 @@ export function inferDockTreeFromRects(rects: GridlockRect[], bounds?: LayoutBou
     first: inferDockTreeFromRects(chosen.first, boundsForRects(chosen.first))!,
     second: inferDockTreeFromRects(chosen.second, boundsForRects(chosen.second))!,
   };
+}
+
+export function inferCompactedDockTree(
+  layout: LayoutConfig,
+  draggedInstanceId: string,
+  targetRect: LayoutBounds,
+  bounds: LayoutBounds,
+): DockLayoutNode | null {
+  let replacedDraggedPane = false;
+  const rects: GridlockRect[] = getDockLeafLayouts(layout, bounds).map((leaf) => {
+    if (leaf.instanceId !== draggedInstanceId) {
+      return { instanceId: leaf.instanceId, ...leaf.rect };
+    }
+    replacedDraggedPane = true;
+    return { instanceId: draggedInstanceId, ...targetRect };
+  });
+
+  if (!replacedDraggedPane) {
+    rects.push({ instanceId: draggedInstanceId, ...targetRect });
+  }
+
+  return inferDockTreeFromRects(rects, bounds);
 }

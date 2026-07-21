@@ -22,6 +22,7 @@ import {
 } from "./index";
 import { resolvePaneFocusSourceLayout } from "./fullscreen";
 import { TransientLayoutProvider, useTransientLayout, type TransientLayoutState } from "../transient-layout";
+import { getDockLeafLayouts } from "../../../plugins/pane-manager";
 
 let testSetup: Awaited<ReturnType<typeof testRender>> | undefined;
 
@@ -485,6 +486,68 @@ describe("Shell", () => {
       await testSetup!.mockMouse.release(16, 6);
       await testSetup!.renderOnce();
     });
+  });
+
+  test("previews and commits one compacted layout while dragging a tiled pane over occupied space", async () => {
+    const config = createDefaultConfig("/tmp/gloomberb-shell-live-compact-drag-test");
+    const mainPane = requireLayoutInstance(config, "portfolio-list:main");
+    const detailPane = requireLayoutInstance(config, "ticker-detail:main");
+    const lowerDetailPane = { ...detailPane, instanceId: "ticker-detail:lower" };
+    const floatingDetailPane = { ...detailPane, instanceId: "ticker-detail:floating" };
+    const layout: LayoutConfig = {
+      dockRoot: {
+        kind: "split",
+        axis: "horizontal",
+        ratio: 0.5,
+        first: { kind: "pane", instanceId: mainPane.instanceId },
+        second: {
+          kind: "split",
+          axis: "vertical",
+          ratio: 0.5,
+          first: { kind: "pane", instanceId: detailPane.instanceId },
+          second: { kind: "pane", instanceId: lowerDetailPane.instanceId },
+        },
+      },
+      instances: [{ ...mainPane }, { ...detailPane }, lowerDetailPane, floatingDetailPane],
+      floating: [{ instanceId: floatingDetailPane.instanceId, x: 28, y: 2, width: 22, height: 7, zIndex: 80 }],
+      detached: [],
+    };
+    const { actions } = await renderShellForWindowModeTest(
+      createShellStateWithLayout(config, layout, mainPane.instanceId),
+      { width: 80, height: 18 },
+    );
+    const beforeRows = testSetup!.captureCharFrame().split("\n");
+    const beforeMainRow = beforeRows.findIndex((row) => row.includes("Main Portfolio"));
+    const beforeMainColumn = beforeRows[beforeMainRow]?.indexOf("Main Portfolio") ?? -1;
+
+    await act(async () => {
+      await testSetup!.mockMouse.pressDown(5, 1);
+      await testSetup!.renderOnce();
+      await testSetup!.mockMouse.moveTo(68, 13);
+      await testSetup!.renderOnce();
+      await testSetup!.renderOnce();
+    });
+
+    const previewRows = testSetup!.captureCharFrame().split("\n");
+    const previewMainRow = previewRows.findIndex((row) => row.includes("Main Portfolio"));
+    const previewMainColumn = previewRows[previewMainRow]?.indexOf("Main Portfolio") ?? -1;
+    expect(actions.some((action) => action.type === "UPDATE_LAYOUT")).toBe(false);
+    expect({ row: previewMainRow, column: previewMainColumn })
+      .not.toEqual({ row: beforeMainRow, column: beforeMainColumn });
+
+    await act(async () => {
+      await testSetup!.mockMouse.release(68, 13);
+      await testSetup!.renderOnce();
+      await testSetup!.renderOnce();
+    });
+
+    const updates = actions.filter((action) => action.type === "UPDATE_LAYOUT");
+    const historyPushes = actions.filter((action) => action.type === "PUSH_LAYOUT_HISTORY");
+    const nextLayout = updates[0]?.layout as LayoutConfig | undefined;
+    expect(historyPushes).toHaveLength(1);
+    expect(updates).toHaveLength(1);
+    expect(nextLayout?.floating).toEqual(layout.floating);
+    expect(getDockLeafLayouts(nextLayout!, { x: 0, y: 0, width: 80, height: 17 })).toHaveLength(3);
   });
 
   test("keeps the focused textarea cursor visible when it is not covered", async () => {

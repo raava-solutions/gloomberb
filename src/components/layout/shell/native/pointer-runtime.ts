@@ -47,6 +47,7 @@ export function useShellNativePointerRuntime({
   const {
     dragRef,
     updateDividerPreview,
+    updateDockPreview,
     updateDragFloatingRect,
   } = dragRuntime;
 
@@ -81,6 +82,7 @@ export function useShellNativePointerRuntime({
 
     const pointer = getShellPointer(event);
     focusNativePane(paneId);
+    updateDockPreview(null);
     dragRef.current = {
       type: "pane-drag",
       paneId,
@@ -91,7 +93,7 @@ export function useShellNativePointerRuntime({
     };
     updateDragFloatingRect({ paneId, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } });
     event.preventDefault();
-  }, [dragRef, focusNativePane, getShellPointer, nativePaneChrome, transientFocusActive, updateDragFloatingRect, windowMode]);
+  }, [dragRef, focusNativePane, getShellPointer, nativePaneChrome, transientFocusActive, updateDockPreview, updateDragFloatingRect, windowMode]);
 
   const startNativeDockedDrag = useCallback((paneId: string, rect: LayoutBounds, event: ShellMouseEvent) => {
     if (!nativePaneChrome) return;
@@ -101,6 +103,7 @@ export function useShellNativePointerRuntime({
 
     const pointer = getShellPointer(event);
     focusNativePane(paneId);
+    updateDockPreview(null);
     dragRef.current = {
       type: "pane-drag",
       paneId,
@@ -110,7 +113,7 @@ export function useShellNativePointerRuntime({
       origRect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
     };
     event.preventDefault();
-  }, [dragRef, focusNativePane, getShellPointer, nativePaneChrome, transientFocusActive, windowMode]);
+  }, [dragRef, focusNativePane, getShellPointer, nativePaneChrome, transientFocusActive, updateDockPreview, windowMode]);
 
   const startNativeFloatResize = useCallback((
     paneId: string,

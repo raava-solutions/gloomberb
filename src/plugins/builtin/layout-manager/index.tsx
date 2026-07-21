@@ -3,9 +3,10 @@ import type { AppNotificationRequest, GloomPlugin, GloomPluginContext } from "..
 import type { AppAction } from "../../../state/app/context";
 import { notifyGridlockComplete } from "../../gridlock-notification";
 import {
-  dockPane,
-  floatPane,
+  dockFloatingPaneAtCurrentRect,
+  floatAtRect,
   getDockedPaneIds,
+  getLeafRect,
   gridlockAllPanes,
   isPaneInLayout,
   isPaneDocked,
@@ -66,8 +67,13 @@ export const layoutManagerPlugin: GloomPlugin = {
           return;
         }
 
-        const def = ctx.getPaneDef(focusedPane.paneId);
-        const nextLayout = floatPane(layout, focusedPane.instanceId, termWidth, termHeight, def);
+        const rect = getLeafRect(
+          layout,
+          focusedPane.instanceId,
+          { x: 0, y: 0, width: termWidth, height: termHeight },
+        );
+        if (!rect) return;
+        const nextLayout = floatAtRect(layout, focusedPane.instanceId, rect);
         persistLayout(ctx, nextLayout);
         dispatchRef?.({ type: "FOCUS_PANE", paneId: focusedPane.instanceId });
       },
@@ -82,14 +88,18 @@ export const layoutManagerPlugin: GloomPlugin = {
       execute: async () => {
         if (!getStateRef) return;
 
-        const { layout, focusedPaneId } = getStateRef();
+        const { layout, termWidth, termHeight, focusedPaneId } = getStateRef();
         const focusedPane = getFocusedPane(layout, focusedPaneId);
         if (!focusedPane || !layout.floating.some((entry) => entry.instanceId === focusedPane.instanceId)) {
           notify("Focus a floating pane to dock it", { type: "info" });
           return;
         }
 
-        const nextLayout = dockPane(layout, focusedPane.instanceId);
+        const nextLayout = dockFloatingPaneAtCurrentRect(
+          layout,
+          focusedPane.instanceId,
+          { x: 0, y: 0, width: termWidth, height: termHeight },
+        );
         persistLayout(ctx, nextLayout);
         dispatchRef?.({ type: "FOCUS_PANE", paneId: focusedPane.instanceId });
       },
