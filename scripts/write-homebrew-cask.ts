@@ -53,8 +53,8 @@ function renderCask({ version, sha256 }: Pick<Options, "version" | "sha256">): s
   version "${version}"
   sha256 "${sha256}"
 
-  url "https://github.com/vincelwt/gloomberb/releases/download/v#{version}/stable-macos-arm64-Gloomberb.app.zip",
-      verified: "github.com/vincelwt/gloomberb/"
+  url "https://github.com/raava-solutions/gloomberb/releases/download/v#{version}/stable-macos-arm64-Gloomberb.app.zip",
+      verified: "github.com/raava-solutions/gloomberb/"
   name "Gloomberb"
   desc "Open-source finance terminal"
   homepage "https://gloomberb.com"
@@ -69,7 +69,7 @@ function renderCask({ version, sha256 }: Pick<Options, "version" | "sha256">): s
   app "Gloomberb.app"
   binary "#{appdir}/Gloomberb.app/Contents/Resources/gloomberb", target: "gloomberb"
 
-  uninstall quit: "com.vincelwt.gloomberb"
+  uninstall quit: "com.raava.gloomberb"
 
   zap trash: "~/.gloomberb"
 end

@@ -7,7 +7,7 @@ const GENERATE_RELEASE_PATCH = process.platform !== "win32";
 const config: ElectrobunConfig = {
   app: {
     name: "Gloomberb",
-    identifier: "com.vincelwt.gloomberb",
+    identifier: "com.raava.gloomberb",
     version: pkg.version,
     description: pkg.description,
     urlSchemes: ["gloomberb"],
