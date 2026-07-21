@@ -3,6 +3,7 @@ import type {
   DockDividerLayout,
   DockLeafLayout,
   FloatingRect,
+  FloatingResizeCorner,
   LayoutBounds,
   ResolvedPane,
 } from "../../../plugins/pane-manager";
@@ -62,6 +63,27 @@ function sortedFloatingPanes(visibleFloatingPanes: VisibleFloatingPane[]): Visib
   return [...visibleFloatingPanes].sort((a, b) => (b.pane.floating?.zIndex ?? 50) - (a.pane.floating?.zIndex ?? 50));
 }
 
+function resolveTerminalResizeHandle(
+  relativeX: number,
+  relativeY: number,
+  rect: { width: number; height: number },
+): FloatingResizeCorner | null {
+  const nearLeft = relativeX <= 1;
+  const nearRight = relativeX >= rect.width - 2;
+  const nearTop = relativeY <= 0;
+  const nearBottom = relativeY >= rect.height - 1;
+
+  if (nearBottom && nearRight) return "bottom-right";
+  if (nearBottom && nearLeft) return "bottom-left";
+  if (nearTop && nearRight) return "top-right";
+  if (nearTop && nearLeft) return "top-left";
+  if (nearBottom) return "bottom";
+  if (nearLeft) return "left";
+  if (nearRight) return "right";
+  // The TUI header owns the interior top row for dragging and header actions.
+  return null;
+}
+
 export function useShellTerminalPointerRuntime({
   appHeaderHeight,
   closePaneMenu,
@@ -117,10 +139,12 @@ export function useShellTerminalPointerRuntime({
         const relativeY = shellY - rect.y;
         selectWindowModePane(paneId);
 
-        if (relativeX >= rect.width - 2 && relativeY >= rect.height - 1) {
+        const resizeHandle = resolveTerminalResizeHandle(relativeX, relativeY, rect);
+        if (resizeHandle) {
           dragRef.current = {
             type: "float-resize",
             paneId,
+            corner: resizeHandle,
             startX: preciseX,
             startY: preciseShellY,
             origRect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
@@ -207,10 +231,12 @@ export function useShellTerminalPointerRuntime({
           event.preventDefault();
           return;
         }
-        if (relativeX >= rect.width - 2 && relativeY >= rect.height - 1) {
+        const resizeHandle = resolveTerminalResizeHandle(relativeX, relativeY, rect);
+        if (resizeHandle) {
           dragRef.current = {
             type: "float-resize",
             paneId,
+            corner: resizeHandle,
             startX: preciseX,
             startY: preciseShellY,
             origRect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },

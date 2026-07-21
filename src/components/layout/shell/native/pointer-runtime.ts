@@ -1,5 +1,10 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
-import type { DockDividerLayout, FloatingRect, LayoutBounds } from "../../../../plugins/pane-manager";
+import type {
+  DockDividerLayout,
+  FloatingRect,
+  FloatingResizeCorner,
+  LayoutBounds,
+} from "../../../../plugins/pane-manager";
 import type { ActionMenuState } from "../action-menu-overlay";
 import type { ShellDragRuntimeState, ShellMouseEvent } from "../drag/runtime";
 import type { WindowEditState } from "../../window-edit/mode";
@@ -107,7 +112,12 @@ export function useShellNativePointerRuntime({
     event.preventDefault();
   }, [dragRef, focusNativePane, getShellPointer, nativePaneChrome, transientFocusActive, windowMode]);
 
-  const startNativeFloatResize = useCallback((paneId: string, rect: FloatingRect, event: ShellMouseEvent) => {
+  const startNativeFloatResize = useCallback((
+    paneId: string,
+    rect: FloatingRect,
+    corner: FloatingResizeCorner,
+    event: ShellMouseEvent,
+  ) => {
     if (!nativePaneChrome) return;
     if (transientFocusActive) return;
 
@@ -120,6 +130,7 @@ export function useShellNativePointerRuntime({
     dragRef.current = {
       type: "float-resize",
       paneId,
+      corner,
       startX: pointer.x,
       startY: pointer.y,
       origRect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
