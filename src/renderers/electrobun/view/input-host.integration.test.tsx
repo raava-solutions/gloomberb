@@ -27,6 +27,7 @@ class FocusableControl extends EventTarget {
     readonly tagName: "INPUT" | "BUTTON",
     private readonly onFocus: (control: FocusableControl) => void,
     readonly onNativeActivate: () => void = () => {},
+    readonly onKeyDown: (event: TestKeyboardEvent) => void = () => {},
   ) {
     super();
   }
@@ -40,22 +41,41 @@ class TestWindow {
   readonly innerWidth = 960;
   readonly innerHeight = 720;
   activeElement: FocusableControl | null = null;
-  private readonly listeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
+  private readonly captureListeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
+  private readonly bubbleListeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
 
-  addEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
-    const listeners = this.listeners.get(type) ?? new Set();
+  addEventListener(
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+    options?: boolean | AddEventListenerOptions,
+  ): void {
+    const listenerMap = options === true || (typeof options === "object" && options.capture)
+      ? this.captureListeners
+      : this.bubbleListeners;
+    const listeners = listenerMap.get(type) ?? new Set();
     listeners.add(listener);
-    this.listeners.set(type, listeners);
+    listenerMap.set(type, listeners);
   }
 
-  removeEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
-    this.listeners.get(type)?.delete(listener);
+  removeEventListener(
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+    options?: boolean | EventListenerOptions,
+  ): void {
+    const listenerMap = options === true || (typeof options === "object" && options.capture)
+      ? this.captureListeners
+      : this.bubbleListeners;
+    listenerMap.get(type)?.delete(listener);
   }
 
-  createControl(tagName: "INPUT" | "BUTTON", onNativeActivate: () => void = () => {}): FocusableControl {
+  createControl(
+    tagName: "INPUT" | "BUTTON",
+    onNativeActivate: () => void = () => {},
+    onKeyDown: (event: TestKeyboardEvent) => void = () => {},
+  ): FocusableControl {
     return new FocusableControl(tagName, (control) => {
       this.activeElement = control;
-    }, onNativeActivate);
+    }, onNativeActivate, onKeyDown);
   }
 
   emitKeyDown(key: string, options: { shift?: boolean } = {}): TestKeyboardEvent {
@@ -75,9 +95,16 @@ class TestWindow {
     } as unknown as TestKeyboardEvent;
     event.preventDefault = () => { event.defaultPrevented = true; };
     event.stopPropagation = () => { event.propagationStopped = true; };
-    for (const listener of this.listeners.get("keydown") ?? []) {
+    for (const listener of this.captureListeners.get("keydown") ?? []) {
       if (typeof listener === "function") listener(event);
       else listener.handleEvent(event);
+    }
+    if (!event.propagationStopped) this.activeElement.onKeyDown(event);
+    if (!event.propagationStopped) {
+      for (const listener of this.bubbleListeners.get("keydown") ?? []) {
+        if (typeof listener === "function") listener(event);
+        else listener.handleEvent(event);
+      }
     }
     return event;
   }
@@ -163,6 +190,112 @@ afterEach(async () => {
 });
 
 describe("WebInputHostProvider Window Edit registration", () => {
+  test("captures Window Edit Enter before a focused form Input can submit", async () => {
+    const testWindow = new TestWindow();
+    globalThis.window = testWindow as unknown as Window & typeof globalThis;
+    const layout: LayoutConfig = {
+      dockRoot: null,
+      instances: [createPaneInstance("test-pane", { instanceId: "float-a" })],
+      floating: [{
+        instanceId: "float-a",
+        x: 20,
+        y: 8,
+        width: 6,
+        height: 3,
+        zIndex: 50,
+        fixedGeometry: true,
+      }],
+      detached: [],
+    };
+    const persistedLayouts: LayoutConfig[] = [];
+    let inputKeyDowns = 0;
+    let formSubmits = 0;
+    const controls: {
+      startWindowMode?: (paneId?: string, mode?: "move" | "resize") => void;
+      windowMode?: WindowEditState | null;
+    } = {};
+
+    function Harness() {
+      const result = useShellWindowMode({
+        bounds: { x: 0, y: 0, width: 120, height: 40 },
+        cancelActiveDrag() {},
+        closePaneMenu() {},
+        contentHeight: 40,
+        dockGeometryOptions: {},
+        focusPane() {},
+        focusedPaneId: "float-a",
+        hasActiveDrag: () => false,
+        nativePaneChrome: true,
+        overlayOpen: false,
+        persistLayout(nextLayout) { persistedLayouts.push(nextLayout); },
+        pluginRegistry: {
+          notify() {},
+          openWindowModeFn() {},
+          panes: new Map(),
+        } as unknown as PluginRegistry,
+        visibleLayout: layout,
+        width: 120,
+      });
+      controls.startWindowMode = result.startWindowMode;
+      controls.windowMode = result.windowMode;
+      return null;
+    }
+
+    testSetup = await testRender(
+      <WebInputHostProvider>
+        <Harness />
+      </WebInputHostProvider>,
+      { width: 120, height: 40 },
+    );
+    await testSetup.renderOnce();
+
+    await act(async () => {
+      controls.startWindowMode?.("float-a", "resize");
+      await testSetup!.renderOnce();
+      await testSetup!.renderOnce();
+    });
+
+    const formInput = testWindow.createControl("INPUT", () => {}, (event) => {
+      inputKeyDowns += 1;
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      formSubmits += 1;
+    });
+    formInput.focus();
+    await act(async () => {
+      testWindow.emitKeyDown("ArrowUp");
+      await testSetup!.renderOnce();
+      await testSetup!.renderOnce();
+    });
+    expect(controls.windowMode?.dirty).toBe(true);
+    inputKeyDowns = 0;
+
+    let enter: TestKeyboardEvent | undefined;
+    await act(async () => {
+      enter = testWindow.emitKeyDown("Enter");
+      await testSetup!.renderOnce();
+      await testSetup!.renderOnce();
+    });
+
+    expect({ inputKeyDowns, formSubmits }).toEqual({ inputKeyDowns: 0, formSubmits: 0 });
+    expect(persistedLayouts).toEqual([controls.windowMode!.previewLayout]);
+    expect(controls.windowMode).toMatchObject({ mode: "move", dirty: false, notice: "Committed" });
+    expect(enter?.defaultPrevented).toBe(true);
+    expect(enter?.propagationStopped).toBe(true);
+
+    await act(async () => {
+      testWindow.emitKeyDown("Escape");
+      await testSetup!.renderOnce();
+      await testSetup!.renderOnce();
+    });
+    expect(controls.windowMode).toBeNull();
+
+    const inactiveEnter = testWindow.emitKeyDown("Enter");
+    expect({ inputKeyDowns, formSubmits }).toEqual({ inputKeyDowns: 1, formSubmits: 1 });
+    expect(inactiveEnter.defaultPrevented).toBe(true);
+    expect(inactiveEnter.propagationStopped).toBe(false);
+  });
+
   test("cycles and commits over editable and native control defaults", async () => {
     const testWindow = new TestWindow();
     globalThis.window = testWindow as unknown as Window & typeof globalThis;

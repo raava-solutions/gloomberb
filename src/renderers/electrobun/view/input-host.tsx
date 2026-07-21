@@ -113,6 +113,7 @@ function dispatchShortcutEntries(
   shortcutEvent: KeyEventLike,
   entries: readonly ShortcutEntry[],
   nativeInterceptionOnly = false,
+  skipNativeInterceptors = false,
 ): void {
   for (const phase of ["before", "normal", "after"] as const) {
     if (phase === "after" && (shortcutEvent.defaultPrevented || shortcutEvent.propagationStopped)) break;
@@ -130,6 +131,7 @@ function dispatchShortcutEntries(
     for (const { entry, interceptsNative } of phaseEntries) {
       if (!entry.enabledRef.current) continue;
       if (nativeInterceptionOnly && (phase !== "before" || !interceptsNative)) continue;
+      if (skipNativeInterceptors && phase === "before" && interceptsNative) continue;
       if (!shouldDeliverShortcut(shortcutEvent, entry.allowEditableRef.current)) continue;
       entry.handlerRef.current(shortcutEvent);
       if (shortcutEvent.propagationStopped) break;
@@ -138,12 +140,21 @@ function dispatchShortcutEntries(
   }
 }
 
-export function dispatchWebAppKeyDown(event: KeyboardEvent, entries: readonly ShortcutEntry[]): void {
+export function dispatchWebNativeInterceptors(event: KeyboardEvent, entries: readonly ShortcutEntry[]): void {
+  if (event.defaultPrevented || event.isComposing) return;
+  dispatchShortcutEntries(toKeyEventLike(event), entries, true);
+}
+
+export function dispatchWebAppKeyDown(
+  event: KeyboardEvent,
+  entries: readonly ShortcutEntry[],
+  nativeInterceptorsDispatched = false,
+): void {
   if (event.defaultPrevented || event.isComposing) return;
   const shortcutEvent = toKeyEventLike(event);
   const nativeInterceptionOnly = !shouldDispatchWebAppKeyDown(event);
 
-  dispatchShortcutEntries(shortcutEvent, entries, nativeInterceptionOnly);
+  dispatchShortcutEntries(shortcutEvent, entries, nativeInterceptionOnly, nativeInterceptorsDispatched);
   if (!nativeInterceptionOnly && shouldConsumeWebAppKeyDown(event)) event.preventDefault();
 }
 
@@ -151,11 +162,18 @@ export function WebInputHostProvider({ children }: { children: ReactNode }) {
   const shortcutsRef = useRef<ShortcutEntry[]>([]);
 
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      dispatchWebAppKeyDown(event, shortcutsRef.current);
+    const onKeyDownCapture = (event: KeyboardEvent) => {
+      dispatchWebNativeInterceptors(event, shortcutsRef.current);
     };
+    const onKeyDown = (event: KeyboardEvent) => {
+      dispatchWebAppKeyDown(event, shortcutsRef.current, true);
+    };
+    window.addEventListener("keydown", onKeyDownCapture, true);
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDownCapture, true);
+      window.removeEventListener("keydown", onKeyDown);
+    };
   }, []);
 
   useEffect(() => {

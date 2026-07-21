@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { KeyEventLike } from "../../../react/input";
-import { dispatchWebAppKeyDown } from "./input-host";
+import { dispatchWebAppKeyDown, dispatchWebNativeInterceptors } from "./input-host";
 
 function keyboardEvent(overrides: Record<string, unknown> = {}) {
   const event = {
@@ -47,6 +47,22 @@ function runNativeDefault(event: KeyboardEvent, action: () => void): void {
 }
 
 describe("dispatchWebAppKeyDown", () => {
+  test("runs only native before-phase interceptors during capture and does not repeat them in bubble", () => {
+    const calls: string[] = [];
+    const event = keyboardEvent({ key: "x", target: { tagName: "DIV" } });
+    const entries = [
+      shortcut(() => { calls.push("generic-before"); }, { phase: "before", order: 1 }),
+      shortcut(() => { calls.push("native-before"); }, { phase: "before", order: 2, interceptNative: true }),
+      shortcut(() => { calls.push("generic-normal"); }, { phase: "normal", order: 3 }),
+    ];
+
+    dispatchWebNativeInterceptors(event, entries);
+    expect(calls).toEqual(["native-before"]);
+
+    dispatchWebAppKeyDown(event, entries, true);
+    expect(calls).toEqual(["native-before", "generic-before", "generic-normal"]);
+  });
+
   test("leaves Tab and Shift+Tab to native focus traversal when no modal handler accepts them", () => {
     let paneTabs = 0;
     const focusMoves: string[] = [];
