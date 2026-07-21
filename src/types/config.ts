@@ -44,6 +44,7 @@ export interface FloatingPlacementMemory {
   y: number;
   width: number;
   height: number;
+  fixedGeometry?: boolean;
 }
 
 export interface DetachedPlacementMemory {
@@ -91,6 +92,7 @@ export interface FloatingPaneEntry {
   width: number;
   height: number;
   zIndex?: number;
+  fixedGeometry?: boolean;
 }
 
 interface DetachedPaneEntry {

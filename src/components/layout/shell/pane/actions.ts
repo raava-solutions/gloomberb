@@ -107,9 +107,8 @@ export function useShellPaneActions({
     return true;
   }, [focusedPaneId, openPaneSettings, pluginRegistry]);
 
-  const toggleFocusedPaneFloating = useCallback(() => {
-    if (!focusedPaneId) return false;
-    const pane = paneMap.get(focusedPaneId);
+  const togglePaneFloating = useCallback((paneId: string) => {
+    const pane = paneMap.get(paneId);
     if (!pane) return false;
     const bounds = { x: 0, y: 0, width, height: contentHeight };
     const tiledRect = pane.floating
@@ -126,7 +125,11 @@ export function useShellPaneActions({
     persistLayout(nextLayout);
     focusPane(pane.instance.instanceId);
     return true;
-  }, [contentHeight, focusPane, focusedPaneId, nativePaneChrome, paneMap, persistLayout, visibleLayout, width]);
+  }, [contentHeight, focusPane, nativePaneChrome, paneMap, persistLayout, visibleLayout, width]);
+
+  const toggleFocusedPaneFloating = useCallback(() => (
+    focusedPaneId ? togglePaneFloating(focusedPaneId) : false
+  ), [focusedPaneId, togglePaneFloating]);
 
   const popOutFocusedPane = useCallback(() => {
     if (!focusedPaneId || desktopWindowBridge?.kind !== "main" || !desktopWindowBridge.popOutPane) return false;
@@ -157,5 +160,6 @@ export function useShellPaneActions({
     openPaneSettings,
     popOutFocusedPane,
     toggleFocusedPaneFloating,
+    togglePaneFloating,
   };
 }

@@ -17,6 +17,7 @@ import {
 } from "./floating";
 import type { LayoutBounds } from "./dock-tree";
 import { inferCompactedDockTree } from "./gridlock-inference";
+import { dockPane } from "./docking";
 import type { FloatingResizeCorner } from "./types";
 import { detachPane, ensurePaneInstance, finalizeLayout } from "./layout-state";
 
@@ -54,6 +55,7 @@ export function floatAtRect(layout: LayoutConfig, instanceId: string, rect: Floa
         width: rect.width,
         height: rect.height,
         zIndex: rect.zIndex ?? maxFloatingZ(layout) + 1,
+        fixedGeometry: rect.fixedGeometry,
       },
     ],
   });
@@ -67,7 +69,7 @@ export function dockFloatingPaneAtCurrentRect(
   const floating = layout.floating.find((entry) => entry.instanceId === instanceId);
   if (!floating) return layout;
   const dockRoot = inferCompactedDockTree(layout, instanceId, floating, bounds);
-  if (!dockRoot) return layout;
+  if (!dockRoot) return dockPane(layout, instanceId);
   return finalizeLayout({
     ...layout,
     dockRoot,
@@ -102,6 +104,8 @@ export function resizeFloatingPaneFromCorner(
 ): LayoutConfig {
   const floating = layout.floating.find((entry) => entry.instanceId === instanceId);
   if (!floating) return layout;
+  const minWidth = floating.fixedGeometry ? 1 : MIN_FLOAT_WIDTH;
+  const minHeight = floating.fixedGeometry ? 1 : MIN_FLOAT_HEIGHT;
 
   let left = floating.x;
   let top = floating.y;
@@ -114,15 +118,15 @@ export function resizeFloatingPaneFromCorner(
   const affectsBottom = corner === "bottom-left" || corner === "bottom-right" || corner === "bottom";
 
   if (affectsLeft) {
-    left = Math.max(bounds.x, Math.min(left + deltaX, right - MIN_FLOAT_WIDTH));
+    left = Math.max(bounds.x, Math.min(left + deltaX, right - minWidth));
   } else if (affectsRight) {
-    right = Math.min(bounds.x + bounds.width, Math.max(right + deltaX, left + MIN_FLOAT_WIDTH));
+    right = Math.min(bounds.x + bounds.width, Math.max(right + deltaX, left + minWidth));
   }
 
   if (affectsTop) {
-    top = Math.max(bounds.y, Math.min(top + deltaY, bottom - MIN_FLOAT_HEIGHT));
+    top = Math.max(bounds.y, Math.min(top + deltaY, bottom - minHeight));
   } else if (affectsBottom) {
-    bottom = Math.min(bounds.y + bounds.height, Math.max(bottom + deltaY, top + MIN_FLOAT_HEIGHT));
+    bottom = Math.min(bounds.y + bounds.height, Math.max(bottom + deltaY, top + minHeight));
   }
 
   return finalizeLayout(updateFloatingPane(layout, instanceId, {

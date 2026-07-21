@@ -26,6 +26,7 @@ interface UseShellNativePointerRuntimeOptions {
   setHoveredMenuItemId: Dispatch<SetStateAction<string | null>>;
   setMenuState: Dispatch<SetStateAction<ActionMenuState | null>>;
   transientFocusActive: boolean;
+  togglePaneFloating: (paneId: string) => boolean;
   windowMode: WindowEditState | null;
 }
 
@@ -42,6 +43,7 @@ export function useShellNativePointerRuntime({
   setHoveredMenuItemId,
   setMenuState,
   transientFocusActive,
+  togglePaneFloating,
   windowMode,
 }: UseShellNativePointerRuntimeOptions) {
   const {
@@ -89,9 +91,9 @@ export function useShellNativePointerRuntime({
       mode: "floating",
       startX: pointer.x,
       startY: pointer.y,
-      origRect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+      origRect: { ...rect },
     };
-    updateDragFloatingRect({ paneId, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } });
+    updateDragFloatingRect({ paneId, rect: { ...rect } });
     event.preventDefault();
   }, [dragRef, focusNativePane, getShellPointer, nativePaneChrome, transientFocusActive, updateDockPreview, updateDragFloatingRect, windowMode]);
 
@@ -136,9 +138,9 @@ export function useShellNativePointerRuntime({
       corner,
       startX: pointer.x,
       startY: pointer.y,
-      origRect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+      origRect: { ...rect },
     };
-    updateDragFloatingRect({ paneId, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } });
+    updateDragFloatingRect({ paneId, rect: { ...rect } });
     event.stopPropagation();
     event.preventDefault();
   }, [dragRef, focusNativePane, getShellPointer, nativePaneChrome, selectWindowModePane, transientFocusActive, updateDragFloatingRect, windowMode]);
@@ -190,12 +192,20 @@ export function useShellNativePointerRuntime({
     handleFloatingClose(paneId);
   }, [handleFloatingClose, windowMode]);
 
+  const handlePaneFloatToggle = useCallback((paneId: string, event: ShellMouseEvent) => {
+    event.stopPropagation();
+    event.preventDefault();
+    if (windowMode || event.button === 2) return;
+    togglePaneFloating(paneId);
+  }, [togglePaneFloating, windowMode]);
+
   return {
     handleFloatingCloseMouseDown,
     handleNativeDrag: handleActiveDrag,
     handleNativePaneContextMenu,
     handleNativePaneMouseDown,
     handlePaneAction,
+    handlePaneFloatToggle,
     startNativeDividerDrag,
     startNativeDockedDrag,
     startNativeFloatingDrag,

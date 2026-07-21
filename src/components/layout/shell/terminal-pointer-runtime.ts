@@ -42,6 +42,7 @@ interface UseShellTerminalPointerRuntimeOptions {
   setHoveredMenuItemId: Dispatch<SetStateAction<string | null>>;
   setMenuState: Dispatch<SetStateAction<ActionMenuState | null>>;
   transientFocusActive: boolean;
+  togglePaneFloating: (paneId: string) => boolean;
   visibleFloatingPanes: VisibleFloatingPane[];
   width: number;
   windowMode: WindowEditState | null;
@@ -102,6 +103,7 @@ export function useShellTerminalPointerRuntime({
   setHoveredMenuItemId,
   setMenuState,
   transientFocusActive,
+  togglePaneFloating,
   visibleFloatingPanes,
   width,
   windowMode,
@@ -148,9 +150,9 @@ export function useShellTerminalPointerRuntime({
             corner: resizeHandle,
             startX: preciseX,
             startY: preciseShellY,
-            origRect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+            origRect: { ...rect },
           };
-          updateDragFloatingRect({ paneId, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } });
+          updateDragFloatingRect({ paneId, rect: { ...rect } });
         }
 
         event.stopPropagation();
@@ -216,7 +218,11 @@ export function useShellTerminalPointerRuntime({
           openPaneMenu(paneId, rect, event);
           return;
         }
-        if (relativeY === 0 && headerAreas.closeStart != null && relativeX >= headerAreas.closeStart && relativeX < rect.width) {
+        if (relativeY === 0
+          && headerAreas.closeStart != null
+          && headerAreas.closeEnd != null
+          && relativeX >= headerAreas.closeStart
+          && relativeX < headerAreas.closeEnd) {
           handleFloatingClose(paneId);
           event.stopPropagation();
           event.preventDefault();
@@ -224,10 +230,18 @@ export function useShellTerminalPointerRuntime({
         }
         if (relativeY === 0
           && headerAreas.actionStart != null
-          && headerAreas.closeStart != null
+          && headerAreas.actionEnd != null
           && relativeX >= headerAreas.actionStart
-          && relativeX < headerAreas.closeStart) {
+          && relativeX < headerAreas.actionEnd) {
           openPaneMenu(paneId, rect, event);
+          event.stopPropagation();
+          event.preventDefault();
+          return;
+        }
+        if (relativeY === 0
+          && relativeX >= headerAreas.toggleStart
+          && relativeX < headerAreas.toggleEnd) {
+          togglePaneFloating(paneId);
           event.stopPropagation();
           event.preventDefault();
           return;
@@ -240,9 +254,9 @@ export function useShellTerminalPointerRuntime({
             corner: resizeHandle,
             startX: preciseX,
             startY: preciseShellY,
-            origRect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+            origRect: { ...rect },
           };
-          updateDragFloatingRect({ paneId, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } });
+          updateDragFloatingRect({ paneId, rect: { ...rect } });
           event.stopPropagation();
           event.preventDefault();
           return;
@@ -255,9 +269,9 @@ export function useShellTerminalPointerRuntime({
             mode: "floating",
             startX: preciseX,
             startY: preciseShellY,
-            origRect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+            origRect: { ...rect },
           };
-          updateDragFloatingRect({ paneId, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } });
+          updateDragFloatingRect({ paneId, rect: { ...rect } });
           event.stopPropagation();
           event.preventDefault();
           return;
@@ -304,8 +318,18 @@ export function useShellTerminalPointerRuntime({
         }
         if (relativeY === 0
           && headerAreas.actionStart != null
-          && relativeX >= headerAreas.actionStart) {
+          && headerAreas.actionEnd != null
+          && relativeX >= headerAreas.actionStart
+          && relativeX < headerAreas.actionEnd) {
           openPaneMenu(leaf.instanceId, leaf.rect, event);
+          event.stopPropagation();
+          event.preventDefault();
+          return;
+        }
+        if (relativeY === 0
+          && relativeX >= headerAreas.toggleStart
+          && relativeX < headerAreas.toggleEnd) {
+          togglePaneFloating(leaf.instanceId);
           event.stopPropagation();
           event.preventDefault();
           return;
@@ -355,6 +379,7 @@ export function useShellTerminalPointerRuntime({
     setHoveredMenuItemId,
     setMenuState,
     transientFocusActive,
+    togglePaneFloating,
     updateDividerPreview,
     updateDockPreview,
     updateDragFloatingRect,
