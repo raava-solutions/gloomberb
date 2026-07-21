@@ -638,70 +638,147 @@ describe("Shell", () => {
     expect(getDockLeafLayouts(nextLayout!, { x: 0, y: 0, width: 80, height: 17 })).toHaveLength(2);
   });
 
-  test("keeps an occupied directional overlay target-relative through pointer preview and commit", async () => {
-    const config = createDefaultConfig("/tmp/gloomberb-shell-directional-drag-test");
-    const mainPane = requireLayoutInstance(config, "portfolio-list:main");
-    const detailPane = requireLayoutInstance(config, "ticker-detail:main");
-    const lowerDetailPane = { ...detailPane, instanceId: "ticker-detail:lower" };
-    const layout: LayoutConfig = {
-      dockRoot: {
-        kind: "split",
-        axis: "horizontal",
-        ratio: 0.5,
-        first: { kind: "pane", instanceId: mainPane.instanceId },
-        second: {
+  for (const directionalCase of [
+    {
+      position: "top",
+      pointer: { x: 88, y: 12 },
+      axis: "vertical",
+      order: ["portfolio-list:main", "ticker-detail:main"],
+      previewRects: [
+        { instanceId: "portfolio-list:main", rect: { x: 0, y: 0, width: 120, height: 14 } },
+        { instanceId: "ticker-detail:main", rect: { x: 0, y: 15, width: 120, height: 14 } },
+        { instanceId: "ticker-detail:lower", rect: { x: 0, y: 30, width: 120, height: 29 } },
+      ],
+      committedRects: [
+        { instanceId: "portfolio-list:main", rect: { x: 0, y: 0, width: 120, height: 14 } },
+        { instanceId: "ticker-detail:main", rect: { x: 0, y: 15, width: 120, height: 14 } },
+        { instanceId: "ticker-detail:lower", rect: { x: 0, y: 30, width: 120, height: 29 } },
+      ],
+    },
+    {
+      position: "left",
+      pointer: { x: 82, y: 15 },
+      axis: "horizontal",
+      order: ["portfolio-list:main", "ticker-detail:main"],
+      previewRects: [
+        { instanceId: "portfolio-list:main", rect: { x: 0, y: 0, width: 60, height: 29 } },
+        { instanceId: "ticker-detail:lower", rect: { x: 0, y: 30, width: 120, height: 29 } },
+      ],
+      committedRects: [
+        { instanceId: "portfolio-list:main", rect: { x: 0, y: 0, width: 60, height: 29 } },
+        { instanceId: "ticker-detail:main", rect: { x: 61, y: 0, width: 59, height: 29 } },
+        { instanceId: "ticker-detail:lower", rect: { x: 0, y: 30, width: 120, height: 29 } },
+      ],
+    },
+    {
+      position: "right",
+      pointer: { x: 95, y: 15 },
+      axis: "horizontal",
+      order: ["ticker-detail:main", "portfolio-list:main"],
+      previewRects: [
+        { instanceId: "ticker-detail:main", rect: { x: 0, y: 0, width: 60, height: 29 } },
+        { instanceId: "portfolio-list:main", rect: { x: 61, y: 0, width: 59, height: 29 } },
+        { instanceId: "ticker-detail:lower", rect: { x: 0, y: 30, width: 120, height: 29 } },
+      ],
+      committedRects: [
+        { instanceId: "ticker-detail:main", rect: { x: 0, y: 0, width: 60, height: 29 } },
+        { instanceId: "portfolio-list:main", rect: { x: 61, y: 0, width: 59, height: 29 } },
+        { instanceId: "ticker-detail:lower", rect: { x: 0, y: 30, width: 120, height: 29 } },
+      ],
+    },
+    {
+      position: "bottom",
+      pointer: { x: 88, y: 18 },
+      axis: "vertical",
+      order: ["ticker-detail:main", "portfolio-list:main"],
+      previewRects: [
+        { instanceId: "ticker-detail:main", rect: { x: 0, y: 0, width: 120, height: 14 } },
+        { instanceId: "portfolio-list:main", rect: { x: 0, y: 15, width: 120, height: 14 } },
+        { instanceId: "ticker-detail:lower", rect: { x: 0, y: 30, width: 120, height: 29 } },
+      ],
+      committedRects: [
+        { instanceId: "ticker-detail:main", rect: { x: 0, y: 0, width: 120, height: 14 } },
+        { instanceId: "portfolio-list:main", rect: { x: 0, y: 15, width: 120, height: 14 } },
+        { instanceId: "ticker-detail:lower", rect: { x: 0, y: 30, width: 120, height: 29 } },
+      ],
+    },
+  ] as const) {
+    test(`routes the ${directionalCase.position} overlay cell through pointer preview and release`, async () => {
+      const config = createDefaultConfig(`/tmp/gloomberb-shell-directional-${directionalCase.position}-test`);
+      const mainPane = requireLayoutInstance(config, "portfolio-list:main");
+      const detailPane = requireLayoutInstance(config, "ticker-detail:main");
+      const lowerDetailPane = { ...detailPane, instanceId: "ticker-detail:lower" };
+      const layout: LayoutConfig = {
+        dockRoot: {
           kind: "split",
-          axis: "vertical",
+          axis: "horizontal",
           ratio: 0.5,
-          first: { kind: "pane", instanceId: detailPane.instanceId },
-          second: { kind: "pane", instanceId: lowerDetailPane.instanceId },
+          first: { kind: "pane", instanceId: mainPane.instanceId },
+          second: {
+            kind: "split",
+            axis: "vertical",
+            ratio: 0.5,
+            first: { kind: "pane", instanceId: detailPane.instanceId },
+            second: { kind: "pane", instanceId: lowerDetailPane.instanceId },
+          },
         },
-      },
-      instances: [{ ...mainPane }, { ...detailPane }, lowerDetailPane],
-      floating: [],
-      detached: [],
-    };
-    const { actions } = await renderShellForWindowModeTest(
-      createShellStateWithLayout(config, layout, mainPane.instanceId),
-      { width: 120, height: 61 },
-    );
-    const expected = [
-      { instanceId: mainPane.instanceId, rect: { x: 0, y: 0, width: 120, height: 14 } },
-      { instanceId: detailPane.instanceId, rect: { x: 0, y: 15, width: 120, height: 14 } },
-      { instanceId: lowerDetailPane.instanceId, rect: { x: 0, y: 30, width: 120, height: 29 } },
-    ];
+        instances: [{ ...mainPane }, { ...detailPane }, lowerDetailPane],
+        floating: [],
+        detached: [],
+      };
+      const { actions } = await renderShellForWindowModeTest(
+        createShellStateWithLayout(config, layout, mainPane.instanceId),
+        { width: 120, height: 61 },
+      );
 
-    await act(async () => {
-      await testSetup!.mockMouse.pressDown(5, 1);
-      await testSetup!.renderOnce();
-      await testSetup!.mockMouse.moveTo(88, 12);
-      await testSetup!.renderOnce();
-      await testSetup!.renderOnce();
+      await act(async () => {
+        await testSetup!.mockMouse.pressDown(5, 1);
+        await testSetup!.renderOnce();
+        await testSetup!.mockMouse.moveTo(directionalCase.pointer.x, directionalCase.pointer.y);
+        await testSetup!.renderOnce();
+        await testSetup!.renderOnce();
+      });
+
+      expect(actions.some((action) => action.type === "UPDATE_LAYOUT")).toBe(false);
+      for (const instanceId of [mainPane.instanceId, detailPane.instanceId, lowerDetailPane.instanceId]) {
+        const expectedPreview = directionalCase.previewRects.find((entry) => entry.instanceId === instanceId);
+        const renderable = testSetup!.renderer.root.findDescendantById(`drag-preview:${instanceId}`) as BoxRenderable | undefined;
+        if (!expectedPreview) {
+          expect(renderable).toBeUndefined();
+          continue;
+        }
+        expect(renderable).toBeDefined();
+        expect({ x: renderable!.x, y: renderable!.y, width: renderable!.width, height: renderable!.height })
+          .toEqual(expectedPreview.rect);
+      }
+
+      await act(async () => {
+        await testSetup!.mockMouse.release(directionalCase.pointer.x, directionalCase.pointer.y);
+        await testSetup!.renderOnce();
+        await testSetup!.renderOnce();
+      });
+
+      const updates = actions.filter((action) => action.type === "UPDATE_LAYOUT");
+      expect(updates).toHaveLength(1);
+      expect(updates[0]!.layout.dockRoot).toMatchObject({
+        kind: "split",
+        axis: "vertical",
+        first: {
+          kind: "split",
+          axis: directionalCase.axis,
+          first: { kind: "pane", instanceId: directionalCase.order[0] },
+          second: { kind: "pane", instanceId: directionalCase.order[1] },
+        },
+        second: { kind: "pane", instanceId: lowerDetailPane.instanceId },
+      });
+      expect(getDockLeafLayouts(
+        updates[0]!.layout,
+        { x: 0, y: 0, width: 120, height: 59 },
+        { reserveDividerGutters: true },
+      ).map(({ instanceId, rect }) => ({ instanceId, rect })))
+        .toEqual(directionalCase.committedRects);
     });
-
-    expect(actions.some((action) => action.type === "UPDATE_LAYOUT")).toBe(false);
-    for (const preview of expected) {
-      const renderable = testSetup!.renderer.root.findDescendantById(`drag-preview:${preview.instanceId}`) as BoxRenderable | undefined;
-      expect(renderable).toBeDefined();
-      expect({ x: renderable!.x, y: renderable!.y, width: renderable!.width, height: renderable!.height })
-        .toEqual(preview.rect);
-    }
-
-    await act(async () => {
-      await testSetup!.mockMouse.release(88, 12);
-      await testSetup!.renderOnce();
-      await testSetup!.renderOnce();
-    });
-
-    const updates = actions.filter((action) => action.type === "UPDATE_LAYOUT");
-    expect(updates).toHaveLength(1);
-    expect(getDockLeafLayouts(
-      updates[0]!.layout,
-      { x: 0, y: 0, width: 120, height: 59 },
-      { reserveDividerGutters: true },
-    ).map(({ instanceId, rect }) => ({ instanceId, rect })))
-      .toEqual(expected);
-  });
+  }
 
   test("renders and commits the exact selected 6x6 cell when the only dock leaf becomes floating", async () => {
     const config = createDefaultConfig("/tmp/gloomberb-shell-cell-snap-test");

@@ -231,6 +231,40 @@ describe("pane-manager split-tree drops", () => {
     }));
   });
 
+  test("keeps snapped cell geometry when center-swapping with a docked pane", () => {
+    const config = createDefaultConfig("/tmp/gloomberb-cell-swap-test");
+    const floatingPane = createPaneInstance("chat", { instanceId: "chat:floating" });
+    const dockedPaneId = "ticker-detail:main";
+    const snapped = snapPaneToGridRect(
+      addPaneFloating(cloneLayout(config.layout), floatingPane, 120, 40),
+      floatingPane.instanceId,
+      { x: 80, y: 4, width: 6, height: 6 },
+      BOUNDS,
+    );
+    const snappedEntry = snapped.floating.find((entry) => entry.instanceId === floatingPane.instanceId)!;
+
+    const swapped = applyDrop(snapped, floatingPane.instanceId, {
+      kind: "leaf",
+      targetId: dockedPaneId,
+      position: "center",
+    });
+    const replacement = swapped.floating.find((entry) => entry.instanceId === dockedPaneId);
+
+    expect(replacement).toEqual({ ...snappedEntry, instanceId: dockedPaneId });
+    expect(replacement).toEqual(expect.objectContaining({
+      x: 80,
+      y: 4,
+      width: 6,
+      height: 6,
+      fixedGeometry: true,
+    }));
+    expect(getDockedPaneIds(swapped)).toContain(floatingPane.instanceId);
+    expect(getDockedPaneIds(swapped)).not.toContain(dockedPaneId);
+
+    const clamped = moveFloatingPane(swapped, dockedPaneId, 0, 0, BOUNDS);
+    expect(clamped.floating.find((entry) => entry.instanceId === dockedPaneId)).toEqual(replacement);
+  });
+
   test("rejects an overlapping auto-compact candidate without rebuilding the dock tree", () => {
     const layout: LayoutConfig = {
       dockRoot: {

@@ -5,6 +5,7 @@ import {
   createLeafDropPreview,
   createSnapDropPreview,
   constrainFloatingRectToBounds,
+  finalizePaneDragRelease,
   LAYOUT_GRID_COLUMNS,
   LAYOUT_GRID_ROWS,
   makeLayoutGridCells,
@@ -71,40 +72,103 @@ describe("layout construction grid", () => {
     expect(guides.every((guide) => guide.previewRect.width === 1 && guide.previewRect.height === 1)).toBe(true);
   });
 
-  test("inserts a docked pane at the selected edge of the occupied target leaf", () => {
-    const preview = createLeafDropPreview(
-      threePaneLayout(),
-      "a:main",
-      { kind: "leaf", targetId: "b:main", position: "top" },
-      BOUNDS,
-    );
+  for (const directionalCase of [
+    {
+      position: "top" as const,
+      axis: "vertical" as const,
+      order: ["a:main", "b:main"],
+      previewRects: [
+        { instanceId: "a:main", rect: { x: 0, y: 0, width: 120, height: 15 } },
+        { instanceId: "b:main", rect: { x: 0, y: 16, width: 120, height: 14 } },
+        { instanceId: "c:main", rect: { x: 0, y: 31, width: 120, height: 29 } },
+      ],
+      committedRects: [
+        { instanceId: "a:main", rect: { x: 0, y: 0, width: 120, height: 15 } },
+        { instanceId: "b:main", rect: { x: 0, y: 16, width: 120, height: 14 } },
+        { instanceId: "c:main", rect: { x: 0, y: 31, width: 120, height: 29 } },
+      ],
+    },
+    {
+      position: "left" as const,
+      axis: "horizontal" as const,
+      order: ["a:main", "b:main"],
+      previewRects: [
+        { instanceId: "a:main", rect: { x: 0, y: 0, width: 60, height: 30 } },
+        { instanceId: "c:main", rect: { x: 0, y: 31, width: 120, height: 29 } },
+      ],
+      committedRects: [
+        { instanceId: "a:main", rect: { x: 0, y: 0, width: 60, height: 30 } },
+        { instanceId: "b:main", rect: { x: 61, y: 0, width: 59, height: 30 } },
+        { instanceId: "c:main", rect: { x: 0, y: 31, width: 120, height: 29 } },
+      ],
+    },
+    {
+      position: "right" as const,
+      axis: "horizontal" as const,
+      order: ["b:main", "a:main"],
+      previewRects: [
+        { instanceId: "b:main", rect: { x: 0, y: 0, width: 60, height: 30 } },
+        { instanceId: "a:main", rect: { x: 61, y: 0, width: 59, height: 30 } },
+        { instanceId: "c:main", rect: { x: 0, y: 31, width: 120, height: 29 } },
+      ],
+      committedRects: [
+        { instanceId: "b:main", rect: { x: 0, y: 0, width: 60, height: 30 } },
+        { instanceId: "a:main", rect: { x: 61, y: 0, width: 59, height: 30 } },
+        { instanceId: "c:main", rect: { x: 0, y: 31, width: 120, height: 29 } },
+      ],
+    },
+    {
+      position: "bottom" as const,
+      axis: "vertical" as const,
+      order: ["b:main", "a:main"],
+      previewRects: [
+        { instanceId: "b:main", rect: { x: 0, y: 0, width: 120, height: 15 } },
+        { instanceId: "a:main", rect: { x: 0, y: 16, width: 120, height: 14 } },
+        { instanceId: "c:main", rect: { x: 0, y: 31, width: 120, height: 29 } },
+      ],
+      committedRects: [
+        { instanceId: "b:main", rect: { x: 0, y: 0, width: 120, height: 15 } },
+        { instanceId: "a:main", rect: { x: 0, y: 16, width: 120, height: 14 } },
+        { instanceId: "c:main", rect: { x: 0, y: 31, width: 120, height: 29 } },
+      ],
+    },
+  ]) {
+    test(`routes the ${directionalCase.position} cell to an exact target-relative preview and commit`, () => {
+      const layout = threePaneLayout();
+      const preview = createLeafDropPreview(
+        layout,
+        "a:main",
+        { kind: "leaf", targetId: "b:main", position: directionalCase.position },
+        BOUNDS,
+        { reserveDividerGutters: true },
+      );
 
-    expect(preview).not.toBeNull();
-    const leaves = getDockLeafLayouts(preview!.layout, BOUNDS);
-    const a = leaves.find((leaf) => leaf.instanceId === "a:main")!.rect;
-    const b = leaves.find((leaf) => leaf.instanceId === "b:main")!.rect;
-    const c = leaves.find((leaf) => leaf.instanceId === "c:main")!.rect;
+      expect(preview).not.toBeNull();
+      expect(preview!.layout.dockRoot).toMatchObject({
+        kind: "split",
+        axis: "vertical",
+        first: {
+          kind: "split",
+          axis: directionalCase.axis,
+          first: { kind: "pane", instanceId: directionalCase.order[0] },
+          second: { kind: "pane", instanceId: directionalCase.order[1] },
+        },
+        second: { kind: "pane", instanceId: "c:main" },
+      });
+      expect(preview!.rects).toEqual(directionalCase.previewRects);
 
-    expect(a.x).toBe(b.x);
-    expect(a.width).toBe(b.width);
-    expect(a.y).toBeLessThan(b.y);
-    expect(c).toEqual({ x: 0, y: 30, width: 120, height: 30 });
-  });
-
-  test("previews every dock leaf geometry changed by a directional drop", () => {
-    const preview = createLeafDropPreview(
-      threePaneLayout(),
-      "a:main",
-      { kind: "leaf", targetId: "b:main", position: "top" },
-      BOUNDS,
-    );
-
-    expect(preview?.rects.map((entry) => entry.instanceId).sort()).toEqual([
-      "a:main",
-      "b:main",
-      "c:main",
-    ]);
-  });
+      const committed = finalizePaneDragRelease(
+        layout,
+        "a:main",
+        { x: 9, y: 8, width: 20, height: 10 },
+        preview,
+      ).nextLayout;
+      expect(committed).toEqual(preview!.layout);
+      expect(getDockLeafLayouts(committed, BOUNDS, { reserveDividerGutters: true })
+        .map(({ instanceId, rect }) => ({ instanceId, rect })))
+        .toEqual(directionalCase.committedRects);
+    });
+  }
 
   test("commits the selected grid cell exactly for one-pane and empty-grid layouts", () => {
     const target = { x: 80, y: 40, width: 20, height: 10 };

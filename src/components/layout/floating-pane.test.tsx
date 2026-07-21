@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { ReactNode } from "react";
 import { UiHostProvider } from "../../ui";
 import type { RendererHost, UiHost } from "../../ui/host";
+import { shouldDispatchWebAppKeyDown } from "../../renderers/electrobun/view/key-event";
 import { FloatingPaneWrapper } from "./floating-pane";
 import { DesktopPaneButton } from "./pane/header";
 
@@ -84,10 +85,11 @@ describe("FloatingPaneWrapper", () => {
     expect(markup).toContain('aria-label="Pane is floating — tile pane"');
   });
 
-  test("lets native pane-header buttons focus on mouse down and activate on click", () => {
+  test("lets native pane-header buttons focus and activate without pane shortcuts or dragging", () => {
     let activations = 0;
-    let stopped = false;
-    let prevented = false;
+    let focusedPaneShortcuts = 0;
+    let headerDrags = 0;
+    let activeElement: { tagName: string } | null = null;
     const button = DesktopPaneButton({
       label: "Tile pane",
       icon: null,
@@ -100,19 +102,59 @@ describe("FloatingPaneWrapper", () => {
       onMouseDown?: (event: { stopPropagation(): void; preventDefault(): void }) => void;
       tabIndex?: number;
     };
+    const buttonElement = { tagName: "BUTTON" };
 
+    const pressKey = (key: string) => {
+      const event = {
+        key,
+        ctrlKey: false,
+        metaKey: false,
+        shiftKey: false,
+        target: activeElement,
+      } as never;
+      if (shouldDispatchWebAppKeyDown(event)) focusedPaneShortcuts += 1;
+      if (activeElement === buttonElement && (key === "Enter" || key === " ")) {
+        props.onClick?.(event);
+      }
+    };
+
+    expect(shouldDispatchWebAppKeyDown({
+      key: "Tab",
+      ctrlKey: false,
+      metaKey: false,
+      shiftKey: false,
+      target: null,
+    } as never)).toBe(false);
+    activeElement = buttonElement;
+
+    pressKey("Enter");
+    expect(activations).toBe(1);
+    expect(focusedPaneShortcuts).toBe(0);
+    expect(headerDrags).toBe(0);
+
+    pressKey(" ");
+    expect(activations).toBe(2);
+    expect(focusedPaneShortcuts).toBe(0);
+    expect(headerDrags).toBe(0);
+
+    let stopped = false;
+    let prevented = false;
     props.onMouseDown?.({
       stopPropagation() { stopped = true; },
       preventDefault() { prevented = true; },
     });
+    if (!stopped) headerDrags += 1;
 
     expect(stopped).toBe(true);
     expect(prevented).toBe(false);
-    expect(activations).toBe(0);
+    expect(activations).toBe(2);
     expect(props.tabIndex).toBeUndefined();
     expect(props.onKeyDown).toBeUndefined();
+    expect(headerDrags).toBe(0);
 
     props.onClick?.({});
-    expect(activations).toBe(1);
+    expect(activations).toBe(3);
+    expect(focusedPaneShortcuts).toBe(0);
+    expect(headerDrags).toBe(0);
   });
 });

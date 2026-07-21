@@ -43,4 +43,19 @@ describe("shouldConsumeWebAppKeyDown", () => {
     }
     expect(shouldDispatchWebAppKeyDown(keyEvent({ key: "Tab", shiftKey: true, target: button }))).toBe(false);
   });
+
+  test("bypasses app shortcut dispatch for native control activation keys", () => {
+    const button = { tagName: "BUTTON" };
+    const buttonChild = {
+      tagName: "SVG",
+      closest: (selector: string) => selector.includes("button") ? button : null,
+    };
+
+    for (const key of ["Enter", "Return", " "]) {
+      expect(shouldDispatchWebAppKeyDown(keyEvent({ key, target: button }))).toBe(false);
+      expect(shouldDispatchWebAppKeyDown(keyEvent({ key, target: buttonChild }))).toBe(false);
+    }
+
+    expect(shouldDispatchWebAppKeyDown(keyEvent({ key: "+", target: button }))).toBe(true);
+  });
 });
