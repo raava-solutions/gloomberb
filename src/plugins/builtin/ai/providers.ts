@@ -1,4 +1,5 @@
 import { resolveAiCliCommand } from "./command-resolution";
+import { normalizeLocalAgentSessionId } from "./session-id";
 
 export interface AiProvider {
   id: string;
@@ -47,6 +48,7 @@ const CLAUDE_CONFINED_SETTINGS = JSON.stringify({
 });
 
 function claudeStructuredArgs(prompt: string, sessionId?: string): string[] {
+  const normalizedSessionId = normalizeLocalAgentSessionId(sessionId);
   return [
     "--print",
     prompt,
@@ -59,7 +61,7 @@ function claudeStructuredArgs(prompt: string, sessionId?: string): string[] {
     "",
     "--permission-mode",
     "manual",
-    ...(sessionId ? ["--resume", sessionId] : []),
+    ...(normalizedSessionId ? ["--resume", normalizedSessionId] : []),
   ];
 }
 
@@ -88,11 +90,12 @@ function claudeToolsArgs(prompt: string, mode: AiToolMode, sessionId?: string): 
 }
 
 function codexStructuredArgs(prompt: string, sessionId?: string): string[] {
-  return sessionId
+  const normalizedSessionId = normalizeLocalAgentSessionId(sessionId);
+  return normalizedSessionId
     ? [
       "exec", "--sandbox", "read-only", "resume", "--skip-git-repo-check",
       "--ignore-user-config", "--ignore-rules", "--disable", "shell_tool", "--json",
-      sessionId, prompt,
+      normalizedSessionId, prompt,
     ]
     : [
       "exec", "--skip-git-repo-check", "--ignore-user-config", "--ignore-rules",
@@ -106,13 +109,23 @@ function codexToolsArgs(prompt: string, mode: AiToolMode, sessionId?: string): s
   base.splice(disableIndex, 2);
   const sandboxIndex = base.indexOf("--sandbox");
   base[sandboxIndex + 1] = mode === "yolo" ? "danger-full-access" : "workspace-write";
+  if (mode === "confined") {
+    base.splice(
+      1,
+      0,
+      "-c", "sandbox_workspace_write.exclude_tmpdir_env_var=true",
+      "-c", "sandbox_workspace_write.exclude_slash_tmp=true",
+      "-c", "sandbox_workspace_write.network_access=false",
+    );
+  }
   return base;
 }
 
 function piStructuredArgs(prompt: string, sessionId?: string): string[] {
+  const normalizedSessionId = normalizeLocalAgentSessionId(sessionId);
   return [
     "-p", "--mode", "json", "--offline", "--no-tools", "-nc", "-ne", "-ns",
-    ...(sessionId ? ["--session-id", sessionId] : []), prompt,
+    ...(normalizedSessionId ? ["--session-id", normalizedSessionId] : []), prompt,
   ];
 }
 

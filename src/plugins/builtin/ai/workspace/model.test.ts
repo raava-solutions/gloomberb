@@ -4,8 +4,10 @@ import {
   buildLocalAgentPrompt,
   createLocalAgentThread,
   EMPTY_LOCAL_AGENT_WORKSPACE,
+  getLocalAgentConfinedCaveat,
   getLocalAgentToolPosture,
   normalizeLocalAgentWorkspace,
+  resolveLocalAgentToolModeToggle,
   toggleLocalAgentToolMode,
   updateLocalAgentThread,
 } from "./model";
@@ -47,6 +49,27 @@ describe("local agent workspace model", () => {
       mode: "yolo",
       footer: "Tools: YOLO · Network: on",
       warning: "YOLO mode - runs shell, edits real files, reaches network",
+    });
+  });
+
+  test("describes provider-specific confined read boundaries", () => {
+    expect(getLocalAgentConfinedCaveat("claude")).toContain("host reads blocked");
+    expect(getLocalAgentConfinedCaveat("codex")).toContain("host reads possible");
+    expect(getLocalAgentConfinedCaveat("pi")).toContain("host reads possible");
+  });
+
+  test("requires two steps to enable YOLO but disables it immediately", () => {
+    expect(resolveLocalAgentToolModeToggle("confined", false)).toEqual({
+      shouldToggle: false,
+      yoloConfirmationArmed: true,
+    });
+    expect(resolveLocalAgentToolModeToggle("confined", true)).toEqual({
+      shouldToggle: true,
+      yoloConfirmationArmed: false,
+    });
+    expect(resolveLocalAgentToolModeToggle("yolo", false)).toEqual({
+      shouldToggle: true,
+      yoloConfirmationArmed: false,
     });
   });
 
@@ -171,7 +194,7 @@ describe("local agent workspace model", () => {
     expect(normalized.threads[0]?.messages.map((message) => message.content)).toEqual(["First", "Second"]);
   });
 
-  test("preserves an optional opaque session id and rejects malformed values", () => {
+  test("preserves safe session ids and rejects malformed non-string values", () => {
     const valid = normalizeLocalAgentWorkspace({
       activeThreadId: "thread-1",
       threads: [{
@@ -199,5 +222,23 @@ describe("local agent workspace model", () => {
 
     expect(valid.threads[0]?.sessionId).toBe("session-1");
     expect(invalid.threads).toHaveLength(0);
+  });
+
+  test("strips session ids that could escape their provider flag position", () => {
+    const normalized = normalizeLocalAgentWorkspace({
+      activeThreadId: "thread-1",
+      threads: [{
+        id: "thread-1",
+        providerId: "codex",
+        sessionId: "--foo",
+        title: "Research",
+        createdAt: 1,
+        updatedAt: 1,
+        messages: [],
+      }],
+    });
+
+    expect(normalized.threads).toHaveLength(1);
+    expect(normalized.threads[0]?.sessionId).toBeUndefined();
   });
 });

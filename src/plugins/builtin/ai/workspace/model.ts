@@ -1,3 +1,5 @@
+import { normalizeLocalAgentSessionId } from "../session-id";
+
 export type LocalAgentProviderId = "claude" | "codex" | "pi";
 export type LocalAgentToolMode = "confined" | "yolo";
 
@@ -12,6 +14,22 @@ export function getLocalAgentToolPosture(mode: LocalAgentToolMode | undefined): 
   return resolvedMode === "yolo"
     ? { mode: resolvedMode, footer: "Tools: YOLO · Network: on", warning: LOCAL_AGENT_YOLO_WARNING }
     : { mode: resolvedMode, footer: "Tools: confined · Network: off", warning: null };
+}
+
+export function getLocalAgentConfinedCaveat(providerId: LocalAgentProviderId): string {
+  return providerId === "claude"
+    ? "Confined: writes stay in disposable workspace; network off; host reads blocked"
+    : "Confined: writes stay in disposable workspace; network off; host reads possible";
+}
+
+export function resolveLocalAgentToolModeToggle(
+  mode: LocalAgentToolMode | undefined,
+  yoloConfirmationArmed: boolean,
+): { shouldToggle: boolean; yoloConfirmationArmed: boolean } {
+  if ((mode ?? "confined") === "yolo" || yoloConfirmationArmed) {
+    return { shouldToggle: true, yoloConfirmationArmed: false };
+  }
+  return { shouldToggle: false, yoloConfirmationArmed: true };
 }
 
 export interface LocalAgentAttachmentMetadata {
@@ -126,13 +144,18 @@ export function normalizeLocalAgentWorkspace(value: unknown): LocalAgentWorkspac
   const threads = Array.isArray(candidate.threads)
     ? candidate.threads
       .filter(isThread)
-      .map((thread) => ({
-        ...thread,
-        messages: thread.messages
-          .map(normalizeMessage)
-          .filter((message): message is LocalAgentMessage => message !== null)
-          .slice(-MAX_MESSAGES_PER_THREAD),
-      }))
+      .map((thread) => {
+        const { sessionId, ...threadWithoutSession } = thread;
+        const normalizedSessionId = normalizeLocalAgentSessionId(sessionId);
+        return {
+          ...threadWithoutSession,
+          ...(normalizedSessionId ? { sessionId: normalizedSessionId } : {}),
+          messages: thread.messages
+            .map(normalizeMessage)
+            .filter((message): message is LocalAgentMessage => message !== null)
+            .slice(-MAX_MESSAGES_PER_THREAD),
+        };
+      })
       .slice(0, MAX_THREADS)
     : [];
   const activeThreadId = typeof candidate.activeThreadId === "string"

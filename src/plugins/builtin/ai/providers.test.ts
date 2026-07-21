@@ -92,10 +92,14 @@ describe("local workspace provider contracts", () => {
     expect(codexConfined.slice(codexConfined.indexOf("--sandbox"), codexConfined.indexOf("--sandbox") + 2))
       .toEqual(["--sandbox", "workspace-write"]);
     expect(codexConfined).not.toContain("shell_tool");
+    expect(codexConfined).toContain("sandbox_workspace_write.exclude_tmpdir_env_var=true");
+    expect(codexConfined).toContain("sandbox_workspace_write.exclude_slash_tmp=true");
+    expect(codexConfined).toContain("sandbox_workspace_write.network_access=false");
     const codexYolo = codex.buildToolsArgs("PROMPT", { mode: "yolo", sessionId: "session-2" });
     expect(codexYolo.slice(0, 4)).toEqual(["exec", "--sandbox", "danger-full-access", "resume"]);
     expect(codexYolo).toContain("session-2");
     expect(codexYolo).not.toContain("shell_tool");
+    expect(codexYolo.join(" ")).not.toContain("sandbox_workspace_write.");
 
     const piConfined = pi.buildToolsArgs("PROMPT", { mode: "confined" });
     expect(piConfined).toContain("read,grep,find,ls");
@@ -107,6 +111,18 @@ describe("local workspace provider contracts", () => {
     expect(piYolo).not.toContain("--offline");
     expect(piYolo).not.toContain("--no-tools");
     expect(piYolo).toContain("session-3");
+  });
+
+  test("drops session ids that could be parsed as provider flags", () => {
+    const definitions = getAiProviderDefinitions();
+    for (const providerId of ["claude", "codex", "pi"]) {
+      const provider = definitions.find((entry) => entry.id === providerId);
+      if (!provider?.buildResumeArgs || !provider.buildToolsArgs) {
+        throw new Error(`Expected resume and tools arguments for ${providerId}`);
+      }
+      expect(provider.buildResumeArgs("PROMPT", "--foo")).not.toContain("--foo");
+      expect(provider.buildToolsArgs("PROMPT", { mode: "confined", sessionId: "--foo" })).not.toContain("--foo");
+    }
   });
 
   test("maps tool posture onto the capability side-effect taxonomy", () => {

@@ -24,9 +24,11 @@ import {
   appendLocalAgentMessages,
   buildLocalAgentPrompt,
   createLocalAgentThread,
+  getLocalAgentConfinedCaveat,
   getLocalAgentToolPosture,
   normalizeLocalAgentWorkspace,
   removeLocalAgentMessages,
+  resolveLocalAgentToolModeToggle,
   selectLocalAgentThread,
   toggleLocalAgentToolMode,
   updateLocalAgentThread,
@@ -39,7 +41,12 @@ export const LOCAL_AGENT_WORKSPACE_STATE_KEY = "local-agent-workspace";
 export const LOCAL_AGENT_WORKSPACE_SCHEMA_VERSION = 1;
 
 function providerLabel(providerId: LocalAgentProviderId): string {
-  return providerId === "claude" ? "Claude Code" : "Codex";
+  const labels: Record<LocalAgentProviderId, string> = {
+    claude: "Claude Code",
+    codex: "Codex",
+    pi: "Pi",
+  };
+  return labels[providerId];
 }
 
 function providerPrerequisite(provider: AiProvider): string {
@@ -126,11 +133,13 @@ export function LocalAgentWorkspacePane({ focused, width, height }: PaneProps) {
   const [runningMessageId, setRunningMessageId] = useState<string | null>(null);
   const [streamingOutput, setStreamingOutput] = useState("");
   const [hoveredThreadId, setHoveredThreadId] = useState<string | null>(null);
+  const [yoloConfirmationThreadId, setYoloConfirmationThreadId] = useState<string | null>(null);
   const inputRef = useRef<TextareaRenderable | null>(null);
   const scrollRef = useRef<ScrollBoxRenderable | null>(null);
   const runRef = useRef<{ controller: AiRunController; threadId: string; assistantMessageId: string } | null>(null);
   const busyRef = useRef(false);
   const seededRef = useRef(false);
+  const yoloConfirmationThreadIdRef = useRef<string | null>(null);
 
   const previousSymbol = useAppSelector((state) => {
     const previous = state.previousFocusedPaneId
@@ -146,6 +155,12 @@ export function LocalAgentWorkspacePane({ focused, width, height }: PaneProps) {
   const updateWorkspace = useCallback((updater: (current: LocalAgentWorkspaceState) => LocalAgentWorkspaceState) => {
     setPersistedWorkspace((current) => updater(normalizeLocalAgentWorkspace(current)));
   }, [setPersistedWorkspace]);
+
+  const clearYoloConfirmation = useCallback(() => {
+    yoloConfirmationThreadIdRef.current = null;
+    setYoloConfirmationThreadId(null);
+    setStatusMessage((current) => current?.startsWith("Confirm YOLO?") ? null : current);
+  }, []);
 
   const clearDraft = useCallback(() => {
     setInputValue("");
@@ -266,11 +281,35 @@ export function LocalAgentWorkspacePane({ focused, width, height }: PaneProps) {
     runRef.current?.controller.cancel();
   }, []);
 
-  const toggleToolMode = useCallback(() => {
+  const requestToolModeToggle = useCallback(() => {
     if (!activeThread || busyRef.current || runRef.current) return;
+    const resolution = resolveLocalAgentToolModeToggle(
+      activeToolMode,
+      yoloConfirmationThreadIdRef.current === activeThread.id,
+    );
+    if (!resolution.shouldToggle) {
+      yoloConfirmationThreadIdRef.current = activeThread.id;
+      setYoloConfirmationThreadId(activeThread.id);
+      setStatusMessage("Confirm YOLO? Press y again (or click again); N/Esc cancels.");
+      return;
+    }
+    clearYoloConfirmation();
     updateWorkspace((current) => updateLocalAgentThread(current, activeThread.id, toggleLocalAgentToolMode));
     setStatusMessage("Tool posture changed. The provider session was reset for the new boundary.");
-  }, [activeThread, updateWorkspace]);
+  }, [activeThread, activeToolMode, clearYoloConfirmation, updateWorkspace]);
+
+  const cancelYoloConfirmation = useCallback(() => {
+    clearYoloConfirmation();
+    setStatusMessage("YOLO escalation cancelled.");
+  }, [clearYoloConfirmation]);
+
+  useEffect(() => {
+    clearYoloConfirmation();
+  }, [activeThread?.id, clearYoloConfirmation]);
+
+  useEffect(() => {
+    if (!focused) clearYoloConfirmation();
+  }, [clearYoloConfirmation, focused]);
 
   const resetSession = useCallback(async () => {
     if (!activeThread || busyRef.current || runRef.current) return;
@@ -425,19 +464,28 @@ export function LocalAgentWorkspacePane({ focused, width, height }: PaneProps) {
       if (isEnter && selectedProvider) void createThread(selectedProvider);
       return;
     }
+    if (yoloConfirmationThreadId === activeThread?.id && activeToolMode === "confined") {
+      if (event.name === "y") requestToolModeToggle();
+      else if (event.name === "n" || event.name === "escape") cancelYoloConfirmation();
+      return;
+    }
     if (isEnter) focusInput();
-    if (event.name === "n" && !busyRef.current) setCreating(true);
+    if (event.name === "n" && !busyRef.current) {
+      clearYoloConfirmation();
+      setCreating(true);
+    }
     if (event.name === "a") attachSelectedTicker();
     if (event.name === "x") removeAttachments();
     if (event.name === "c" && runRef.current) cancelRun();
     if (event.name === "r" && activeThread?.sessionId) void resetSession();
-    if (event.name === "y") toggleToolMode();
+    if (event.name === "y") requestToolModeToggle();
     if (event.name === "[") cycleThread(-1);
     if (event.name === "]") cycleThread(1);
   }, { allowEditable: true });
 
   useEffect(() => () => {
     runRef.current?.controller.cancel();
+    yoloConfirmationThreadIdRef.current = null;
     dispatch({ type: "SET_INPUT_CAPTURED", captured: false });
   }, [dispatch]);
 
@@ -455,7 +503,13 @@ export function LocalAgentWorkspacePane({ focused, width, height }: PaneProps) {
               tone: activeToolMode === "yolo" ? "warning" as const : "muted" as const,
               bold: activeToolMode === "yolo",
             }],
-          }] : [])],
+          }, ...(activeToolMode === "confined" ? [{
+            id: "tools-caveat",
+            parts: [{
+              text: getLocalAgentConfinedCaveat(activeThread.providerId),
+              tone: "muted" as const,
+            }],
+          }] : [])] : [])],
     hints: [],
   }), [activeThread, activeToolMode, activeToolPosture.footer, checkingProviderId, runningMessageId, statusMessage]);
 
@@ -496,7 +550,15 @@ export function LocalAgentWorkspacePane({ focused, width, height }: PaneProps) {
           <Box height={1} paddingX={1} flexDirection="row">
             <Text fg={colors.textDim}>Threads</Text>
             <Box flexGrow={1} />
-            <Text fg={colors.textBright} onMouseDown={() => { if (!busyRef.current) setCreating(true); }} style={{ cursor: "pointer" }}>+ New</Text>
+            <Text
+              fg={colors.textBright}
+              onMouseDown={() => {
+                if (busyRef.current) return;
+                clearYoloConfirmation();
+                setCreating(true);
+              }}
+              style={{ cursor: "pointer" }}
+            >+ New</Text>
           </Box>
           <ScrollBox flexGrow={1} scrollY focusable={false}>
             {workspace.threads.map((thread) => {
@@ -512,6 +574,7 @@ export function LocalAgentWorkspacePane({ focused, width, height }: PaneProps) {
                   onMouseOut={() => setHoveredThreadId((current) => current === thread.id ? null : current)}
                   onMouseDown={() => {
                     if (busyRef.current) return;
+                    clearYoloConfirmation();
                     updateWorkspace((current) => selectLocalAgentThread(current, thread.id));
                     clearDraft();
                     setStatusMessage(null);
@@ -546,10 +609,12 @@ export function LocalAgentWorkspacePane({ focused, width, height }: PaneProps) {
           <Text
             fg={activeToolMode === "yolo" ? colors.warning : colors.textBright}
             attributes={activeToolMode === "yolo" ? TextAttributes.BOLD : 0}
-            onMouseDown={toggleToolMode}
+            onMouseDown={requestToolModeToggle}
             style={{ cursor: "pointer" }}
           >
-            YOLO: {activeToolMode === "yolo" ? "on" : "off"}
+            {yoloConfirmationThreadId === activeThread.id
+              ? "Confirm YOLO? y/N"
+              : `YOLO: ${activeToolMode === "yolo" ? "on" : "off"}`}
           </Text>
           {!showSidebar && (
             <>
@@ -557,7 +622,15 @@ export function LocalAgentWorkspacePane({ focused, width, height }: PaneProps) {
               <Text fg={colors.textBright} onMouseDown={() => cycleThread(-1)} style={{ cursor: "pointer" }}>‹ </Text>
               <Text fg={colors.text}>{activeThread.title}</Text>
               <Text fg={colors.textBright} onMouseDown={() => cycleThread(1)} style={{ cursor: "pointer" }}> ›</Text>
-              <Text fg={colors.textBright} onMouseDown={() => { if (!busyRef.current) setCreating(true); }} style={{ cursor: "pointer" }}>  + New</Text>
+              <Text
+                fg={colors.textBright}
+                onMouseDown={() => {
+                  if (busyRef.current) return;
+                  clearYoloConfirmation();
+                  setCreating(true);
+                }}
+                style={{ cursor: "pointer" }}
+              >  + New</Text>
             </>
           )}
         </Box>
