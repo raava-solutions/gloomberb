@@ -8,7 +8,7 @@
 
 Desktop app for macOS and Windows. Terminal UI for macOS, Linux, and Windows.
 
-<a href="https://gloomberb.com/download/desktop"><strong>Download desktop</strong></a>
+<a href="#install"><strong>Build desktop</strong></a>
 &nbsp;&middot;&nbsp;
 <a href="#install"><strong>Install the TUI</strong></a>
 
@@ -19,72 +19,41 @@ Desktop app for macOS and Windows. Terminal UI for macOS, Linux, and Windows.
 
 </div>
 
+## Important: upstream cloud services
+
+This fork defaults to upstream Gloomberb cloud services: `api.gloom.sh` handles authentication and live market data over REST and WebSocket, while billing and upgrade calls to action link to `gloom.sh`. A `gloom.sh` account is required for cloud features. Set `GLOOMBERB_API_URL` to point the API and WebSocket client at a different compatible backend; billing and upgrade links remain upstream unless changed in the source.
+
 ## Desktop App or TUI?
 
 Gloomberb has two ways in:
 
 | Surface | Best for | How it runs |
 |---------|----------|-------------|
-| Desktop app | A polished app window, pop-out panes, OS shortcuts, and built-in updates | Published for macOS and Windows. It also installs a `gloomberb` terminal command for the TUI. |
+| Desktop app | A polished app window, pop-out panes, OS shortcuts, and built-in updates | Built locally for macOS and Windows. It also installs a `gloomberb` terminal command for the TUI. |
 | Terminal UI | Fast keyboard workflows inside your terminal, SSH/dev boxes, Linux machines, and script-friendly setups | Runs with `gloomberb` on macOS, Linux, and Windows. |
 
 Both share the same command language, plugin system, market data surfaces, portfolios, watchlists, alerts, notes, and AI tools.
 
 ## Install
 
-### macOS
-
-Install the desktop app and the `gloomberb` terminal command:
+Signed release automation is not yet available for this fork, so the primary installation method is to run or build from source. Install [Bun](https://bun.sh/), then:
 
 ```bash
-brew install --cask vincelwt/tap/gloomberb
-# or
-curl -fsSL gloomberb.com/install | bash
+git clone https://github.com/raava-solutions/gloomberb.git
+cd gloomberb
+bun install
+bun src/index.tsx
 ```
 
-Both install `Gloomberb.app` and a `gloomberb` command that runs the TUI through the app bundle, so the bundled runtime is stored once.
+To make the `gloomberb` command always run the current checkout, or to build and install the desktop app locally, follow [Working on the Gloomberb fork: always-latest local run + fork-safe release](docs/solutions/developer-experience/gloomberb-fork-local-run-and-release.md).
 
-Prefer a direct download?
+Fork-owned packaged builds, when available, are published on the [Raava Solutions Gloomberb releases page](https://github.com/raava-solutions/gloomberb/releases). Do not use upstream Homebrew, installer, or package commands when you intend to run this fork.
 
-- [Download Gloomberb for Mac](https://gloomberb.com/download/desktop)
-
-### Linux
-
-Install the standalone TUI binary:
+Build the desktop app locally with:
 
 ```bash
-curl -fsSL gloomberb.com/install | bash
+bun run desktop:build
 ```
-
-This installs `gloomberb` to `~/.local/bin` by default. A Linux desktop package is not published yet.
-
-### Windows
-
-Install the desktop app:
-
-- [Download GloomberbSetup.exe for Windows x64](https://github.com/vincelwt/gloomberb/releases/latest/download/stable-win-x64-GloomberbSetup.exe)
-
-The installer adds the app and a `gloomberb` terminal command. For a terminal-only setup, install Bun and use the package:
-
-```powershell
-bun install -g gloomberb
-```
-
-### Terminal Package
-
-Already have Bun installed on any supported OS?
-
-```bash
-bun install -g gloomberb
-```
-
-Then run:
-
-```bash
-gloomberb
-```
-
-On macOS and Windows, desktop updates replace the installed app in place and keep the terminal command pointing at the updated runtime. Homebrew users can also update through `brew upgrade --cask gloomberb`.
 
 For the best terminal experience, use a [Kitty](https://sw.kovidgoyal.net/kitty/)-compatible terminal such as Ghostty, Kitty, or WezTerm.
 
@@ -267,7 +236,7 @@ Use `HELP` inside Gloomberb for the live shortcut list. The common command-bar p
 
 ## License
 
-MIT
+MIT. This fork preserves attribution to the upstream [vincelwt/gloomberb](https://github.com/vincelwt/gloomberb) project and its contributors.
 
 ## Credits
 

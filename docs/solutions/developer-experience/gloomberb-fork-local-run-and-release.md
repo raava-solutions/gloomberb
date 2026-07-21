@@ -59,9 +59,7 @@ Tradeoff: the command runs whatever branch is *checked out*. Keep the repo on `m
 In `electrobun.config.ts`, the release base URL is baked in at build time. Point it at the fork and gate notarization so local builds don't hard-fail:
 
 ```ts
-// before
-const RELEASE_BASE_URL = "https://github.com/vincelwt/gloomberb/releases/latest/download";
-// after
+// Fork-owned release endpoint
 const RELEASE_BASE_URL = "https://github.com/raava-solutions/gloomberb/releases/latest/download";
 
 mac: {

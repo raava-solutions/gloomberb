@@ -584,7 +584,7 @@ describe("apiClient account profile", () => {
           bio: "Markets.",
           profilePublic: true,
           publicEmail: "public@example.com",
-          xAccount: "vincelwt",
+          xAccount: "raavasolutions",
           sharedPortfolioId: "main",
           acceptUnknownDms: true,
           chatEmailNotificationsEnabled: false,
