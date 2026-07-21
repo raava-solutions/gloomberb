@@ -210,6 +210,26 @@ describe("pane-manager split-tree drops", () => {
     }));
   });
 
+  test("resizes floating panes from each edge without changing the orthogonal axis", () => {
+    const cases = [
+      { corner: "right", deltaX: 10, deltaY: 99, expected: { x: 20, y: 8, width: 50, height: 14 } },
+      { corner: "left", deltaX: -5, deltaY: 99, expected: { x: 15, y: 8, width: 45, height: 14 } },
+      { corner: "bottom", deltaX: 99, deltaY: 6, expected: { x: 20, y: 8, width: 40, height: 20 } },
+      { corner: "top", deltaX: 99, deltaY: -3, expected: { x: 20, y: 5, width: 40, height: 17 } },
+    ] as const;
+
+    for (const { corner, deltaX, deltaY, expected } of cases) {
+      const config = createDefaultConfig("/tmp/gloomberb-test");
+      const pane = createPaneInstance("chat");
+      let layout = addPaneFloating(cloneLayout(config.layout), pane, 120, 40);
+      layout = floatAtRect(layout, pane.instanceId, { x: 20, y: 8, width: 40, height: 14 });
+
+      layout = resizeFloatingPaneFromCorner(layout, pane.instanceId, corner, deltaX, deltaY, BOUNDS);
+
+      expect(layout.floating.find((entry) => entry.instanceId === pane.instanceId)).toEqual(expect.objectContaining(expected));
+    }
+  });
+
   test("finds dock resize targets from the focused pane ancestors", () => {
     const layout: LayoutConfig = {
       dockRoot: {
