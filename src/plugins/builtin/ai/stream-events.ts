@@ -27,7 +27,10 @@ export class AiStructuredStreamParser {
   private piSawDeltas = false;
   private readonly codexItems = new Map<string, string>();
   private readonly codexItemOrder: string[] = [];
+  private readonly completedCodexItems = new Set<string>();
   private terminalError: string | null = null;
+  private cliSessionId: string | null = null;
+  private pendingDelta = "";
 
   constructor(private readonly providerId: string) {}
 
@@ -43,6 +46,16 @@ export class AiStructuredStreamParser {
     if (this.buffer.trim()) this.parseLine(this.buffer);
     this.buffer = "";
     return this.result();
+  }
+
+  sessionId(): string | null {
+    return this.cliSessionId;
+  }
+
+  takeDelta(): string {
+    const delta = this.pendingDelta;
+    this.pendingDelta = "";
+    return delta;
   }
 
   private parseLine(line: string): void {
@@ -68,17 +81,23 @@ export class AiStructuredStreamParser {
   }
 
   private parseClaude(event: Record<string, unknown>): void {
+    this.cliSessionId ??= stringValue(event.session_id);
     const nestedEvent = event.type === "stream_event" ? objectValue(event.event) : event;
     const delta = nestedEvent?.type === "content_block_delta" ? objectValue(nestedEvent.delta) : null;
     if (delta?.type === "text_delta") {
       this.claudeSawDeltas = true;
-      this.claudeTranscript += stringValue(delta.text) ?? "";
+      const text = stringValue(delta.text) ?? "";
+      this.claudeTranscript += text;
+      this.pendingDelta += text;
       return;
     }
 
     if (event.type === "assistant" && !this.claudeSawDeltas) {
       const snapshot = contentText(objectValue(event.message)?.content);
-      if (snapshot) this.claudeTranscript = snapshot;
+      if (snapshot) {
+        this.claudeTranscript = snapshot;
+        this.pendingDelta += snapshot;
+      }
       return;
     }
 
@@ -88,11 +107,15 @@ export class AiStructuredStreamParser {
         this.terminalError = result ?? "Claude failed to complete the request.";
       } else if (!this.claudeTranscript && result) {
         this.claudeTranscript = result;
+        this.pendingDelta += result;
       }
     }
   }
 
   private parseCodex(event: Record<string, unknown>): void {
+    if (event.type === "thread.started") {
+      this.cliSessionId ??= stringValue(event.thread_id);
+    }
     if (event.type === "error" || event.type === "turn.failed") {
       const error = objectValue(event.error);
       this.terminalError = stringValue(event.message)
@@ -105,15 +128,25 @@ export class AiStructuredStreamParser {
     if (item?.type !== "agent_message") return;
     const id = stringValue(item.id) ?? `agent-message-${this.codexItemOrder.length}`;
     if (!this.codexItems.has(id)) this.codexItemOrder.push(id);
-    this.codexItems.set(id, stringValue(item.text) ?? "");
+    const text = stringValue(item.text) ?? "";
+    this.codexItems.set(id, text);
+    if (event.type === "item.completed" && !this.completedCodexItems.has(id) && text) {
+      this.pendingDelta += `${this.completedCodexItems.size > 0 ? "\n\n" : ""}${text}`;
+      this.completedCodexItems.add(id);
+    }
   }
 
   private parsePi(event: Record<string, unknown>): void {
+    if (event.type === "session") {
+      this.cliSessionId ??= stringValue(event.id) ?? stringValue(event.sessionId) ?? stringValue(event.session_id);
+    }
     if (event.type === "message_update") {
       const assistantMessageEvent = objectValue(event.assistantMessageEvent);
       if (assistantMessageEvent?.type === "text_delta") {
         this.piSawDeltas = true;
-        this.piTranscript += stringValue(assistantMessageEvent.delta) ?? "";
+        const text = stringValue(assistantMessageEvent.delta) ?? "";
+        this.piTranscript += text;
+        this.pendingDelta += text;
       }
       return;
     }
@@ -121,7 +154,10 @@ export class AiStructuredStreamParser {
       const message = objectValue(event.message);
       if (message?.role === "assistant") {
         const snapshot = contentText(message.content);
-        if (snapshot) this.piTranscript = snapshot;
+        if (snapshot) {
+          this.piTranscript = snapshot;
+          this.pendingDelta += snapshot;
+        }
       }
       return;
     }

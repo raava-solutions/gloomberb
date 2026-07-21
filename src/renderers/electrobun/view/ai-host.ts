@@ -24,6 +24,20 @@ export async function installElectrobunAiHost(): Promise<void> {
 
   __setDetectedProvidersForTests(providers);
   setAiRunHost({
+    ensureThreadWorkspace(threadId) {
+      return backendRequest<string>("capability.invoke", {
+        capabilityId: AI_RUNNER_CAPABILITY_ID,
+        operationId: "ensureThreadWorkspace",
+        payload: { threadId },
+      });
+    },
+    async removeThreadWorkspace(threadId) {
+      await backendRequest("capability.invoke", {
+        capabilityId: AI_RUNNER_CAPABILITY_ID,
+        operationId: "removeThreadWorkspace",
+        payload: { threadId },
+      });
+    },
     checkStatus(provider) {
       return backendRequest("capability.invoke", {
         capabilityId: AI_RUNNER_CAPABILITY_ID,
@@ -31,12 +45,13 @@ export async function installElectrobunAiHost(): Promise<void> {
         payload: { providerId: provider.id },
       });
     },
-    run({ provider, prompt, cwd, onChunk, outputMode, isolatedWorkspace }) {
+    run({ provider, prompt, sessionId, cwd, onChunk, outputMode, isolatedWorkspace }) {
       const subscriptionId = `ai-run:${nextRunId++}`;
       let disposed = false;
       let settled = false;
+      let accumulatedOutput = "";
       let disposeMessages: () => void = () => {};
-      let resolveDone: (output: string) => void = () => {};
+      let resolveDone: (result: { output: string; sessionId: string | null }) => void = () => {};
       let rejectDone: (error: unknown) => void = () => {};
 
       const cleanup = () => {
@@ -53,7 +68,7 @@ export async function installElectrobunAiHost(): Promise<void> {
         callback();
       };
 
-      const done = new Promise<string>((resolve, reject) => {
+      const done = new Promise<{ output: string; sessionId: string | null }>((resolve, reject) => {
         resolveDone = resolve;
         rejectDone = reject;
       });
@@ -62,10 +77,11 @@ export async function installElectrobunAiHost(): Promise<void> {
         const event = message.event as AiRunnerEvent;
         switch (event.kind) {
           case "chunk":
-            onChunk?.(event.output);
+            accumulatedOutput += event.delta;
+            onChunk?.(event.delta);
             break;
           case "done":
-            settle(() => resolveDone(event.output));
+            settle(() => resolveDone({ output: event.output || accumulatedOutput, sessionId: event.sessionId }));
             break;
           case "cancelled":
             settle(() => rejectDone(new AiRunCancelledError()));
@@ -83,6 +99,7 @@ export async function installElectrobunAiHost(): Promise<void> {
         payload: {
           providerId: provider.id,
           prompt,
+          sessionId,
           cwd,
           outputMode,
           isolatedWorkspace,

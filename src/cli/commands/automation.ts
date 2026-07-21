@@ -107,7 +107,7 @@ export const aiCliCommand: CliCommandDef = {
       const prompt = rawArgs.join(" ").trim();
       if (!prompt) ctx.fail("Usage: gloomberb ai ask [--provider id] <prompt>");
       const controller = runAiPrompt({ provider: selectedProvider, prompt, cwd: process.cwd() });
-      const text = await controller.done;
+      const { output: text } = await controller.done;
       ctx.printResult({ data: { provider: selectedProvider.id, text } });
       return;
     }

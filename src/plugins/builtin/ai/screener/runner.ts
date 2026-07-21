@@ -89,16 +89,17 @@ export function useAiScreenerRunner({
       const run = runAiPrompt({
         provider,
         prompt,
-        onChunk: (output) => {
+        onChunk: (delta) => {
+          rawOutput += delta;
           setRunState((current) => (
             current?.tabId === tab.id
-              ? { ...current, output }
+              ? { ...current, output: rawOutput }
               : current
           ));
         },
       });
       runRef.current = run;
-      rawOutput = await run.done;
+      rawOutput = (await run.done).output;
 
       const parsed = parseScreenerResponse(rawOutput);
       const validated = await validateScreenerResults(parsed.tickers, tickers, dispatch, dataProvider);

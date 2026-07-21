@@ -23,6 +23,7 @@ export interface LocalAgentMessage {
 export interface LocalAgentThread {
   id: string;
   providerId: LocalAgentProviderId;
+  sessionId?: string;
   title: string;
   createdAt: number;
   updatedAt: number;
@@ -88,6 +89,7 @@ function isThread(value: unknown): value is LocalAgentThread {
   const thread = value as Partial<LocalAgentThread>;
   return typeof thread.id === "string"
     && isProviderId(thread.providerId)
+    && (thread.sessionId === undefined || typeof thread.sessionId === "string")
     && typeof thread.title === "string"
     && typeof thread.createdAt === "number"
     && typeof thread.updatedAt === "number"
@@ -217,14 +219,16 @@ export function buildLocalAgentPrompt(
   userText: string,
   attachments: LocalAgentAttachmentPayload[],
 ): string {
-  const transcript = thread.messages
-    .filter((message) => message.role === "user" || message.status === "complete")
-    .map((message) => `${message.role === "user" ? "User" : "Assistant"}: ${message.content}`)
-    .join("\n\n");
   const sections = [
     "Continue this local research conversation. Answer the current user request directly.",
   ];
-  if (transcript) sections.push(`Conversation so far:\n${transcript}`);
+  if (!thread.sessionId) {
+    const transcript = thread.messages
+      .filter((message) => message.role === "user" || message.status === "complete")
+      .map((message) => `${message.role === "user" ? "User" : "Assistant"}: ${message.content}`)
+      .join("\n\n");
+    if (transcript) sections.push(`Conversation so far:\n${transcript}`);
+  }
   if (attachments.length > 0) {
     sections.push([
       "Context explicitly attached by the user for this request:",

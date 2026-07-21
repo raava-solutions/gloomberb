@@ -21,7 +21,7 @@ export type BrokerQuoteEvent = {
 export type BrokerRemoteEvent = BrokerStatusEvent | BrokerQuoteEvent;
 
 export type AiRunnerEvent =
-  | { kind: "chunk"; output: string }
-  | { kind: "done"; output: string }
+  | { kind: "chunk"; delta: string }
+  | { kind: "done"; output: string; sessionId: string | null }
   | { kind: "cancelled" }
   | { kind: "error"; error: string };

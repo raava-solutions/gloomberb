@@ -137,7 +137,7 @@ describe("BreakingPane", () => {
       run() {
         runCalls += 1;
         return {
-          done: Promise.resolve("digest"),
+          done: Promise.resolve({ output: "digest", sessionId: null }),
           cancel: () => {},
         };
       },

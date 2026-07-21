@@ -187,20 +187,22 @@ export function AskAiResearchTab({ width, height, focused, onCapture }: TickerRe
     );
     const fullPrompt = `You are a financial analyst assistant. Here is the current financial data for the company being discussed:\n\n${context}\n\nUser question: ${text}`;
 
+    let streamedOutput = "";
     try {
       const run = runAiPrompt({
         provider: currentProvider,
         prompt: fullPrompt,
-        onChunk: (output) => {
+        onChunk: (delta) => {
+          streamedOutput += delta;
           setMessages((previous) => {
             const updated = [...previous];
-            updated[updated.length - 1] = { role: "assistant", content: output, loading: true };
+            updated[updated.length - 1] = { role: "assistant", content: streamedOutput, loading: true };
             return updated;
           });
         },
       });
       runRef.current = run;
-      const output = await run.done;
+      const { output } = await run.done;
       setMessages((previous) => {
         const updated = [...previous];
         updated[updated.length - 1] = {
