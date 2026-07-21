@@ -1,10 +1,12 @@
 import type { LayoutConfig } from "../../types/config";
 import {
   boundsForRects,
+  inferCompactedDockTree,
   inferDockTreeFromRects,
   type GridlockRect,
 } from "./gridlock-inference";
 import {
+  findDockLeaf,
   getDockLeafLayouts,
   type LayoutBounds,
 } from "./dock-tree";
@@ -13,6 +15,22 @@ import {
   removeUnavailablePaneTypes,
   type PaneTypeAvailability,
 } from "./layout-state";
+
+export function compactDockedPaneAtRect(
+  layout: LayoutConfig,
+  draggedInstanceId: string,
+  targetRect: LayoutBounds,
+  bounds: LayoutBounds,
+): LayoutConfig {
+  if (!findDockLeaf(layout, draggedInstanceId)) return layout;
+  const dockRoot = inferCompactedDockTree(layout, draggedInstanceId, targetRect, bounds);
+  if (!dockRoot) return layout;
+  return finalizeLayout({
+    ...layout,
+    dockRoot,
+    floating: layout.floating,
+  });
+}
 
 export function gridlockAllPanes(
   layout: LayoutConfig,

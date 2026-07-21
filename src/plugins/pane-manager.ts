@@ -32,6 +32,7 @@ export {
   addPaneFloating,
   bringToFront,
   detachPaneToFrame,
+  dockFloatingPaneAtCurrentRect,
   floatAtRect,
   floatPane,
   getRememberedFloatingRect,
@@ -55,7 +56,8 @@ export {
   removeUnavailablePaneTypes,
   type PaneTypeAvailability,
 } from "./pane-manager/layout-state";
-export { gridlockAllPanes } from "./pane-manager/gridlock";
+export { compactDockedPaneAtRect, gridlockAllPanes } from "./pane-manager/gridlock";
+export { inferCompactedDockTree } from "./pane-manager/gridlock-inference";
 export type {
   DropTarget,
   FloatingResizeCorner,
