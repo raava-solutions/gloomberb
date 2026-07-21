@@ -3,10 +3,64 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveAiCliCommand } from "./command-resolution";
-import type { AiProvider } from "./providers";
+import type { AiProvider, AiToolMode } from "./providers";
 import { AiStructuredStreamParser } from "./stream-events";
 
 const AUTH_CHECK_TIMEOUT_MS = 15_000;
+
+interface KillableToolProcess {
+  pid: number;
+  kill(signal?: number | NodeJS.Signals): void;
+}
+
+const activeToolProcesses = new Set<KillableToolProcess>();
+
+export function terminateAiToolProcess(
+  proc: KillableToolProcess,
+  platform: NodeJS.Platform = process.platform,
+  killGroup: (pid: number, signal?: NodeJS.Signals | number) => void = process.kill,
+  signal: NodeJS.Signals = "SIGTERM",
+): void {
+  if (platform === "win32" && typeof Bun !== "undefined" && typeof Bun.spawnSync === "function") {
+    try {
+      const result = Bun.spawnSync(["taskkill", "/PID", String(proc.pid), "/T", "/F"], {
+        stdin: "ignore",
+        stdout: "ignore",
+        stderr: "ignore",
+      });
+      if (result.exitCode === 0) return;
+    } catch {
+      // Fall through to the direct child when taskkill is unavailable.
+    }
+  }
+  if (platform !== "win32" && proc.pid > 0) {
+    try {
+      killGroup(-proc.pid, signal);
+      return;
+    } catch {
+      // Fall back to the direct child if its process group has already exited.
+    }
+  }
+  try { proc.kill(signal); } catch { /* ignore cleanup failures */ }
+}
+
+function stopAiToolProcess(proc: KillableToolProcess): void {
+  terminateAiToolProcess(proc);
+  const escalation = setTimeout(() => {
+    if (activeToolProcesses.has(proc)) terminateAiToolProcess(proc, process.platform, process.kill, "SIGKILL");
+  }, 250);
+  escalation.unref?.();
+}
+
+export function reapAiToolProcesses(): void {
+  const processes = [...activeToolProcesses];
+  activeToolProcesses.clear();
+  for (const proc of processes) terminateAiToolProcess(proc, process.platform, process.kill, "SIGKILL");
+}
+
+if (typeof process !== "undefined" && typeof process.once === "function") {
+  process.once("exit", reapAiToolProcesses);
+}
 
 export class AiRunCancelledError extends Error {
   constructor() {
@@ -30,6 +84,8 @@ export interface AiRunHost {
     provider: AiProvider;
     prompt: string;
     sessionId?: string;
+    threadId?: string;
+    toolMode?: AiToolMode;
     cwd?: string;
     onChunk?: (delta: string) => void;
     outputMode?: "plain" | "structured";
@@ -85,7 +141,7 @@ export async function checkStatusWithBun(
   if (typeof Bun === "undefined" || typeof Bun.spawn !== "function") {
     return { available: false, authenticated: false, message: "Local AI status checks require a native Bun host." };
   }
-  const resolvedCommand = resolveAiCliCommand(provider.command);
+  const resolvedCommand = resolveAiCliCommand(provider.command, { providerId: provider.id });
   if (!resolvedCommand) {
     return { available: false, authenticated: false, message: remediationFor(provider, "unavailable") };
   }
@@ -184,6 +240,8 @@ function runWithBun({
   provider,
   prompt,
   sessionId,
+  threadId: _threadId,
+  toolMode,
   cwd,
   onChunk,
   outputMode = "plain",
@@ -192,6 +250,8 @@ function runWithBun({
   provider: AiProvider;
   prompt: string;
   sessionId?: string;
+  threadId?: string;
+  toolMode?: AiToolMode;
   cwd?: string;
   onChunk?: (delta: string) => void;
   outputMode?: "plain" | "structured";
@@ -210,15 +270,17 @@ function runWithBun({
 
   const done = (async () => {
     if (cancelled) throw new AiRunCancelledError();
-    const resolvedCommand = resolveAiCliCommand(provider.command);
+    const resolvedCommand = resolveAiCliCommand(provider.command, { providerId: provider.id });
     if (!resolvedCommand) {
       throw new Error(`${provider.name} is not installed or not available in PATH.`);
     }
 
     const args = outputMode === "structured"
-      ? sessionId
-        ? provider.buildResumeArgs?.(prompt, sessionId) ?? provider.buildStructuredArgs?.(prompt)
-        : provider.buildStructuredArgs?.(prompt)
+      ? toolMode
+        ? provider.buildToolsArgs?.(prompt, { mode: toolMode, sessionId })
+        : sessionId
+          ? provider.buildResumeArgs?.(prompt, sessionId) ?? provider.buildStructuredArgs?.(prompt)
+          : provider.buildStructuredArgs?.(prompt)
       : provider.buildArgs(prompt);
     if (!args) {
       throw new Error(`${provider.name} does not support structured non-interactive output.`);
@@ -236,8 +298,10 @@ function runWithBun({
         stdin: "ignore",
         stdout: "pipe",
         stderr: "pipe",
+        detached: toolMode !== undefined,
       });
       processRef = proc;
+      if (toolMode) activeToolProcesses.add(proc as KillableToolProcess);
 
       const stderrPromise = new Response(proc.stderr).text().catch(() => "");
       const stdoutReader = proc.stdout.getReader();
@@ -298,12 +362,21 @@ function runWithBun({
 
       return { output: finalOutput, sessionId: structuredParser?.sessionId() ?? sessionId ?? null };
     } catch (error) {
-      try { proc?.kill(); } catch { /* ignore cleanup failures */ }
+      if (proc) {
+        if (toolMode) stopAiToolProcess(proc as KillableToolProcess);
+        else try { proc.kill(); } catch { /* ignore cleanup failures */ }
+      }
       await proc?.exited.catch(() => {});
       if (cancelled) throw new AiRunCancelledError();
       throw error;
     } finally {
       processRef = null;
+      if (proc && toolMode) {
+        // The direct CLI may exit while a tool-spawned grandchild remains in
+        // the detached group. Reap the group regardless of direct-child state.
+        terminateAiToolProcess(proc as KillableToolProcess, process.platform, process.kill, "SIGKILL");
+        activeToolProcesses.delete(proc as KillableToolProcess);
+      }
       if (ownedIsolatedCwd) await rm(ownedIsolatedCwd, { recursive: true, force: true }).catch(() => {});
     }
   })();
@@ -313,7 +386,10 @@ function runWithBun({
     cancel: () => {
       cancelled = true;
       try {
-        processRef?.kill();
+        if (processRef) {
+          if (toolMode) stopAiToolProcess(processRef as KillableToolProcess);
+          else processRef.kill();
+        }
       } catch {
         // ignore cleanup failures
       }
@@ -325,6 +401,8 @@ export function runAiPrompt({
   provider,
   prompt,
   sessionId,
+  threadId,
+  toolMode,
   cwd,
   onChunk,
   outputMode,
@@ -333,6 +411,8 @@ export function runAiPrompt({
   provider: AiProvider;
   prompt: string;
   sessionId?: string;
+  threadId?: string;
+  toolMode?: AiToolMode;
   cwd?: string;
   onChunk?: (delta: string) => void;
   outputMode?: "plain" | "structured";
@@ -342,6 +422,8 @@ export function runAiPrompt({
     provider,
     prompt,
     sessionId,
+    threadId,
+    toolMode,
     cwd,
     onChunk,
     outputMode,

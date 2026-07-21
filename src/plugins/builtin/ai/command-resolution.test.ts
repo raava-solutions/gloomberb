@@ -38,6 +38,40 @@ describe("AI CLI command resolution", () => {
     ]);
   });
 
+  test("passes only runtime basics and the active provider's auth variables", () => {
+    const resolved = resolveAiCliCommand("claude", {
+      env: {
+        PATH: "/usr/bin:/bin",
+        HOME: "/Users/example",
+        LANG: "en_US.UTF-8",
+        LC_ALL: "en_US.UTF-8",
+        TERM: "xterm-256color",
+        ANTHROPIC_API_KEY: "provider-secret",
+        CLAUDE_CODE_OAUTH_TOKEN: "provider-oauth",
+        OPENAI_API_KEY: "other-provider-secret",
+        IBKR_BROKER_TOKEN: "broker-secret",
+        AWS_SECRET_ACCESS_KEY: "cloud-secret",
+      },
+      homeDir: "/Users/example",
+      platform: "darwin",
+      providerId: "claude",
+      which: () => "/Users/example/.local/bin/claude",
+    });
+
+    expect(resolved?.env).toEqual({
+      PATH: "/usr/bin:/bin:/Users/example/.local/bin:/Users/example/.bun/bin:/Users/example/.npm-global/bin:/opt/homebrew/bin:/usr/local/bin",
+      HOME: "/Users/example",
+      LANG: "en_US.UTF-8",
+      TERM: "xterm-256color",
+      LC_ALL: "en_US.UTF-8",
+      ANTHROPIC_API_KEY: "provider-secret",
+      CLAUDE_CODE_OAUTH_TOKEN: "provider-oauth",
+    });
+    expect(resolved?.env).not.toHaveProperty("IBKR_BROKER_TOKEN");
+    expect(resolved?.env).not.toHaveProperty("AWS_SECRET_ACCESS_KEY");
+    expect(resolved?.env).not.toHaveProperty("OPENAI_API_KEY");
+  });
+
   test("uses the augmented PATH for both detection and execution", async () => {
     if (process.platform === "win32") return;
 

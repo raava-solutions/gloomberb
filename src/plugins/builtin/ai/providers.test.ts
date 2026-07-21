@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { getAiProviderDefinitions, getLocalWorkspaceProviders } from "./providers";
+import { getAiProviderDefinitions, getAiToolSideEffectLevel, getLocalWorkspaceProviders } from "./providers";
 
 describe("local workspace provider contracts", () => {
   test("keeps tools disabled while enabling persisted turn-one sessions", () => {
@@ -54,6 +54,82 @@ describe("local workspace provider contracts", () => {
     expect(piArgs).toContain("PROMPT");
     expect(piArgs).toContain("--no-tools");
     expect(piArgs).not.toContain("--no-session");
+  });
+
+  test("builds confined and YOLO tool arguments for every local provider", () => {
+    const definitions = getAiProviderDefinitions();
+    const claude = definitions.find((provider) => provider.id === "claude");
+    const codex = definitions.find((provider) => provider.id === "codex");
+    const pi = definitions.find((provider) => provider.id === "pi");
+    if (!claude?.buildToolsArgs || !codex?.buildToolsArgs || !pi?.buildToolsArgs) {
+      throw new Error("Expected tools-enabled local providers");
+    }
+
+    const claudeConfined = claude.buildToolsArgs("PROMPT", { mode: "confined" });
+    expect(claudeConfined).toContain("Read,Write,Edit,Bash,Glob,Grep");
+    expect(claudeConfined).toContain("dontAsk");
+    expect(claudeConfined).not.toContain("--safe-mode");
+    expect(claudeConfined).not.toContain("--dangerously-skip-permissions");
+    const claudeSettings = JSON.parse(claudeConfined[claudeConfined.indexOf("--settings") + 1]!);
+    expect(claudeSettings.sandbox).toMatchObject({
+      enabled: true,
+      failIfUnavailable: true,
+      allowUnsandboxedCommands: false,
+    });
+    expect(claudeSettings.sandbox.filesystem).toEqual({
+      allowWrite: ["."],
+      denyRead: ["/"],
+      allowRead: ["."],
+    });
+    expect(claudeSettings.sandbox.network.allowedDomains).toEqual([]);
+    const claudeYolo = claude.buildToolsArgs("PROMPT", { mode: "yolo", sessionId: "session-1" });
+    expect(claudeYolo).toContain("default");
+    expect(claudeYolo).toContain("--dangerously-skip-permissions");
+    expect(claudeYolo).toContain("session-1");
+    expect(claudeYolo).not.toContain("--settings");
+
+    const codexConfined = codex.buildToolsArgs("PROMPT", { mode: "confined" });
+    expect(codexConfined.slice(codexConfined.indexOf("--sandbox"), codexConfined.indexOf("--sandbox") + 2))
+      .toEqual(["--sandbox", "workspace-write"]);
+    expect(codexConfined).not.toContain("shell_tool");
+    expect(codexConfined).toContain("sandbox_workspace_write.exclude_tmpdir_env_var=true");
+    expect(codexConfined).toContain("sandbox_workspace_write.exclude_slash_tmp=true");
+    expect(codexConfined).toContain("sandbox_workspace_write.network_access=false");
+    const codexYolo = codex.buildToolsArgs("PROMPT", { mode: "yolo", sessionId: "session-2" });
+    expect(codexYolo.slice(0, 4)).toEqual(["exec", "--sandbox", "danger-full-access", "resume"]);
+    expect(codexYolo).toContain("session-2");
+    expect(codexYolo).not.toContain("shell_tool");
+    expect(codexYolo.join(" ")).not.toContain("sandbox_workspace_write.");
+
+    const piConfined = pi.buildToolsArgs("PROMPT", { mode: "confined" });
+    expect(piConfined).toContain("read,grep,find,ls");
+    expect(piConfined).toContain("--offline");
+    expect(piConfined.join(" ")).not.toMatch(/\b(?:bash|edit|write)\b/);
+    expect(piConfined).not.toContain("--no-tools");
+    const piYolo = pi.buildToolsArgs("PROMPT", { mode: "yolo", sessionId: "session-3" });
+    expect(piYolo).toContain("read,bash,edit,write,grep,find,ls");
+    expect(piYolo).not.toContain("--offline");
+    expect(piYolo).not.toContain("--no-tools");
+    expect(piYolo).toContain("session-3");
+  });
+
+  test("drops session ids that could be parsed as provider flags", () => {
+    const definitions = getAiProviderDefinitions();
+    for (const providerId of ["claude", "codex", "pi"]) {
+      const provider = definitions.find((entry) => entry.id === providerId);
+      if (!provider?.buildResumeArgs || !provider.buildToolsArgs) {
+        throw new Error(`Expected resume and tools arguments for ${providerId}`);
+      }
+      expect(provider.buildResumeArgs("PROMPT", "--foo")).not.toContain("--foo");
+      expect(provider.buildToolsArgs("PROMPT", { mode: "confined", sessionId: "--foo" })).not.toContain("--foo");
+    }
+  });
+
+  test("maps tool posture onto the capability side-effect taxonomy", () => {
+    expect(getAiToolSideEffectLevel("claude", "confined")).toBe("local-write");
+    expect(getAiToolSideEffectLevel("codex", "confined")).toBe("local-write");
+    expect(getAiToolSideEffectLevel("pi", "confined")).toBe("none");
+    expect(getAiToolSideEffectLevel("pi", "yolo")).toBe("network-write");
   });
 
   test("defines Pi structured mode without an auth-status contract", () => {

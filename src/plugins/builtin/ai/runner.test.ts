@@ -194,6 +194,89 @@ describe("AI runner structured mode", () => {
     expect(resumed.output).toBe("resume:session-1:two");
   });
 
+  test("selects tools-on arguments from the requested posture", async () => {
+    const provider: AiProvider = {
+      ...shellProvider("unused"),
+      buildToolsArgs: (prompt, { mode, sessionId }) => [
+        "-c",
+        `printf '%s\\n' '{"type":"item.completed","item":{"id":"answer","type":"agent_message","text":"${mode}:${sessionId ?? "new"}:${prompt}"}}'`,
+      ],
+    };
+
+    const confined = await runAiPrompt({
+      provider,
+      prompt: "one",
+      outputMode: "structured",
+      toolMode: "confined",
+    }).done;
+    const yolo = await runAiPrompt({
+      provider,
+      prompt: "two",
+      sessionId: "session-1",
+      outputMode: "structured",
+      toolMode: "yolo",
+    }).done;
+
+    expect(confined.output).toBe("confined:new:one");
+    expect(yolo.output).toBe("yolo:session-1:two");
+  });
+
+  test("cancellation kills the detached tool process group", async () => {
+    if (process.platform === "win32") return;
+    const tmpPath = await mkdtemp(join(tmpdir(), "gloomberb-group-kill-"));
+    const marker = join(tmpPath, "orphan-survived");
+    const provider: AiProvider = {
+      ...shellProvider("unused"),
+      buildToolsArgs: () => [
+        "-c",
+        `(trap '' TERM; sleep 0.6; printf survived > "${marker}") & wait`,
+      ],
+    };
+
+    try {
+      const run = runAiPrompt({
+        provider,
+        prompt: "ignored",
+        outputMode: "structured",
+        toolMode: "yolo",
+      });
+      await Bun.sleep(50);
+      run.cancel();
+      await expect(run.done).rejects.toBeInstanceOf(Error);
+      await Bun.sleep(700);
+      expect(existsSync(marker)).toBe(false);
+    } finally {
+      await rm(tmpPath, { recursive: true, force: true });
+    }
+  });
+
+  test("successful tool completion reaps detached background grandchildren", async () => {
+    if (process.platform === "win32") return;
+    const tmpPath = await mkdtemp(join(tmpdir(), "gloomberb-completion-reap-"));
+    const marker = join(tmpPath, "orphan-survived");
+    const provider: AiProvider = {
+      ...shellProvider("unused"),
+      buildToolsArgs: () => [
+        "-c",
+        `(trap '' TERM; sleep 0.5; printf survived > "${marker}") </dev/null >/dev/null 2>&1 & printf '%s\\n' '{"type":"item.completed","item":{"id":"answer","type":"agent_message","text":"done"}}'`,
+      ],
+    };
+
+    try {
+      const result = await runAiPrompt({
+        provider,
+        prompt: "ignored",
+        outputMode: "structured",
+        toolMode: "confined",
+      }).done;
+      expect(result.output).toBe("done");
+      await Bun.sleep(600);
+      expect(existsSync(marker)).toBe(false);
+    } finally {
+      await rm(tmpPath, { recursive: true, force: true });
+    }
+  });
+
   test("forwards structured isolation and cancellation through a configured host", async () => {
     let received: Parameters<NonNullable<import("./runner").AiRunHost["run"]>>[0] | null = null;
     let cancelled = false;
@@ -212,15 +295,20 @@ describe("AI runner structured mode", () => {
         provider: shellProvider("unused"),
         prompt: "selected context only",
         sessionId: "existing-session",
+        threadId: "thread-1",
+        toolMode: "yolo",
         outputMode: "structured",
         isolatedWorkspace: true,
       });
       run.cancel();
       expect(await run.done).toEqual({ output: "host output", sessionId: "host-session" });
-      expect(received?.prompt).toBe("selected context only");
-      expect(received?.sessionId).toBe("existing-session");
-      expect(received?.outputMode).toBe("structured");
-      expect(received?.isolatedWorkspace).toBe(true);
+      const forwarded = received as Parameters<NonNullable<import("./runner").AiRunHost["run"]>>[0] | null;
+      expect(forwarded?.prompt).toBe("selected context only");
+      expect(forwarded?.sessionId).toBe("existing-session");
+      expect(forwarded?.threadId).toBe("thread-1");
+      expect(forwarded?.toolMode).toBe("yolo");
+      expect(forwarded?.outputMode).toBe("structured");
+      expect(forwarded?.isolatedWorkspace).toBe(true);
       expect(cancelled).toBe(true);
     } finally {
       setAiRunHost(null);

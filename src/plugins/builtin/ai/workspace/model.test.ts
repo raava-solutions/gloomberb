@@ -4,7 +4,11 @@ import {
   buildLocalAgentPrompt,
   createLocalAgentThread,
   EMPTY_LOCAL_AGENT_WORKSPACE,
+  getLocalAgentConfinedCaveat,
+  getLocalAgentToolPosture,
   normalizeLocalAgentWorkspace,
+  resolveLocalAgentToolModeToggle,
+  toggleLocalAgentToolMode,
   updateLocalAgentThread,
 } from "./model";
 
@@ -20,6 +24,65 @@ describe("local agent workspace model", () => {
     }));
 
     expect(attemptedMutation.threads[0]?.providerId).toBe("claude");
+    expect(attemptedMutation.threads[0]?.toolMode).toBe("confined");
+  });
+
+  test("defaults legacy tool posture to confined and validates explicit values", () => {
+    const created = createLocalAgentThread(EMPTY_LOCAL_AGENT_WORKSPACE, "codex", { id: "thread-1", now: 1 });
+    const thread = created.threads[0]!;
+    const legacy = normalizeLocalAgentWorkspace({ ...created, threads: [{ ...thread, toolMode: undefined }] });
+    const yolo = normalizeLocalAgentWorkspace({ ...created, threads: [{ ...thread, toolMode: "yolo" }] });
+    const invalid = normalizeLocalAgentWorkspace({ ...created, threads: [{ ...thread, toolMode: "unsafe" }] });
+
+    expect(legacy.threads[0]?.toolMode ?? "confined").toBe("confined");
+    expect(yolo.threads[0]?.toolMode).toBe("yolo");
+    expect(invalid.threads).toEqual([]);
+  });
+
+  test("exposes persistent confined and YOLO safety copy", () => {
+    expect(getLocalAgentToolPosture(undefined)).toEqual({
+      mode: "confined",
+      footer: "Tools: confined · Network: off",
+      warning: null,
+    });
+    expect(getLocalAgentToolPosture("yolo")).toEqual({
+      mode: "yolo",
+      footer: "Tools: YOLO · Network: on",
+      warning: "YOLO mode - runs shell, edits real files, reaches network",
+    });
+  });
+
+  test("describes provider-specific confined read boundaries", () => {
+    expect(getLocalAgentConfinedCaveat("claude")).toContain("host reads blocked");
+    expect(getLocalAgentConfinedCaveat("codex")).toContain("host reads possible");
+    expect(getLocalAgentConfinedCaveat("pi")).toContain("host reads possible");
+  });
+
+  test("requires two steps to enable YOLO but disables it immediately", () => {
+    expect(resolveLocalAgentToolModeToggle("confined", false)).toEqual({
+      shouldToggle: false,
+      yoloConfirmationArmed: true,
+    });
+    expect(resolveLocalAgentToolModeToggle("confined", true)).toEqual({
+      shouldToggle: true,
+      yoloConfirmationArmed: false,
+    });
+    expect(resolveLocalAgentToolModeToggle("yolo", false)).toEqual({
+      shouldToggle: true,
+      yoloConfirmationArmed: false,
+    });
+  });
+
+  test("resets the provider session whenever posture changes", () => {
+    const created = createLocalAgentThread(EMPTY_LOCAL_AGENT_WORKSPACE, "claude", { id: "thread-1", now: 1 });
+    const confined = { ...created.threads[0]!, sessionId: "session-1" };
+    const yolo = toggleLocalAgentToolMode(confined);
+    const confinedAgain = toggleLocalAgentToolMode({ ...yolo, sessionId: "session-2" });
+
+    expect(yolo.toolMode).toBe("yolo");
+    expect(yolo.sessionId).toBeUndefined();
+    expect(confinedAgain.toolMode).toBe("confined");
+    expect(confinedAgain.sessionId).toBeUndefined();
   });
 
   test("creates a second provider thread without changing the first transcript", () => {
@@ -131,7 +194,7 @@ describe("local agent workspace model", () => {
     expect(normalized.threads[0]?.messages.map((message) => message.content)).toEqual(["First", "Second"]);
   });
 
-  test("preserves an optional opaque session id and rejects malformed values", () => {
+  test("preserves safe session ids and rejects malformed non-string values", () => {
     const valid = normalizeLocalAgentWorkspace({
       activeThreadId: "thread-1",
       threads: [{
@@ -159,5 +222,23 @@ describe("local agent workspace model", () => {
 
     expect(valid.threads[0]?.sessionId).toBe("session-1");
     expect(invalid.threads).toHaveLength(0);
+  });
+
+  test("strips session ids that could escape their provider flag position", () => {
+    const normalized = normalizeLocalAgentWorkspace({
+      activeThreadId: "thread-1",
+      threads: [{
+        id: "thread-1",
+        providerId: "codex",
+        sessionId: "--foo",
+        title: "Research",
+        createdAt: 1,
+        updatedAt: 1,
+        messages: [],
+      }],
+    });
+
+    expect(normalized.threads).toHaveLength(1);
+    expect(normalized.threads[0]?.sessionId).toBeUndefined();
   });
 });
