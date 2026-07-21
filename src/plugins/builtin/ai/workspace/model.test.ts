@@ -4,7 +4,9 @@ import {
   buildLocalAgentPrompt,
   createLocalAgentThread,
   EMPTY_LOCAL_AGENT_WORKSPACE,
+  getLocalAgentToolPosture,
   normalizeLocalAgentWorkspace,
+  toggleLocalAgentToolMode,
   updateLocalAgentThread,
 } from "./model";
 
@@ -20,6 +22,44 @@ describe("local agent workspace model", () => {
     }));
 
     expect(attemptedMutation.threads[0]?.providerId).toBe("claude");
+    expect(attemptedMutation.threads[0]?.toolMode).toBe("confined");
+  });
+
+  test("defaults legacy tool posture to confined and validates explicit values", () => {
+    const created = createLocalAgentThread(EMPTY_LOCAL_AGENT_WORKSPACE, "codex", { id: "thread-1", now: 1 });
+    const thread = created.threads[0]!;
+    const legacy = normalizeLocalAgentWorkspace({ ...created, threads: [{ ...thread, toolMode: undefined }] });
+    const yolo = normalizeLocalAgentWorkspace({ ...created, threads: [{ ...thread, toolMode: "yolo" }] });
+    const invalid = normalizeLocalAgentWorkspace({ ...created, threads: [{ ...thread, toolMode: "unsafe" }] });
+
+    expect(legacy.threads[0]?.toolMode ?? "confined").toBe("confined");
+    expect(yolo.threads[0]?.toolMode).toBe("yolo");
+    expect(invalid.threads).toEqual([]);
+  });
+
+  test("exposes persistent confined and YOLO safety copy", () => {
+    expect(getLocalAgentToolPosture(undefined)).toEqual({
+      mode: "confined",
+      footer: "Tools: confined · Network: off",
+      warning: null,
+    });
+    expect(getLocalAgentToolPosture("yolo")).toEqual({
+      mode: "yolo",
+      footer: "Tools: YOLO · Network: on",
+      warning: "YOLO mode - runs shell, edits real files, reaches network",
+    });
+  });
+
+  test("resets the provider session whenever posture changes", () => {
+    const created = createLocalAgentThread(EMPTY_LOCAL_AGENT_WORKSPACE, "claude", { id: "thread-1", now: 1 });
+    const confined = { ...created.threads[0]!, sessionId: "session-1" };
+    const yolo = toggleLocalAgentToolMode(confined);
+    const confinedAgain = toggleLocalAgentToolMode({ ...yolo, sessionId: "session-2" });
+
+    expect(yolo.toolMode).toBe("yolo");
+    expect(yolo.sessionId).toBeUndefined();
+    expect(confinedAgain.toolMode).toBe("confined");
+    expect(confinedAgain.sessionId).toBeUndefined();
   });
 
   test("creates a second provider thread without changing the first transcript", () => {

@@ -24,9 +24,11 @@ import {
   appendLocalAgentMessages,
   buildLocalAgentPrompt,
   createLocalAgentThread,
+  getLocalAgentToolPosture,
   normalizeLocalAgentWorkspace,
   removeLocalAgentMessages,
   selectLocalAgentThread,
+  toggleLocalAgentToolMode,
   updateLocalAgentThread,
   type LocalAgentAttachmentPayload,
   type LocalAgentProviderId,
@@ -64,6 +66,7 @@ function WorkspaceProviderChooser({
     <Box flexDirection="column" paddingX={1} paddingTop={1} flexGrow={1}>
       <Text fg={colors.textBright} attributes={TextAttributes.BOLD}>Choose a local runtime</Text>
       <Text fg={colors.textDim}>The selection is permanent for this thread. A different runtime creates a new thread.</Text>
+      <Text fg={colors.textDim}>Tools start confined to a disposable per-thread workspace. YOLO is an explicit per-thread escalation.</Text>
       <Box height={1} />
       {statusMessage && <Text fg={colors.warning}>{statusMessage}</Text>}
       {providers.map((provider, index) => {
@@ -111,6 +114,8 @@ export function LocalAgentWorkspacePane({ focused, width, height }: PaneProps) {
   );
   const workspace = useMemo(() => normalizeLocalAgentWorkspace(persistedWorkspace), [persistedWorkspace]);
   const activeThread = workspace.threads.find((thread) => thread.id === workspace.activeThreadId) ?? null;
+  const activeToolPosture = getLocalAgentToolPosture(activeThread?.toolMode);
+  const activeToolMode = activeToolPosture.mode;
   const [creating, setCreating] = useState(() => workspace.threads.length === 0);
   const [selectedProviderIndex, setSelectedProviderIndex] = useState(0);
   const [checkingProviderId, setCheckingProviderId] = useState<string | null>(null);
@@ -261,6 +266,12 @@ export function LocalAgentWorkspacePane({ focused, width, height }: PaneProps) {
     runRef.current?.controller.cancel();
   }, []);
 
+  const toggleToolMode = useCallback(() => {
+    if (!activeThread || busyRef.current || runRef.current) return;
+    updateWorkspace((current) => updateLocalAgentThread(current, activeThread.id, toggleLocalAgentToolMode));
+    setStatusMessage("Tool posture changed. The provider session was reset for the new boundary.");
+  }, [activeThread, updateWorkspace]);
+
   const resetSession = useCallback(async () => {
     if (!activeThread || busyRef.current || runRef.current) return;
     busyRef.current = true;
@@ -325,14 +336,18 @@ export function LocalAgentWorkspacePane({ focused, width, height }: PaneProps) {
 
     let streamedOutput = "";
     try {
-      const cwd = await ensureIsolatedThreadWorkspace(activeThread.id);
+      const cwd = activeToolMode === "confined"
+        ? await ensureIsolatedThreadWorkspace(activeThread.id)
+        : undefined;
       const controller = runAiPrompt({
         provider,
         prompt,
         sessionId: activeThread.sessionId,
+        threadId: activeThread.id,
+        toolMode: activeToolMode,
         cwd,
         outputMode: "structured",
-        isolatedWorkspace: true,
+        isolatedWorkspace: activeToolMode === "confined",
         onChunk: (delta) => {
           streamedOutput += delta;
           setStreamingOutput(streamedOutput);
@@ -415,7 +430,8 @@ export function LocalAgentWorkspacePane({ focused, width, height }: PaneProps) {
     if (event.name === "a") attachSelectedTicker();
     if (event.name === "x") removeAttachments();
     if (event.name === "c" && runRef.current) cancelRun();
-    if (event.name === "r" && activeThread.sessionId) void resetSession();
+    if (event.name === "r" && activeThread?.sessionId) void resetSession();
+    if (event.name === "y") toggleToolMode();
     if (event.name === "[") cycleThread(-1);
     if (event.name === "]") cycleThread(1);
   }, { allowEditable: true });
@@ -426,15 +442,22 @@ export function LocalAgentWorkspacePane({ focused, width, height }: PaneProps) {
   }, [dispatch]);
 
   usePaneFooter("local-agent-workspace", () => ({
-    info: runningMessageId
+    info: [...(runningMessageId
       ? [{ id: "running", parts: [{ text: "Streaming local reply", tone: "positive" as const, bold: true }] }]
       : checkingProviderId
         ? [{ id: "checking", parts: [{ text: "Checking local sign-in", tone: "muted" as const }] }]
         : statusMessage
           ? [{ id: "error", parts: [{ text: statusMessage, tone: "warning" as const }] }]
-          : [],
+          : []), ...(activeThread ? [{
+            id: "tools",
+            parts: [{
+              text: activeToolPosture.footer,
+              tone: activeToolMode === "yolo" ? "warning" as const : "muted" as const,
+              bold: activeToolMode === "yolo",
+            }],
+          }] : [])],
     hints: [],
-  }), [checkingProviderId, runningMessageId, statusMessage]);
+  }), [activeThread, activeToolMode, activeToolPosture.footer, checkingProviderId, runningMessageId, statusMessage]);
 
   const messageText = activeThread?.messages.map((message) => message.content) ?? [];
   const { catalog, openTicker } = useInlineTickers(messageText);
@@ -519,6 +542,15 @@ export function LocalAgentWorkspacePane({ focused, width, height }: PaneProps) {
               {" · Reset session"}
             </Text>
           )}
+          <Text fg={colors.textDim}> · </Text>
+          <Text
+            fg={activeToolMode === "yolo" ? colors.warning : colors.textBright}
+            attributes={activeToolMode === "yolo" ? TextAttributes.BOLD : 0}
+            onMouseDown={toggleToolMode}
+            style={{ cursor: "pointer" }}
+          >
+            YOLO: {activeToolMode === "yolo" ? "on" : "off"}
+          </Text>
           {!showSidebar && (
             <>
               <Text fg={colors.textDim}> · </Text>
@@ -529,6 +561,12 @@ export function LocalAgentWorkspacePane({ focused, width, height }: PaneProps) {
             </>
           )}
         </Box>
+
+        {activeToolPosture.warning && (
+          <Box paddingX={1} backgroundColor={colors.warning}>
+            <Text fg={colors.bg} attributes={TextAttributes.BOLD}>{activeToolPosture.warning}</Text>
+          </Box>
+        )}
 
         <ScrollBox ref={scrollRef} flexGrow={1} minHeight={0} scrollY focusable={false} paddingX={1}>
           {activeThread.messages.length === 0 ? (

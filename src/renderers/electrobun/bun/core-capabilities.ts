@@ -303,9 +303,17 @@ function createAiRunnerCapability(options: CoreCapabilityOptions): PluginCapabil
           available: resolveAiCliCommand(providerDefinition.command) !== null,
         });
       }),
-      run: stream((input: any, emit) => {
+      run: stream(async (input: any, emit) => {
         const providerId = requireString(input.providerId, "AI provider");
         const prompt = requireString(input.prompt, "AI prompt");
+        const toolMode = input.toolMode === "confined" || input.toolMode === "yolo"
+          ? input.toolMode
+          : undefined;
+        const cwd = toolMode === "confined"
+          ? await ensureIsolatedThreadWorkspace(requireString(input.threadId, "AI thread"))
+          : toolMode === "yolo"
+            ? process.cwd()
+            : optionalString(input.cwd) ?? options.getConfig().dataDir;
         const providerDefinition = getAiProviderDefinitions().find((entry) => entry.id === providerId);
         if (!providerDefinition) {
           throw new Error(`Unknown AI provider: ${providerId}`);
@@ -322,7 +330,9 @@ function createAiRunnerCapability(options: CoreCapabilityOptions): PluginCapabil
           },
           prompt,
           sessionId: optionalString(input.sessionId),
-          cwd: optionalString(input.cwd) ?? options.getConfig().dataDir,
+          threadId: optionalString(input.threadId),
+          toolMode,
+          cwd,
           outputMode: input.outputMode === "structured" ? "structured" : "plain",
           isolatedWorkspace: input.isolatedWorkspace === true,
           onChunk: (delta) => {

@@ -8,11 +8,126 @@ export interface AiProvider {
   buildArgs: (prompt: string) => string[];
   buildStructuredArgs?: (prompt: string) => string[];
   buildResumeArgs?: (prompt: string, sessionId: string) => string[];
+  buildToolsArgs?: (prompt: string, opts: { mode: AiToolMode; sessionId?: string }) => string[];
   authCheckArgs?: string[];
   authLoginCommand?: string;
 }
 
+export type AiToolMode = "confined" | "yolo";
+
+export type AiToolSideEffectLevel = "none" | "local-write" | "network-write";
+
+export function getAiToolSideEffectLevel(providerId: string, mode: AiToolMode): AiToolSideEffectLevel {
+  if (mode === "yolo") return "network-write";
+  return providerId === "pi" ? "none" : "local-write";
+}
+
 export interface AiProviderDefinition extends Omit<AiProvider, "available"> {}
+
+const CLAUDE_CONFINED_SETTINGS = JSON.stringify({
+  sandbox: {
+    enabled: true,
+    failIfUnavailable: true,
+    autoAllowBashIfSandboxed: true,
+    allowUnsandboxedCommands: false,
+    filesystem: {
+      allowWrite: ["."],
+      denyRead: ["/"],
+      allowRead: ["."],
+    },
+    network: {
+      allowedDomains: [],
+      allowAllUnixSockets: false,
+      allowLocalBinding: false,
+    },
+  },
+  permissions: {
+    allow: ["Edit(./**)"],
+  },
+});
+
+function claudeStructuredArgs(prompt: string, sessionId?: string): string[] {
+  return [
+    "--print",
+    prompt,
+    "--verbose",
+    "--output-format",
+    "stream-json",
+    "--include-partial-messages",
+    "--safe-mode",
+    "--tools",
+    "",
+    "--permission-mode",
+    "manual",
+    ...(sessionId ? ["--resume", sessionId] : []),
+  ];
+}
+
+function claudeToolsArgs(prompt: string, mode: AiToolMode, sessionId?: string): string[] {
+  const base = claudeStructuredArgs(prompt, sessionId);
+  const toolsIndex = base.indexOf("--tools");
+  base.splice(toolsIndex, 2);
+  const safeModeIndex = base.indexOf("--safe-mode");
+  base.splice(safeModeIndex, 1);
+  const permissionModeIndex = base.indexOf("--permission-mode");
+  base.splice(permissionModeIndex, 2);
+  if (mode === "yolo") {
+    return [...base, "--tools", "default", "--dangerously-skip-permissions"];
+  }
+  return [
+    ...base,
+    "--tools",
+    "Read,Write,Edit,Bash,Glob,Grep",
+    "--permission-mode",
+    "dontAsk",
+    "--setting-sources",
+    "",
+    "--settings",
+    CLAUDE_CONFINED_SETTINGS,
+  ];
+}
+
+function codexStructuredArgs(prompt: string, sessionId?: string): string[] {
+  return sessionId
+    ? [
+      "exec", "--sandbox", "read-only", "resume", "--skip-git-repo-check",
+      "--ignore-user-config", "--ignore-rules", "--disable", "shell_tool", "--json",
+      sessionId, prompt,
+    ]
+    : [
+      "exec", "--skip-git-repo-check", "--ignore-user-config", "--ignore-rules",
+      "--disable", "shell_tool", "--sandbox", "read-only", "--json", prompt,
+    ];
+}
+
+function codexToolsArgs(prompt: string, mode: AiToolMode, sessionId?: string): string[] {
+  const base = codexStructuredArgs(prompt, sessionId);
+  const disableIndex = base.indexOf("--disable");
+  base.splice(disableIndex, 2);
+  const sandboxIndex = base.indexOf("--sandbox");
+  base[sandboxIndex + 1] = mode === "yolo" ? "danger-full-access" : "workspace-write";
+  return base;
+}
+
+function piStructuredArgs(prompt: string, sessionId?: string): string[] {
+  return [
+    "-p", "--mode", "json", "--offline", "--no-tools", "-nc", "-ne", "-ns",
+    ...(sessionId ? ["--session-id", sessionId] : []), prompt,
+  ];
+}
+
+function piToolsArgs(prompt: string, mode: AiToolMode, sessionId?: string): string[] {
+  const base = piStructuredArgs(prompt, sessionId);
+  const noToolsIndex = base.indexOf("--no-tools");
+  base.splice(noToolsIndex, 1);
+  const offlineIndex = base.indexOf("--offline");
+  if (mode === "yolo") base.splice(offlineIndex, 1);
+  const tools = mode === "yolo"
+    ? "read,bash,edit,write,grep,find,ls"
+    : "read,grep,find,ls";
+  base.splice(base.length - 1, 0, "--tools", tools);
+  return base;
+}
 
 const PROVIDER_DEFS: AiProviderDefinition[] = [
   {
@@ -20,34 +135,9 @@ const PROVIDER_DEFS: AiProviderDefinition[] = [
     name: "Claude",
     command: "claude",
     buildArgs: (prompt) => ["-p", prompt],
-    buildStructuredArgs: (prompt) => [
-      "--print",
-      prompt,
-      "--verbose",
-      "--output-format",
-      "stream-json",
-      "--include-partial-messages",
-      "--safe-mode",
-      "--tools",
-      "",
-      "--permission-mode",
-      "manual",
-    ],
-    buildResumeArgs: (prompt, sessionId) => [
-      "--print",
-      prompt,
-      "--verbose",
-      "--output-format",
-      "stream-json",
-      "--include-partial-messages",
-      "--safe-mode",
-      "--tools",
-      "",
-      "--permission-mode",
-      "manual",
-      "--resume",
-      sessionId,
-    ],
+    buildStructuredArgs: (prompt) => claudeStructuredArgs(prompt),
+    buildResumeArgs: (prompt, sessionId) => claudeStructuredArgs(prompt, sessionId),
+    buildToolsArgs: (prompt, { mode, sessionId }) => claudeToolsArgs(prompt, mode, sessionId),
     authCheckArgs: ["auth", "status"],
     authLoginCommand: "claude auth login",
   },
@@ -62,32 +152,9 @@ const PROVIDER_DEFS: AiProviderDefinition[] = [
     name: "Codex",
     command: "codex",
     buildArgs: (prompt) => ["exec", "--skip-git-repo-check", prompt],
-    buildStructuredArgs: (prompt) => [
-      "exec",
-      "--skip-git-repo-check",
-      "--ignore-user-config",
-      "--ignore-rules",
-      "--disable",
-      "shell_tool",
-      "--sandbox",
-      "read-only",
-      "--json",
-      prompt,
-    ],
-    buildResumeArgs: (prompt, sessionId) => [
-      "exec",
-      "--sandbox",
-      "read-only",
-      "resume",
-      "--skip-git-repo-check",
-      "--ignore-user-config",
-      "--ignore-rules",
-      "--disable",
-      "shell_tool",
-      "--json",
-      sessionId,
-      prompt,
-    ],
+    buildStructuredArgs: (prompt) => codexStructuredArgs(prompt),
+    buildResumeArgs: (prompt, sessionId) => codexStructuredArgs(prompt, sessionId),
+    buildToolsArgs: (prompt, { mode, sessionId }) => codexToolsArgs(prompt, mode, sessionId),
     authCheckArgs: ["login", "status"],
     authLoginCommand: "codex login",
   },
@@ -96,8 +163,9 @@ const PROVIDER_DEFS: AiProviderDefinition[] = [
     name: "Pi",
     command: "pi",
     buildArgs: (prompt) => ["-p", "--mode", "text", "--offline", "--no-tools", "--no-session", "-nc", "-ne", "-ns", prompt],
-    buildStructuredArgs: (prompt) => ["-p", "--mode", "json", "--offline", "--no-tools", "-nc", "-ne", "-ns", prompt],
-    buildResumeArgs: (prompt, sessionId) => ["-p", "--mode", "json", "--offline", "--no-tools", "-nc", "-ne", "-ns", "--session-id", sessionId, prompt],
+    buildStructuredArgs: (prompt) => piStructuredArgs(prompt),
+    buildResumeArgs: (prompt, sessionId) => piStructuredArgs(prompt, sessionId),
+    buildToolsArgs: (prompt, { mode, sessionId }) => piToolsArgs(prompt, mode, sessionId),
     // No authCheckArgs: pi authenticates via config/env (no auth-status subcommand);
     // an inconclusive/unauthenticated state surfaces at run time.
   },

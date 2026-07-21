@@ -1,4 +1,18 @@
 export type LocalAgentProviderId = "claude" | "codex" | "pi";
+export type LocalAgentToolMode = "confined" | "yolo";
+
+export const LOCAL_AGENT_YOLO_WARNING = "YOLO mode - runs shell, edits real files, reaches network";
+
+export function getLocalAgentToolPosture(mode: LocalAgentToolMode | undefined): {
+  mode: LocalAgentToolMode;
+  footer: string;
+  warning: string | null;
+} {
+  const resolvedMode = mode ?? "confined";
+  return resolvedMode === "yolo"
+    ? { mode: resolvedMode, footer: "Tools: YOLO · Network: on", warning: LOCAL_AGENT_YOLO_WARNING }
+    : { mode: resolvedMode, footer: "Tools: confined · Network: off", warning: null };
+}
 
 export interface LocalAgentAttachmentMetadata {
   id: string;
@@ -24,10 +38,19 @@ export interface LocalAgentThread {
   id: string;
   providerId: LocalAgentProviderId;
   sessionId?: string;
+  toolMode?: LocalAgentToolMode;
   title: string;
   createdAt: number;
   updatedAt: number;
   messages: LocalAgentMessage[];
+}
+
+export function toggleLocalAgentToolMode(thread: LocalAgentThread): LocalAgentThread {
+  const { sessionId: _sessionId, ...resetThread } = thread;
+  return {
+    ...resetThread,
+    toolMode: (thread.toolMode ?? "confined") === "yolo" ? "confined" : "yolo",
+  };
 }
 
 export interface LocalAgentWorkspaceState {
@@ -90,6 +113,7 @@ function isThread(value: unknown): value is LocalAgentThread {
   return typeof thread.id === "string"
     && isProviderId(thread.providerId)
     && (thread.sessionId === undefined || typeof thread.sessionId === "string")
+    && (thread.toolMode === undefined || thread.toolMode === "confined" || thread.toolMode === "yolo")
     && typeof thread.title === "string"
     && typeof thread.createdAt === "number"
     && typeof thread.updatedAt === "number"
@@ -128,6 +152,7 @@ export function createLocalAgentThread(
   const thread: LocalAgentThread = {
     id,
     providerId,
+    toolMode: "confined",
     title: `New ${PROVIDER_TITLES[providerId]} thread`,
     createdAt: now,
     updatedAt: now,

@@ -9,11 +9,49 @@ interface AiCliPathOptions {
 
 interface AiCliResolutionOptions extends AiCliPathOptions {
   which?: (command: string, options: { PATH: string }) => string | null;
+  providerId?: string;
 }
 
 export interface ResolvedAiCliCommand {
   executable: string;
   env: Record<string, string | undefined>;
+}
+
+const PROVIDER_AUTH_ENV_KEYS: Record<string, readonly string[]> = {
+  claude: ["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"],
+  codex: ["OPENAI_API_KEY"],
+  gemini: ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+  // Pi's subscription and OAuth credentials live in its config directory. Its
+  // selected model provider is not known at command-resolution time, so no
+  // ambient cloud API keys are exposed to its tools.
+  pi: [],
+};
+
+function providerIdFor(command: string, explicitProviderId?: string): string {
+  if (explicitProviderId) return explicitProviderId;
+  const basename = command.split(/[\\/]/).at(-1) ?? command;
+  return basename.replace(/\.(?:cmd|exe)$/i, "");
+}
+
+export function buildAiCliEnv(
+  command: string,
+  searchPath: string,
+  env: Record<string, string | undefined>,
+  providerId?: string,
+): Record<string, string | undefined> {
+  const allowedKeys = new Set(["HOME", "LANG", "TERM"]);
+  for (const key of Object.keys(env)) {
+    if (key.startsWith("LC_")) allowedKeys.add(key);
+  }
+  for (const key of PROVIDER_AUTH_ENV_KEYS[providerIdFor(command, providerId)] ?? []) {
+    allowedKeys.add(key);
+  }
+
+  const childEnv: Record<string, string | undefined> = { PATH: searchPath };
+  for (const key of allowedKeys) {
+    if (env[key] !== undefined) childEnv[key] = env[key];
+  }
+  return childEnv;
 }
 
 export function getAiCliSearchPath({
@@ -56,6 +94,6 @@ export function resolveAiCliCommand(
 
   return {
     executable,
-    env: { ...env, PATH: searchPath },
+    env: buildAiCliEnv(command, searchPath, env, options.providerId),
   };
 }
