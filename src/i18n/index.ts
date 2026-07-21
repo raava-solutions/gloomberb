@@ -7,18 +7,35 @@ const DICTIONARIES: Record<Exclude<AppLanguage, "en">, Record<string, string>> =
 };
 
 function normalizeLanguageTag(tag: string): AppLanguage | null {
-  const lower = tag.trim().toLowerCase();
-  if (!lower) return null;
-  if (lower === "en" || lower.startsWith("en-") || lower.startsWith("en_")) return "en";
-  if (lower === "zh" || lower.startsWith("zh-") || lower.startsWith("zh_")) return "zh-CN";
+  const normalized = tag
+    .trim()
+    .toLowerCase()
+    .split(/[.@]/, 1)[0]
+    ?.replaceAll("_", "-");
+  if (!normalized) return null;
+  const [language, variant] = normalized.split("-");
+  if (language === "en") return "en";
+  if (language === "zh" && (!variant || variant === "cn" || variant === "sg" || variant === "hans")) {
+    return "zh-CN";
+  }
   return null;
+}
+
+function getEnvironmentLanguageOverride(): AppLanguage | null {
+  try {
+    return typeof process !== "undefined" && process.env?.GLOOMBERB_LANG
+      ? normalizeLanguageTag(process.env.GLOOMBERB_LANG)
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function detectLanguage(): AppLanguage {
   try {
     if (typeof process !== "undefined" && process.env) {
       const env = process.env;
-      const override = env.GLOOMBERB_LANG && normalizeLanguageTag(env.GLOOMBERB_LANG);
+      const override = getEnvironmentLanguageOverride();
       if (override) return override;
       // Keep the test suite deterministic regardless of the host locale.
       if (env.NODE_ENV === "test") return "en";
@@ -56,10 +73,10 @@ export function setLanguage(language: AppLanguage): void {
  * can be forced into another language without touching the config.
  */
 export function applyLanguageFromConfig(config: { language?: string } | null | undefined): void {
-  try {
-    if (typeof process !== "undefined" && process.env?.GLOOMBERB_LANG) return;
-  } catch {
-    // ignore
+  const override = getEnvironmentLanguageOverride();
+  if (override) {
+    currentLanguage = override;
+    return;
   }
   const configured = config?.language;
   if (!configured || configured === "auto") return;
@@ -72,7 +89,8 @@ export function applyLanguageFromConfig(config: { language?: string } | null | u
  * command). "auto" re-runs environment detection.
  */
 export function applyLanguagePreference(preference: "auto" | "en" | "zh-CN"): void {
-  currentLanguage = preference === "auto" ? detectLanguage() : preference;
+  currentLanguage = getEnvironmentLanguageOverride()
+    ?? (preference === "auto" ? detectLanguage() : preference);
 }
 
 /**

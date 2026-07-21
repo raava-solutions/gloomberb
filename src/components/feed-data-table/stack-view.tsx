@@ -2,9 +2,8 @@ import { Box, ScrollBox, Text } from "../../ui";
 import { TextAttributes, type ScrollBoxRenderable } from "../../ui";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { t } from "../../i18n";
-import { stringDisplayWidth } from "../../utils/text-width";
+import { displayWidth, formatTimeAgo } from "../../utils/format";
 import { colors } from "../../theme/colors";
-import { formatTimeAgo } from "../../utils/format";
 import { isPlainKey } from "../../utils/keyboard";
 import { toTimestampMillis } from "../../utils/timestamp";
 import { DataTableStackView } from "../data-table/stack-view";
@@ -113,7 +112,7 @@ function buildColumns(
   const timeWidth = 8;
   const sourceWidth = Math.min(
     Math.max(
-      stringDisplayWidth(sourceLabel),
+      displayWidth(sourceLabel),
       ...items.map((item) => item.eyebrow?.length ?? 0),
       6,
     ),

@@ -2,7 +2,7 @@ import { Box, Text } from "../../../ui";
 import { colors } from "../../../theme/colors";
 import { MENU_Z_INDEX, truncateMenuText } from "./menu";
 import { t } from "../../../i18n";
-import { stringDisplayWidth } from "../../../utils/text-width";
+import { displayWidth } from "../../../utils/format";
 
 export interface ActionMenuState {
   paneId: string;
@@ -46,7 +46,7 @@ export function ShellActionMenuOverlay({
         const acceleratorWidth = accelerator.length;
         const labelWidth = accelerator ? Math.max(1, innerWidth - acceleratorWidth - 1) : innerWidth;
         const label = truncateMenuText(t(item.label), labelWidth);
-        const spacer = accelerator ? " ".repeat(Math.max(1, innerWidth - stringDisplayWidth(label) - acceleratorWidth)) : "";
+        const spacer = accelerator ? " ".repeat(Math.max(1, innerWidth - displayWidth(label) - acceleratorWidth)) : "";
         const line = truncateMenuText(`${label}${spacer}${accelerator}`, innerWidth).padEnd(innerWidth, " ");
         return (
           <Box

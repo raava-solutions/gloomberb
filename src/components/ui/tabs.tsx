@@ -4,7 +4,7 @@ import { Box, ScrollBox, Text, useUiHost } from "../../ui";
 import { TextAttributes, type ScrollBoxRenderable } from "../../ui";
 import { colors, hoverBg } from "../../theme/colors";
 import { t } from "../../i18n";
-import { stringDisplayWidth } from "../../utils/text-width";
+import { displayWidth } from "../../utils/format";
 import { useRemoteUiNode } from "../../remote/semantic-tree";
 
 type TabPointerEvent = {
@@ -200,7 +200,7 @@ function tabWidth(
   closeMode: TabsProps["closeMode"],
 ): number {
   const showClose = !!tab.onClose && (closeMode === "always" || active);
-  return stringDisplayWidth(tab.label) + 2 + (showClose ? 2 : 0);
+  return displayWidth(tab.label) + 2 + (showClose ? 2 : 0);
 }
 
 function OpenTuiTabs({
@@ -296,7 +296,7 @@ function OpenTuiTabs({
         const active = tab.value === activeValue;
         const hovered = hoveredValue === tab.value && !tab.disabled;
         const focusedActive = focused && active;
-        const tabWidth = tabWidths[index] ?? stringDisplayWidth(tab.label) + 2;
+        const tabWidth = tabWidths[index] ?? displayWidth(tab.label) + 2;
         const showClose = !!tab.onClose && (closeMode === "always" || active);
         const attributes = (active ? TextAttributes.BOLD : 0)
           | (

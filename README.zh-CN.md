@@ -282,7 +282,7 @@ gloomberb
 - 词典在 [src/i18n/zh-cn.ts](src/i18n/zh-cn.ts)，以英文原文为键；查不到的词条自动回退英文，因此可以增量补充翻译，不影响任何功能。
 - 渲染出口统一经过 `t()`（[src/i18n/index.ts](src/i18n/index.ts)），面板标题、命令栏、右键菜单、设置对话框、页签、帮助与引导页均已接入。
 - 表格列头（BID/ASK/CHG% 等金融缩写）刻意保留英文，符合行情终端惯例并保证定宽列对齐。
-- 中日韩宽字符的截断与排版由 [src/utils/text-width.ts](src/utils/text-width.ts) 按终端单元格宽度处理。
+- 中日韩宽字符和字素簇的截断与排版由 [src/utils/format.ts](src/utils/format.ts) 按终端单元格宽度处理。
 
 ## 许可证
 

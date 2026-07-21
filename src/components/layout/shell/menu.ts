@@ -13,7 +13,7 @@ import {
   type ShortcutDisplayMode,
 } from "../../../utils/shortcut-labels";
 import { PANE_MANAGEMENT_ACCELERATORS } from "./shortcuts";
-import { truncateToDisplayWidth } from "../../../utils/text-width";
+import { truncateToDisplayWidth } from "../../../utils/format";
 
 const MENU_MIN_WIDTH = 18;
 const MENU_MAX_WIDTH = 44;

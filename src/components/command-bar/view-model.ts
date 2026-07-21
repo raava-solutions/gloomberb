@@ -1,6 +1,6 @@
 import { matchPrefix, type Command } from "./commands/registry";
 import { t, tf } from "../../i18n";
-import { truncateToDisplayWidth } from "../../utils/text-width";
+import { truncateToDisplayWidth } from "../../utils/format";
 
 export { rankTickerSearchItems } from "../../tickers/search";
 

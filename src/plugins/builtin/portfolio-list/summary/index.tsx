@@ -7,7 +7,7 @@ import type { BrokerConnectionStatus } from "../../../../types/broker";
 import type { TickerFinancials } from "../../../../types/financials";
 import type { Portfolio, TickerRecord } from "../../../../types/ticker";
 import type { BrokerAccount, BrokerCashBalance } from "../../../../types/trading";
-import { formatCompact, formatPercentRaw } from "../../../../utils/format";
+import { displayWidth, formatCompact, formatPercentRaw } from "../../../../utils/format";
 import { getBrokerInstance } from "../../../../utils/broker-instances";
 import { resolvePortfolioAccountMetrics, resolvePortfolioMarketValue } from "../account-metrics";
 import { calculatePortfolioSummaryTotals, type PortfolioSummaryTotals } from "./totals";
@@ -47,7 +47,7 @@ function createSummarySegment(
   return {
     id,
     parts,
-    length: parts.reduce((sum, part) => sum + part.text.length, 0) + Math.max(0, parts.length - 1),
+    length: parts.reduce((sum, part) => sum + displayWidth(t(part.text)), 0) + Math.max(0, parts.length - 1),
   };
 }
 
