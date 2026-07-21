@@ -91,15 +91,20 @@ export function resizeFloatingPaneFromCorner(
   let right = floating.x + floating.width;
   let bottom = floating.y + floating.height;
 
-  if (corner === "top-left" || corner === "bottom-left") {
+  const affectsLeft = corner === "top-left" || corner === "bottom-left" || corner === "left";
+  const affectsRight = corner === "top-right" || corner === "bottom-right" || corner === "right";
+  const affectsTop = corner === "top-left" || corner === "top-right" || corner === "top";
+  const affectsBottom = corner === "bottom-left" || corner === "bottom-right" || corner === "bottom";
+
+  if (affectsLeft) {
     left = Math.max(bounds.x, Math.min(left + deltaX, right - MIN_FLOAT_WIDTH));
-  } else {
+  } else if (affectsRight) {
     right = Math.min(bounds.x + bounds.width, Math.max(right + deltaX, left + MIN_FLOAT_WIDTH));
   }
 
-  if (corner === "top-left" || corner === "top-right") {
+  if (affectsTop) {
     top = Math.max(bounds.y, Math.min(top + deltaY, bottom - MIN_FLOAT_HEIGHT));
-  } else {
+  } else if (affectsBottom) {
     bottom = Math.min(bounds.y + bounds.height, Math.max(bottom + deltaY, top + MIN_FLOAT_HEIGHT));
   }
 

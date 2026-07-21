@@ -6,6 +6,7 @@ import {
   type DockLeafLayout,
   type DropTarget,
   type FloatingRect,
+  type FloatingResizeCorner,
   type LayoutBounds,
 } from "../../../../plugins/pane-manager";
 import type { DesktopDockPreviewState } from "../../../../types/desktop-window";
@@ -26,7 +27,10 @@ type SnapGuidePosition =
   | "top-left"
   | "top-right"
   | "bottom-left"
-  | "bottom-right";
+  | "bottom-right"
+  | "left-third"
+  | "right-third"
+  | "center-third";
 
 export interface SnapGuide {
   position: SnapGuidePosition;
@@ -59,6 +63,7 @@ export interface PaneDragRectState {
 }
 
 export interface FloatResizeDragState {
+  corner: FloatingResizeCorner;
   startX: number;
   startY: number;
   origRect: FloatingRect;
@@ -153,11 +158,34 @@ export function resolveFloatResizeRect(
   totalWidth: number,
   totalHeight: number,
 ): FloatingRect {
+  const dx = pointerX - drag.startX;
+  const dy = pointerY - drag.startY;
+  let left = drag.origRect.x;
+  let top = drag.origRect.y;
+  let right = drag.origRect.x + drag.origRect.width;
+  let bottom = drag.origRect.y + drag.origRect.height;
+  const affectsLeft = drag.corner === "top-left" || drag.corner === "bottom-left" || drag.corner === "left";
+  const affectsRight = drag.corner === "top-right" || drag.corner === "bottom-right" || drag.corner === "right";
+  const affectsTop = drag.corner === "top-left" || drag.corner === "top-right" || drag.corner === "top";
+  const affectsBottom = drag.corner === "bottom-left" || drag.corner === "bottom-right" || drag.corner === "bottom";
+
+  if (affectsLeft) {
+    left = Math.max(0, Math.min(left + dx, right - MIN_FLOAT_WIDTH));
+  } else if (affectsRight) {
+    right = Math.min(totalWidth, Math.max(right + dx, left + MIN_FLOAT_WIDTH));
+  }
+
+  if (affectsTop) {
+    top = Math.max(0, Math.min(top + dy, bottom - MIN_FLOAT_HEIGHT));
+  } else if (affectsBottom) {
+    bottom = Math.min(totalHeight, Math.max(bottom + dy, top + MIN_FLOAT_HEIGHT));
+  }
+
   return constrainFloatingRectToBounds({
-    x: drag.origRect.x,
-    y: drag.origRect.y,
-    width: Math.max(MIN_FLOAT_WIDTH, Math.min(totalWidth - drag.origRect.x, drag.origRect.width + (pointerX - drag.startX))),
-    height: Math.max(MIN_FLOAT_HEIGHT, Math.min(totalHeight - drag.origRect.y, drag.origRect.height + (pointerY - drag.startY))),
+    x: left,
+    y: top,
+    width: right - left,
+    height: bottom - top,
     zIndex: drag.origRect.zIndex,
   }, totalWidth, totalHeight);
 }
@@ -294,8 +322,10 @@ export function finalizePaneDragRelease(
 }
 
 export function makeSnapGuides(width: number, height: number): SnapGuide[] {
+  const TOP_BOTTOM_SNAP_FRACTION = 0.5;
   const halfWidth = Math.max(1, Math.floor(width / 2));
   const halfHeight = Math.max(1, Math.floor(height / 2));
+  const thirdWidth = Math.max(1, Math.floor(width / 3));
   const cornerWidth = Math.max(8, Math.min(16, Math.floor(width * 0.2)));
   const cornerHeight = Math.max(4, Math.min(8, Math.floor(height * 0.22)));
   const edgeWidth = Math.max(6, Math.min(10, Math.floor(width * 0.1)));
@@ -350,7 +380,7 @@ export function makeSnapGuides(width: number, height: number): SnapGuide[] {
     {
       position: "top",
       triggerRect: { x: cornerWidth, y: 0, width: Math.max(1, width - (cornerWidth * 2)), height: topBottomEdgeHeight },
-      previewRect: { x: 0, y: 0, width, height: halfHeight },
+      previewRect: { x: 0, y: 0, width: Math.max(1, Math.floor(width * TOP_BOTTOM_SNAP_FRACTION)), height: halfHeight },
     },
     {
       position: "bottom",
@@ -360,7 +390,42 @@ export function makeSnapGuides(width: number, height: number): SnapGuide[] {
         width: Math.max(1, width - (cornerWidth * 2)),
         height: topBottomEdgeHeight,
       },
-      previewRect: { x: 0, y: Math.max(0, height - halfHeight), width, height: halfHeight },
+      previewRect: {
+        x: 0,
+        y: Math.max(0, height - halfHeight),
+        width: Math.max(1, Math.floor(width * TOP_BOTTOM_SNAP_FRACTION)),
+        height: halfHeight,
+      },
+    },
+    {
+      position: "left-third",
+      triggerRect: {
+        x: Math.floor(width / 3),
+        y: topBottomEdgeHeight,
+        width: edgeWidth,
+        height: Math.max(1, height - (topBottomEdgeHeight * 2)),
+      },
+      previewRect: { x: 0, y: 0, width: thirdWidth, height },
+    },
+    {
+      position: "center-third",
+      triggerRect: {
+        x: Math.floor(width / 2),
+        y: topBottomEdgeHeight,
+        width: edgeWidth,
+        height: Math.max(1, height - (topBottomEdgeHeight * 2)),
+      },
+      previewRect: { x: thirdWidth, y: 0, width: thirdWidth, height },
+    },
+    {
+      position: "right-third",
+      triggerRect: {
+        x: Math.floor((width * 2) / 3),
+        y: topBottomEdgeHeight,
+        width: edgeWidth,
+        height: Math.max(1, height - (topBottomEdgeHeight * 2)),
+      },
+      previewRect: { x: Math.max(0, width - thirdWidth), y: 0, width: thirdWidth, height },
     },
   ];
 }

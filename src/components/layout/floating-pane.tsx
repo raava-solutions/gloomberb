@@ -1,8 +1,9 @@
 import { Box, Text, useUiCapabilities } from "../../ui";
 import type { ReactNode } from "react";
 import { colors, floatingPaneBg } from "../../theme/colors";
+import type { FloatingResizeCorner } from "../../plugins/pane-manager";
 import { PaneBodyFrame, getPaneWindowAttributes } from "./pane/frame";
-import { PaneHeader } from "./pane/header";
+import { PANE_HEADER_ACTION, PANE_HEADER_CLOSE, PaneHeader } from "./pane/header";
 import { hasPaneFooterContent, PaneFooterBar, type CombinedPaneFooter } from "./pane/footer";
 import { resolvePaneBodyFrame, shouldReservePaneFooter } from "./pane/sizing";
 
@@ -25,7 +26,7 @@ interface FloatingPaneWrapperProps {
   onHeaderContextMenu?: (event: any) => void;
   onActionMouseDown?: (event: any) => void;
   onCloseMouseDown?: (event: any) => void;
-  onResizeMouseDown?: (event: any) => void;
+  onResizeMouseDown?: (corner: FloatingResizeCorner, event: any) => void;
   onResizeMouseDrag?: (event: any) => void;
   onResizeMouseDragEnd?: (event: any) => void;
   footer?: CombinedPaneFooter | null;
@@ -82,6 +83,7 @@ export function FloatingPaneWrapper({
   const reserveFooter = shouldReservePaneFooter(nativePaneChrome, showFooter);
   const renderFooter = reserveFooter || showFooter;
   const bodyFrame = resolvePaneBodyFrame({ height, nativePaneChrome, footerVisible: renderFooter, reserveFooter });
+  const nativeHeaderControlsWidth = PANE_HEADER_ACTION.length + PANE_HEADER_CLOSE.length;
 
   return (
     <Box
@@ -138,17 +140,104 @@ export function FloatingPaneWrapper({
       {!nativePaneChrome && !focused && <TerminalFloatingPaneBorder width={width} height={height} />}
 
       {nativePaneChrome ? (
-        <Box
-          position="absolute"
-          bottom={0}
-          right={0}
-          width={2}
-          height={1}
-          data-gloom-role="resize-handle"
-          onMouseDown={onResizeMouseDown}
-          onMouseDrag={onResizeMouseDrag}
-          onMouseDragEnd={onResizeMouseDragEnd}
-        />
+        <>
+          <Box
+            position="absolute"
+            top={0}
+            left={0}
+            width={2}
+            height={1}
+            data-gloom-role="resize-handle"
+            data-corner="top-left"
+            onMouseDown={(event: any) => onResizeMouseDown?.("top-left", event)}
+            onMouseDrag={onResizeMouseDrag}
+            onMouseDragEnd={onResizeMouseDragEnd}
+          />
+          <Box
+            position="absolute"
+            top={0}
+            left={2}
+            width={Math.max(0, width - 4 - nativeHeaderControlsWidth)}
+            height={1}
+            data-gloom-role="resize-handle"
+            data-corner="top"
+            onMouseDown={(event: any) => onResizeMouseDown?.("top", event)}
+            onMouseDrag={onResizeMouseDrag}
+            onMouseDragEnd={onResizeMouseDragEnd}
+          />
+          <Box
+            position="absolute"
+            top={0}
+            right={0}
+            width={2}
+            height={1}
+            data-gloom-role="resize-handle"
+            data-corner="top-right"
+            onMouseDown={(event: any) => onResizeMouseDown?.("top-right", event)}
+            onMouseDrag={onResizeMouseDrag}
+            onMouseDragEnd={onResizeMouseDragEnd}
+          />
+          <Box
+            position="absolute"
+            top={1}
+            left={0}
+            width={1}
+            height={Math.max(0, height - 2)}
+            data-gloom-role="resize-handle"
+            data-corner="left"
+            onMouseDown={(event: any) => onResizeMouseDown?.("left", event)}
+            onMouseDrag={onResizeMouseDrag}
+            onMouseDragEnd={onResizeMouseDragEnd}
+          />
+          <Box
+            position="absolute"
+            top={1}
+            right={0}
+            width={1}
+            height={Math.max(0, height - 2)}
+            data-gloom-role="resize-handle"
+            data-corner="right"
+            onMouseDown={(event: any) => onResizeMouseDown?.("right", event)}
+            onMouseDrag={onResizeMouseDrag}
+            onMouseDragEnd={onResizeMouseDragEnd}
+          />
+          <Box
+            position="absolute"
+            bottom={0}
+            left={0}
+            width={2}
+            height={1}
+            data-gloom-role="resize-handle"
+            data-corner="bottom-left"
+            onMouseDown={(event: any) => onResizeMouseDown?.("bottom-left", event)}
+            onMouseDrag={onResizeMouseDrag}
+            onMouseDragEnd={onResizeMouseDragEnd}
+          />
+          <Box
+            position="absolute"
+            bottom={0}
+            left={2}
+            width={Math.max(0, width - 4)}
+            height={1}
+            data-gloom-role="resize-handle"
+            data-corner="bottom"
+            onMouseDown={(event: any) => onResizeMouseDown?.("bottom", event)}
+            onMouseDrag={onResizeMouseDrag}
+            onMouseDragEnd={onResizeMouseDragEnd}
+          />
+          <Box
+            position="absolute"
+            bottom={0}
+            right={0}
+            width={2}
+            height={1}
+            data-gloom-role="resize-handle"
+            data-corner="bottom-right"
+            onMouseDown={(event: any) => onResizeMouseDown?.("bottom-right", event)}
+            onMouseDrag={onResizeMouseDrag}
+            onMouseDragEnd={onResizeMouseDragEnd}
+          />
+        </>
       ) : (
         <Box position="absolute" bottom={0} right={0} width={2} height={1}>
           <Text fg={focused ? colors.borderFocused : colors.border} selectable={false}>{"─◢"}</Text>

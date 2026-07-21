@@ -12,6 +12,7 @@ import {
   type DockGeometryOptions,
   type DockLeafLayout,
   type FloatingRect,
+  type FloatingResizeCorner,
   type LayoutBounds,
   type ResolvedPane,
 } from "../../../../plugins/pane-manager";
@@ -47,6 +48,7 @@ type DragMode =
   | {
     type: "float-resize";
     paneId: string;
+    corner: FloatingResizeCorner;
     startX: number;
     startY: number;
     origRect: FloatingRect;
