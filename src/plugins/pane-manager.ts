@@ -56,7 +56,14 @@ export {
   removeUnavailablePaneTypes,
   type PaneTypeAvailability,
 } from "./pane-manager/layout-state";
-export { compactDockedPaneAtRect, gridlockAllPanes } from "./pane-manager/gridlock";
+export {
+  applyLayoutPreset,
+  compactDockedPaneAtRect,
+  gridlockAllPanes,
+  LAYOUT_PRESET_IDS,
+  snapPaneToGridRect,
+  type LayoutPresetId,
+} from "./pane-manager/gridlock";
 export { inferCompactedDockTree } from "./pane-manager/gridlock-inference";
 export type {
   DropTarget,

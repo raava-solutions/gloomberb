@@ -20,6 +20,7 @@ import {
   resolveAppHeaderHeightCells,
   Shell,
 } from "./index";
+import { buildNativeTransientOccluders } from "./native/window-state";
 import { resolvePaneFocusSourceLayout } from "./fullscreen";
 import { TransientLayoutProvider, useTransientLayout, type TransientLayoutState } from "../transient-layout";
 import { getDockLeafLayouts } from "../../../plugins/pane-manager";
@@ -216,6 +217,33 @@ describe("Shell", () => {
     expect(state.occluders.some((occluder) => occluder.id === "overlay:global")).toBe(false);
   });
 
+  test("occludes every changed pane in a native multi-pane drag preview", () => {
+    const rects = [
+      { instanceId: "left:main", rect: { x: 0, y: 0, width: 40, height: 20 } },
+      { instanceId: "right:main", rect: { x: 40, y: 0, width: 40, height: 20 } },
+    ];
+    const occluders = buildNativeTransientOccluders({
+      activeHoverOverlay: null,
+      activePaneDrag: null,
+      commandBarNativeOccluder: null,
+      dragFloatingRect: null,
+      dockPreview: {
+        kind: "compact",
+        layout: { dockRoot: null, instances: [], floating: [], detached: [] },
+        rect: rects[0]!.rect,
+        rects,
+      },
+      menu: null,
+      nativeWindowModePanelRect: null,
+      windowModeDockMovePreview: null,
+    });
+
+    expect(occluders).toEqual([
+      { id: "dock-preview:compact:left:main", rect: rects[0]!.rect, zIndex: 96 },
+      { id: "dock-preview:compact:right:main", rect: rects[1]!.rect, zIndex: 96 },
+    ]);
+  });
+
   test("opens the pane menu when clicking the docked header action area", async () => {
     const config = createDefaultConfig("/tmp/gloomberb-shell-test");
     const mainPane = config.layout.instances.find((instance) => instance.instanceId === "portfolio-list:main");
@@ -256,6 +284,36 @@ describe("Shell", () => {
     expect(frame).toContain("Ctrl+,");
     expect(frame).not.toContain("Layout Actions");
     expect(frame).not.toContain("CmdOrCtrl");
+  });
+
+  test("toggles a pane from the visible tiled header control", async () => {
+    const config = createDefaultConfig("/tmp/gloomberb-shell-header-toggle-test");
+    const mainPane = requireLayoutInstance(config, "portfolio-list:main");
+    const layout: LayoutConfig = {
+      dockRoot: { kind: "pane", instanceId: mainPane.instanceId },
+      instances: [{ ...mainPane }],
+      floating: [],
+      detached: [],
+    };
+    const actions: ShellTestAction[] = [];
+    await renderShellForWindowModeTest(
+      createShellStateWithLayout(config, layout, mainPane.instanceId),
+      { width: 50, height: 12, dispatch: (action) => actions.push(action) },
+    );
+
+    const frame = testSetup!.captureCharFrame();
+    const toggleX = frame.split("\n")[0]?.indexOf("T▦") ?? -1;
+    expect(toggleX).toBeGreaterThanOrEqual(0);
+
+    await act(async () => {
+      await testSetup!.mockMouse.click(toggleX, 1);
+      await testSetup!.renderOnce();
+    });
+
+    const update = actions.find((action) => action.type === "UPDATE_LAYOUT");
+    expect(update?.layout.floating).toEqual([
+      expect.objectContaining({ instanceId: mainPane.instanceId }),
+    ]);
   });
 
   test("shows a Pop Out action in the pane menu when a desktop bridge is available", async () => {
@@ -479,6 +537,8 @@ describe("Shell", () => {
 
     const frame = testSetup!.captureCharFrame();
     const rows = frame.split("\n");
+    expect(frame).toContain("┊");
+    expect(frame).toContain("┄");
     expect(rows[2]?.indexOf("┌─:: Main Portfolio") ?? -1).toBeLessThan(0);
     expect(rows[5]?.indexOf("┌─:: Main Portfolio")).toBeGreaterThanOrEqual(14);
 
@@ -486,6 +546,39 @@ describe("Shell", () => {
       await testSetup!.mockMouse.release(16, 6);
       await testSetup!.renderOnce();
     });
+  });
+
+  test("keeps a freely moved floating pane floating when no dock target is present", async () => {
+    const config = createDefaultConfig("/tmp/gloomberb-shell-free-floating-drag-test");
+    const mainPane = requireLayoutInstance(config, "portfolio-list:main");
+    const layout: LayoutConfig = {
+      dockRoot: null,
+      instances: [{ ...mainPane }],
+      floating: [{ instanceId: mainPane.instanceId, x: 8, y: 2, width: 32, height: 10, zIndex: 75 }],
+      detached: [],
+    };
+    const { actions } = await renderShellForWindowModeTest(
+      createShellStateWithLayout(config, layout, mainPane.instanceId),
+      { width: 80, height: 18 },
+    );
+
+    await act(async () => {
+      await testSetup!.mockMouse.drag(10, 3, 28, 8);
+      await testSetup!.renderOnce();
+      await testSetup!.renderOnce();
+    });
+
+    const nextLayout = actions.filter((action) => action.type === "UPDATE_LAYOUT").at(-1)?.layout as LayoutConfig | undefined;
+    expect(nextLayout?.dockRoot).toBeNull();
+    expect(nextLayout?.floating).toEqual([
+      expect.objectContaining({
+        instanceId: mainPane.instanceId,
+        x: 26,
+        y: 6,
+        width: 32,
+        height: 10,
+      }),
+    ]);
   });
 
   test("previews and commits one compacted layout while dragging a tiled pane over occupied space", async () => {

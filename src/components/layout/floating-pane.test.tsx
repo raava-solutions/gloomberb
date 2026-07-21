@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { UiHostProvider } from "../../ui";
 import type { RendererHost, UiHost } from "../../ui/host";
 import { FloatingPaneWrapper } from "./floating-pane";
+import { handleDesktopPaneButtonKeyDown } from "./pane/header";
 
 const rendererHost: RendererHost = {
   requestExit() {},
@@ -37,7 +38,7 @@ describe("FloatingPaneWrapper", () => {
       AsciiText: Inline,
     } as unknown as UiHost;
 
-    renderToStaticMarkup(
+    const markup = renderToStaticMarkup(
       <UiHostProvider ui={ui} renderer={rendererHost}>
         <FloatingPaneWrapper
           paneId="floating:main"
@@ -69,5 +70,25 @@ describe("FloatingPaneWrapper", () => {
         expect.objectContaining({ top: 0, left: 0, width: 2, height: 1 }),
         expect.objectContaining({ top: 0, right: 0, width: 2, height: 1 }),
       ]);
+    expect(markup).toContain('<button type="button"');
+    expect(markup).toContain('data-gloom-role="pane-float-toggle"');
+    expect(markup).toContain('aria-label="Pane is floating — tile pane"');
+  });
+
+  test("activates native pane-header controls with Enter or Space without bubbling into header drag", () => {
+    for (const key of ["Enter", " "]) {
+      let presses = 0;
+      let prevented = false;
+      let stopped = false;
+      handleDesktopPaneButtonKeyDown({
+        key,
+        preventDefault() { prevented = true; },
+        stopPropagation() { stopped = true; },
+      }, () => { presses += 1; });
+
+      expect(presses).toBe(1);
+      expect(prevented).toBe(true);
+      expect(stopped).toBe(true);
+    }
   });
 });

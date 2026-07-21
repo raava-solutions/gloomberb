@@ -23,6 +23,7 @@ function createMouseDown(): ShellMouseEvent & { defaultPrevented: boolean; propa
 function renderPointerRuntime(): {
   dragRef: ShellDragRuntimeState["dragRef"];
   runtime: NativePointerRuntime;
+  toggledPaneIds: string[];
 } {
   const dragRef = { current: null } as ShellDragRuntimeState["dragRef"];
   const dragRuntime = {
@@ -32,6 +33,7 @@ function renderPointerRuntime(): {
     updateDragFloatingRect() {},
   } as unknown as ShellDragRuntimeState;
   let runtime: NativePointerRuntime | undefined;
+  const toggledPaneIds: string[] = [];
 
   function Harness() {
     runtime = useShellNativePointerRuntime({
@@ -47,6 +49,10 @@ function renderPointerRuntime(): {
       setHoveredMenuItemId() {},
       setMenuState() {},
       transientFocusActive: false,
+      togglePaneFloating(paneId) {
+        toggledPaneIds.push(paneId);
+        return true;
+      },
       windowMode: null,
     });
     return null;
@@ -54,7 +60,7 @@ function renderPointerRuntime(): {
 
   renderToStaticMarkup(<Harness />);
   if (!runtime) throw new Error("native pointer runtime was not captured");
-  return { dragRef, runtime };
+  return { dragRef, runtime, toggledPaneIds };
 }
 
 describe("useShellNativePointerRuntime", () => {
@@ -94,5 +100,17 @@ describe("useShellNativePointerRuntime", () => {
       expect(resizeDown.defaultPrevented).toBe(true);
       expect(resizeDown.propagationStopped).toBe(true);
     }
+  });
+
+  test("keeps the small float toggle isolated from the header move grab", () => {
+    const { dragRef, runtime, toggledPaneIds } = renderPointerRuntime();
+    const toggleDown = createMouseDown();
+
+    runtime.handlePaneFloatToggle("docked:main", toggleDown);
+
+    expect(toggledPaneIds).toEqual(["docked:main"]);
+    expect(toggleDown.defaultPrevented).toBe(true);
+    expect(toggleDown.propagationStopped).toBe(true);
+    expect(dragRef.current).toBeNull();
   });
 });
