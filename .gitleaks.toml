@@ -1,0 +1,60 @@
+# gitleaks configuration — raava-solutions/gloomberb
+# Phase 0.4: secret-scan tooling. Extends the built-in gitleaks default
+# ruleset and allowlists KNOWN false-positive shapes verified in this repo.
+#
+# SCOPING DISCIPLINE: every allowlist below uses condition = "AND" with a
+# `paths` filter + a line-scoped `regexes` filter (regexTarget = "line").
+# This suppresses ONLY the specific benign lines — a real secret in any of
+# these same files would still be reported.
+
+title = "gloomberb-gitleaks"
+
+[extend]
+useDefault = true
+
+# ---------------------------------------------------------------------------
+# (a) src/plugins/builtin/ai/runner.ts :: sanitizeRuntimeError
+# Redaction REGEX LITERALS the app uses to STRIP credentials out of error
+# text (bearer / api[_-]?key / oauth[_-]?token / claude_code_oauth_token /
+# authorization). The literals are the scrubber, not secrets themselves.
+[[allowlists]]
+description = "runner.ts sanitizeRuntimeError redaction regex literals (not secrets)"
+condition = "AND"
+regexTarget = "line"
+paths = ['''src/plugins/builtin/ai/runner\.ts''']
+regexes = ['''\.replace\(/.*(bearer|token|api[_ -]?key|authorization).*\[redacted\]''']
+
+# ---------------------------------------------------------------------------
+# (b) src/plugins/builtin/ai/providers.ts
+# CLI command-name literals for auth-status probes: ["auth","status"] and
+# ["login","status"]. These are argv arrays passed to `claude`/`codex`, not
+# credentials.
+[[allowlists]]
+description = "providers.ts auth command-name literals (not secrets)"
+condition = "AND"
+regexTarget = "line"
+paths = ['''src/plugins/builtin/ai/providers\.ts''']
+regexes = ['''authCheckArgs:\s*\["(auth|login)",\s*"status"\]''']
+
+# ---------------------------------------------------------------------------
+# (c) src/plugins/builtin/fear-greed/fear-greed-data.ts  (historical; file
+# removed from HEAD but present in git history). `primaryKey`/`secondaryKey`
+# values are chart data-SERIES identifier slugs (e.g. market_momentum_sp125),
+# not API keys. generic-api-key false positive.
+[[allowlists]]
+description = "fear-greed chart data-series key slugs (not secrets)"
+condition = "AND"
+regexTarget = "line"
+paths = ['''src/plugins/builtin/fear-greed/fear-greed-data\.ts''']
+regexes = ['''(primary|secondary)Key:\s*"[a-z0-9_]+"''']
+
+# ---------------------------------------------------------------------------
+# (d) src/components/onboarding/onboarding-wizard.tsx  (historical, ~line 1212).
+# keyboardShortcuts entries of the form { key: "Cmd/Ctrl+Shift+D", desc: ... }.
+# `key` is a keystroke label, not a credential. generic-api-key false positive.
+[[allowlists]]
+description = "onboarding keyboard-shortcut key labels (not secrets)"
+condition = "AND"
+regexTarget = "line"
+paths = ['''src/components/onboarding/onboarding-wizard\.tsx''']
+regexes = ['''key:\s*"[^"]+",\s*desc:''']
