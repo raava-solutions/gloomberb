@@ -33,6 +33,8 @@ import { useChatComposerRuntime } from "./composer-runtime";
 import { useChatMessageSelection } from "./selection-runtime";
 import type { ChatMessage } from "../../../../api-client";
 import { NewDmDialog } from "./new-dm-dialog";
+import { usePluginAppActions } from "../../../runtime";
+import { requestAccountManagementTab } from "../../account-management/navigation";
 import {
   CHAT_MESSAGE_EDIT_WINDOW_MS,
   findLatestEditableChatMessage,
@@ -69,6 +71,7 @@ export function ChatContent({
   onTargetMessageHandled,
 }: ChatContentProps) {
   const dispatch = useAppDispatch();
+  const { showPane } = usePluginAppActions();
   const commandBarOpen = useAppSelector((state) => state.commandBarOpen);
   const channelId = normalizeChannelId(rawChannelId);
   const channelIdRef = useRef(channelId);
@@ -236,6 +239,16 @@ export function ChatContent({
     scheduleProfilePopoverClose,
     showProfilePopover,
   } = useChatProfilePopover();
+
+  const showUserProfilePopover = useCallback((targetUser: Parameters<typeof showProfilePopover>[0]) => {
+    showProfilePopover(targetUser, { ownProfile: targetUser.id === user?.id });
+  }, [showProfilePopover, user?.id]);
+
+  const openProfileSetup = useCallback(() => {
+    closeProfilePopover();
+    requestAccountManagementTab("profile");
+    showPane("account-management");
+  }, [closeProfilePopover, showPane]);
 
   const blurInput = useCallback(() => {
     setInputFocused(false);
@@ -571,10 +584,11 @@ export function ChatContent({
         scrollRef={scrollRef}
         selectedIdx={selectedIdx}
         setHoveredIdx={setHoveredIdx}
-        showProfilePopover={showProfilePopover}
+        showProfilePopover={showUserProfilePopover}
         stickyTranscript={stickyTranscript}
         user={user}
         userByUsername={userByUsername}
+        onSetUpProfile={openProfileSetup}
       />
 
       {newDmOpen ? (
