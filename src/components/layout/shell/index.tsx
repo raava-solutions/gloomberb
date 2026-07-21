@@ -193,6 +193,7 @@ export function Shell({
     focusedPaneId,
     hasActiveDrag,
     nativePaneChrome,
+    overlayOpen,
     persistLayout,
     pluginRegistry,
     visibleLayout,

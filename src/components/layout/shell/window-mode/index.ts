@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useShortcut } from "../../../../react/input";
 import {
   dockFloatingPaneAtCurrentRect,
@@ -38,6 +38,7 @@ interface UseShellWindowModeOptions {
   focusedPaneId: string | null;
   hasActiveDrag: () => boolean;
   nativePaneChrome: boolean;
+  overlayOpen: boolean;
   persistLayout: (nextLayout: LayoutConfig, options?: { pushHistory?: boolean }) => void;
   pluginRegistry: PluginRegistry;
   visibleLayout: LayoutConfig;
@@ -54,6 +55,7 @@ export function useShellWindowMode({
   focusedPaneId,
   hasActiveDrag,
   nativePaneChrome,
+  overlayOpen,
   persistLayout,
   pluginRegistry,
   visibleLayout,
@@ -128,6 +130,10 @@ export function useShellWindowMode({
   const cancelWindowMode = useCallback(() => {
     setWindowMode(null);
   }, []);
+
+  useLayoutEffect(() => {
+    if (overlayOpen && windowMode) cancelWindowMode();
+  }, [cancelWindowMode, overlayOpen, windowMode]);
 
   const commitWindowMode = useCallback(() => {
     if (!windowMode) return;
