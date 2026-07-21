@@ -81,12 +81,17 @@ interface ShortcutEntry {
   handlerRef: { current: (event: KeyEventLike) => void };
   enabledRef: { current: boolean };
   allowEditableRef: { current: boolean };
-  interceptNativeRef: { current: boolean };
+  interceptNativeRef: { current: NonNullable<ShortcutOptions["interceptNative"]> | false };
   phase: NonNullable<ShortcutOptions["phase"]>;
   order: number;
 }
 
 let nextShortcutOrder = 1;
+
+function shouldInterceptNative(entry: ShortcutEntry, event: KeyEventLike): boolean {
+  const interceptor = entry.interceptNativeRef.current;
+  return typeof interceptor === "function" ? interceptor(event) : interceptor;
+}
 
 function subscribeViewport(listener: () => void): () => void {
   window.addEventListener("resize", listener);
@@ -113,14 +118,18 @@ function dispatchShortcutEntries(
     if (phase === "after" && (shortcutEvent.defaultPrevented || shortcutEvent.propagationStopped)) break;
     const phaseEntries = entries
       .filter((entry) => entry.phase === phase)
+      .map((entry) => ({
+        entry,
+        interceptsNative: shouldInterceptNative(entry, shortcutEvent),
+      }))
       .sort((left, right) => (
-        phase === "before" && left.interceptNativeRef.current !== right.interceptNativeRef.current
-          ? Number(right.interceptNativeRef.current) - Number(left.interceptNativeRef.current)
-          : left.order - right.order
+        phase === "before" && left.interceptsNative !== right.interceptsNative
+          ? Number(right.interceptsNative) - Number(left.interceptsNative)
+          : left.entry.order - right.entry.order
       ));
-    for (const entry of phaseEntries) {
+    for (const { entry, interceptsNative } of phaseEntries) {
       if (!entry.enabledRef.current) continue;
-      if (nativeInterceptionOnly && (phase !== "before" || !entry.interceptNativeRef.current)) continue;
+      if (nativeInterceptionOnly && (phase !== "before" || !interceptsNative)) continue;
       if (!shouldDeliverShortcut(shortcutEvent, entry.allowEditableRef.current)) continue;
       entry.handlerRef.current(shortcutEvent);
       if (shortcutEvent.propagationStopped) break;
@@ -177,11 +186,11 @@ export function WebInputHostProvider({ children }: { children: ReactNode }) {
       const handlerRef = useRef(handler);
       const enabledRef = useRef(options?.enabled !== false);
       const allowEditableRef = useRef(options?.allowEditable === true);
-      const interceptNativeRef = useRef(options?.interceptNative === true);
+      const interceptNativeRef = useRef<NonNullable<ShortcutOptions["interceptNative"]> | false>(options?.interceptNative ?? false);
       handlerRef.current = handler;
       enabledRef.current = options?.enabled !== false;
       allowEditableRef.current = options?.allowEditable === true;
-      interceptNativeRef.current = options?.interceptNative === true;
+      interceptNativeRef.current = options?.interceptNative ?? false;
 
       useLayoutEffect(() => {
         const entry: ShortcutEntry = {

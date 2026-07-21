@@ -3,7 +3,7 @@ import type { KeyEventLike } from "../../../react/input";
 import { dispatchWebAppKeyDown } from "./input-host";
 
 function keyboardEvent(overrides: Record<string, unknown> = {}) {
-  return {
+  const event = {
     key: "x",
     ctrlKey: false,
     metaKey: false,
@@ -13,14 +13,13 @@ function keyboardEvent(overrides: Record<string, unknown> = {}) {
     defaultPrevented: false,
     cancelBubble: false,
     isComposing: false,
-    preventDefault() {
-      this.defaultPrevented = true;
-    },
-    stopPropagation() {
-      this.cancelBubble = true;
-    },
+    preventDefault() {},
+    stopPropagation() {},
     ...overrides,
-  } as unknown as KeyboardEvent;
+  } as unknown as KeyboardEvent & { defaultPrevented: boolean; cancelBubble: boolean };
+  event.preventDefault = () => { event.defaultPrevented = true; };
+  event.stopPropagation = () => { event.cancelBubble = true; };
+  return event;
 }
 
 function shortcut(
@@ -28,7 +27,7 @@ function shortcut(
   options: {
     allowEditable?: boolean;
     enabled?: boolean;
-    interceptNative?: boolean;
+    interceptNative?: boolean | ((event: KeyEventLike) => boolean);
     order?: number;
     phase?: "before" | "normal" | "after";
   } = {},
@@ -37,7 +36,7 @@ function shortcut(
     handlerRef: { current: handler },
     enabledRef: { current: options.enabled !== false },
     allowEditableRef: { current: options.allowEditable === true },
-    interceptNativeRef: { current: options.interceptNative === true },
+    interceptNativeRef: { current: options.interceptNative ?? false },
     phase: options.phase ?? "normal",
     order: options.order ?? 1,
   };
@@ -83,6 +82,72 @@ describe("dispatchWebAppKeyDown", () => {
 
     expect({ modalTabs, paneTabs, focusMoves }).toEqual({ modalTabs: 1, paneTabs: 0, focusMoves: 0 });
     expect(event.defaultPrevented).toBe(true);
+  });
+
+  test("limits target-aware native interception to matching editable controls", () => {
+    let commandBarTabs = 0;
+    let nativeFocusMoves = 0;
+    const commandBarShortcut = shortcut((key) => {
+      if (key.name !== "tab") return;
+      commandBarTabs += 1;
+      key.preventDefault();
+      key.stopPropagation();
+    }, {
+      phase: "before",
+      allowEditable: true,
+      interceptNative: (key) => key.targetEditable === true,
+    });
+
+    const editableTargets = [
+      { tagName: "INPUT" },
+      { tagName: "TEXTAREA" },
+      { tagName: "SELECT" },
+      { tagName: "DIV", isContentEditable: true },
+      { tagName: "SPAN", closest: (selector: string) => selector.includes("contenteditable") ? {} : null },
+    ];
+    const nativeTargets = [
+      { tagName: "BUTTON" },
+      { tagName: "A", getAttribute: (name: string) => name === "href" ? "/back" : null },
+      { tagName: "SUMMARY" },
+    ];
+
+    for (const target of [...editableTargets, ...nativeTargets]) {
+      const event = keyboardEvent({ key: "Tab", target });
+      dispatchWebAppKeyDown(event, [commandBarShortcut]);
+      runNativeDefault(event, () => { nativeFocusMoves += 1; });
+    }
+
+    expect({ commandBarTabs, nativeFocusMoves }).toEqual({ commandBarTabs: 5, nativeFocusMoves: 3 });
+  });
+
+  test("leaves button, link, and summary activation outside target-aware interception", () => {
+    const cases = [
+      { target: { tagName: "BUTTON" }, keys: ["Enter", " "] },
+      { target: { tagName: "A", getAttribute: (name: string) => name === "href" ? "/back" : null }, keys: ["Enter"] },
+      { target: { tagName: "SUMMARY" }, keys: ["Enter", " "] },
+    ];
+    let commandBarActivations = 0;
+    let nativeActivations = 0;
+    const commandBarShortcut = shortcut(() => {
+      commandBarActivations += 1;
+    }, {
+      phase: "before",
+      allowEditable: true,
+      interceptNative: (key) => key.targetEditable === true,
+    });
+
+    for (const { target, keys } of cases) {
+      for (const key of keys) {
+        const event = keyboardEvent({ key, target });
+        dispatchWebAppKeyDown(event, [commandBarShortcut]);
+        runNativeDefault(event, () => { nativeActivations += 1; });
+      }
+    }
+
+    expect({ commandBarActivations, nativeActivations }).toEqual({
+      commandBarActivations: 0,
+      nativeActivations: 5,
+    });
   });
 
   test("keeps native control defaults ahead of focused-pane shortcuts", () => {

@@ -1,15 +1,20 @@
 /// <reference lib="dom" />
 import { afterEach, describe, expect, test } from "bun:test";
+import { flushSync } from "@opentui/react";
 import { testRender } from "@opentui/react/test-utils";
-import { act, useRef, useState } from "react";
+import { act, useReducer, useRef, useState } from "react";
 import { useCommandBarKeyboardShortcuts } from "../../../components/command-bar/keyboard-shortcuts";
 import type { ListScreenState } from "../../../components/command-bar/list/model";
 import type { CommandBarRoute } from "../../../components/command-bar/workflow/types";
+import { Shell } from "../../../components/layout/shell";
+import { TransientLayoutProvider } from "../../../components/layout/transient-layout";
 import { useShellWindowMode } from "../../../components/layout/shell/window-mode";
 import type { WindowEditState } from "../../../components/layout/window-edit/mode";
 import type { PluginRegistry } from "../../../plugins/registry";
 import { useShortcut } from "../../../react/input";
-import { createPaneInstance, type LayoutConfig } from "../../../types/config";
+import { AppContext, appReducer, createInitialState, type AppAction } from "../../../state/app/context";
+import { TestDialogProvider, testRender as testRenderWithAppProviders } from "../../opentui/test-utils";
+import { createDefaultConfig, createPaneInstance, type LayoutConfig } from "../../../types/config";
 import { WebInputHostProvider } from "./input-host";
 
 interface TestKeyboardEvent extends KeyboardEvent {
@@ -21,6 +26,7 @@ class FocusableControl extends EventTarget {
   constructor(
     readonly tagName: "INPUT" | "BUTTON",
     private readonly onFocus: (control: FocusableControl) => void,
+    readonly onNativeActivate: () => void = () => {},
   ) {
     super();
   }
@@ -46,10 +52,10 @@ class TestWindow {
     this.listeners.get(type)?.delete(listener);
   }
 
-  createControl(tagName: "INPUT" | "BUTTON"): FocusableControl {
+  createControl(tagName: "INPUT" | "BUTTON", onNativeActivate: () => void = () => {}): FocusableControl {
     return new FocusableControl(tagName, (control) => {
       this.activeElement = control;
-    });
+    }, onNativeActivate);
   }
 
   emitKeyDown(key: string, options: { shift?: boolean } = {}): TestKeyboardEvent {
@@ -101,12 +107,14 @@ const rootListState: ListScreenState = {
 function CommandBarShortcutHarness({
   currentRoute,
   onActivate = () => {},
+  onConfirm = () => {},
   onDismiss = () => {},
   onMoveWorkflowFocus = () => {},
   onRootTab = () => false,
 }: {
   currentRoute: CommandBarRoute | null;
   onActivate?: () => void;
+  onConfirm?: () => void;
   onDismiss?: () => void;
   onMoveWorkflowFocus?: (delta: number) => void;
   onRootTab?: () => boolean;
@@ -118,7 +126,7 @@ function CommandBarShortcutHarness({
     acceptSelectedShortcutTab: () => false,
     activateListSelection: onActivate,
     commitMultiSelectPicker() {},
-    confirmCurrentRoute() {},
+    confirmCurrentRoute: onConfirm,
     currentRoute,
     dismissCommandBar: onDismiss,
     getWorkflowFieldStringValue: (_field, value) => typeof value === "string" ? value : "",
@@ -331,6 +339,76 @@ describe("WebInputHostProvider command-bar registration", () => {
     expect([tab, shiftTab].every((event) => event.defaultPrevented && event.propagationStopped)).toBe(true);
   });
 
+  test("leaves confirm and list Back buttons to native focus and activation", async () => {
+    const routes: CommandBarRoute[] = [
+      {
+        kind: "confirm",
+        confirmId: "delete-layout",
+        title: "Delete layout?",
+        body: ["This cannot be undone."],
+        confirmLabel: "Delete",
+        cancelLabel: "Back",
+        tone: "danger",
+        onConfirm() {},
+        pending: false,
+        error: null,
+      },
+      {
+        kind: "picker",
+        pickerId: "layout-swap",
+        title: "Switch layout",
+        query: "",
+        selectedIdx: 0,
+        hoveredIdx: null,
+        options: [{ id: "default", label: "Default" }],
+      },
+    ];
+
+    for (const currentRoute of routes) {
+      const testWindow = new TestWindow();
+      globalThis.window = testWindow as unknown as Window & typeof globalThis;
+      let selectedRows = 0;
+      let confirmations = 0;
+      let onBackCalls = 0;
+
+      testSetup = await testRender(
+        <WebInputHostProvider>
+          <CommandBarShortcutHarness
+            currentRoute={currentRoute}
+            onActivate={() => { selectedRows += 1; }}
+            onConfirm={() => { confirmations += 1; }}
+          />
+        </WebInputHostProvider>,
+        { width: 120, height: 40 },
+      );
+      await testSetup.renderOnce();
+
+      const commandInput = testWindow.createControl("INPUT");
+      const backButton = testWindow.createControl("BUTTON", () => { onBackCalls += 1; });
+      commandInput.focus();
+      const tab = testWindow.emitKeyDown("Tab");
+      if (!tab.defaultPrevented) backButton.focus();
+
+      for (const key of ["Enter", " "]) {
+        const activation = testWindow.emitKeyDown(key);
+        if (!activation.defaultPrevented) backButton.onNativeActivate();
+      }
+
+      expect(testWindow.activeElement).toBe(backButton);
+      expect(tab.defaultPrevented).toBe(false);
+      expect({ onBackCalls, selectedRows, confirmations }).toEqual({
+        onBackCalls: 2,
+        selectedRows: 0,
+        confirmations: 0,
+      });
+
+      await act(async () => {
+        testSetup!.renderer.destroy();
+      });
+      testSetup = undefined;
+    }
+  });
+
   test("exits Window Edit before command-bar keys reach the focused web Input", async () => {
     const testWindow = new TestWindow();
     globalThis.window = testWindow as unknown as Window & typeof globalThis;
@@ -451,5 +529,113 @@ describe("WebInputHostProvider command-bar registration", () => {
     expect(controls.commandBarOpen).toBe(false);
     expect(controls.windowMode).toBeNull();
     expect(persistedLayouts).toEqual([]);
+  });
+
+  test("uses real Shell command-bar state to cancel Window Edit before passive effects", async () => {
+    const testWindow = new TestWindow();
+    globalThis.window = testWindow as unknown as Window & typeof globalThis;
+    const layout: LayoutConfig = {
+      dockRoot: null,
+      instances: [createPaneInstance("test-pane", { instanceId: "float-a" })],
+      floating: [{
+        instanceId: "float-a",
+        x: 20,
+        y: 8,
+        width: 20,
+        height: 8,
+        zIndex: 50,
+        fixedGeometry: true,
+      }],
+      detached: [],
+    };
+    const config = {
+      ...createDefaultConfig("/tmp/gloomberb-command-bar-shell-test"),
+      layout,
+      layouts: [{ name: "Default", layout }],
+    };
+    const initialState = {
+      ...createInitialState(config),
+      focusedPaneId: "float-a",
+    };
+    const registry = {
+      panes: new Map([["test-pane", {
+        id: "test-pane",
+        name: "Test Pane",
+        component: () => <text>Test pane body</text>,
+      }]]),
+      paneTemplates: new Map(),
+      commands: new Map(),
+      tickerActions: new Map(),
+      brokers: new Map(),
+      allPlugins: new Map(),
+      getPluginPaneIds: () => [],
+      getPluginPaneTemplateIds: () => [],
+      hasPaneSettings: () => false,
+      openPaneSettingsFn() {},
+      openCommandBar() {},
+      openWindowMode() {},
+      openWindowModeFn() {},
+      updateLayoutFn() {},
+      hidePane() {},
+      notify() {},
+    } as unknown as PluginRegistry;
+    let completions = 0;
+    const controls: {
+      dispatch?: (action: AppAction) => void;
+      commandBarOpen?: boolean;
+    } = {};
+
+    function Harness() {
+      const [state, dispatch] = useReducer(appReducer, initialState);
+      controls.dispatch = dispatch;
+      controls.commandBarOpen = state.commandBarOpen;
+      return (
+        <AppContext value={{ state, dispatch }}>
+          <TransientLayoutProvider>
+            <TestDialogProvider>
+              <Shell pluginRegistry={registry} />
+            </TestDialogProvider>
+            {state.commandBarOpen && (
+              <CommandBarShortcutHarness
+                currentRoute={null}
+                onRootTab={() => {
+                  completions += 1;
+                  return true;
+                }}
+              />
+            )}
+          </TransientLayoutProvider>
+        </AppContext>
+      );
+    }
+
+    testSetup = await testRenderWithAppProviders(
+      <WebInputHostProvider>
+        <Harness />
+      </WebInputHostProvider>,
+      { width: 120, height: 40 },
+    );
+    await testSetup.renderOnce();
+
+    await act(async () => {
+      registry.openWindowModeFn("float-a", "resize");
+      await testSetup!.renderOnce();
+      await testSetup!.renderOnce();
+    });
+    expect(testSetup.captureCharFrame()).toContain("WINDOW RESIZE");
+
+    testWindow.createControl("INPUT").focus();
+    let firstCommandBarKey: TestKeyboardEvent | undefined;
+    act(() => {
+      flushSync(() => {
+        controls.dispatch?.({ type: "SET_COMMAND_BAR", open: true });
+      });
+      firstCommandBarKey = testWindow.emitKeyDown("Tab");
+    });
+
+    expect(controls.commandBarOpen).toBe(true);
+    expect(completions).toBe(1);
+    expect(firstCommandBarKey?.defaultPrevented).toBe(true);
+    expect(firstCommandBarKey?.propagationStopped).toBe(true);
   });
 });
