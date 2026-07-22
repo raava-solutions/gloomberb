@@ -38,6 +38,7 @@ interface ChatTranscriptProps {
   selectedIdx: number;
   setHoveredIdx: Dispatch<SetStateAction<number | null>>;
   showProfilePopover: (user: ChatUserSummary) => void;
+  onSetUpProfile: () => void;
   stickyTranscript: boolean;
   user: { id: string; username: string; emailVerified: boolean } | null;
   userByUsername: Map<string, ChatUserSummary>;
@@ -70,7 +71,9 @@ export function ChatTranscript({
   setHoveredIdx,
   showProfilePopover,
   stickyTranscript,
+  user,
   userByUsername,
+  onSetUpProfile,
 }: ChatTranscriptProps) {
   return (
     <>
@@ -152,6 +155,8 @@ export function ChatTranscript({
           width={chatWidth}
           onClose={scheduleProfilePopoverClose}
           onKeepOpen={cancelProfilePopoverClose}
+          isOwnProfile={profilePopoverUser.id === user?.id}
+          onSetUpProfile={onSetUpProfile}
         />
       )}
     </>

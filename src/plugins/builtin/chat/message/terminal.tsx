@@ -39,6 +39,7 @@ export function TerminalChatMessage({
   const showInlineEditAction = !state.grouped && state.showReplyAction && canEditMessage;
   const showGroupedReplyAction = state.grouped && state.showReplyAction;
   const showGroupedEditAction = state.grouped && state.showReplyAction && canEditMessage;
+  const authorLabel = msg.user.username ?? "anon";
   const groupedActionWidth = MESSAGE_ACTION_WIDTH * Number(showGroupedReplyAction) + MESSAGE_ACTION_WIDTH * Number(showGroupedEditAction);
   const setHovered = () => setHoveredIdx((current) => (current === index ? current : index));
   const clearHovered = () => setHoveredIdx((current) => (current === index ? null : current));
@@ -78,14 +79,21 @@ export function TerminalChatMessage({
           height={1}
           paddingLeft={1}
         >
-          <Text
-            fg={state.authorColor}
-            attributes={state.authorAttributes}
+          <Box
+            width={authorLabel.length}
+            height={1}
             onMouseOver={() => onUserHover(msg.user)}
+            onMouseMove={() => onUserHover(msg.user)}
             onMouseOut={onUserHoverEnd}
+            style={{ cursor: "pointer" }}
           >
-            {msg.user.username ?? "anon"}
-          </Text>
+            <Text
+              fg={state.authorColor}
+              attributes={state.authorAttributes}
+            >
+              {authorLabel}
+            </Text>
+          </Box>
           <Text fg={state.headerStatusColor}> {state.headerStatus}</Text>
           {(showInlineReplyAction || showInlineEditAction) && (
             <>

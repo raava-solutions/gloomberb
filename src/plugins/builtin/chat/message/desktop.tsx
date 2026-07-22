@@ -36,6 +36,7 @@ export const DesktopChatMessage = memo(function DesktopChatMessage({
   const showInlineEditAction = !state.grouped && canSend && canEditMessage;
   const showGroupedReplyAction = state.grouped && canSend;
   const showGroupedEditAction = state.grouped && canSend && canEditMessage;
+  const authorLabel = msg.user.username ?? "anon";
   const groupedActionWidth = MESSAGE_ACTION_WIDTH * Number(showGroupedReplyAction) + MESSAGE_ACTION_WIDTH * Number(showGroupedEditAction);
   const rowProps = {
     width: "100%",
@@ -95,15 +96,20 @@ export const DesktopChatMessage = memo(function DesktopChatMessage({
           height={1}
           paddingLeft={1}
         >
-          <Text
-            fg={state.authorColor}
-            attributes={state.authorAttributes}
+          <Box
+            height={1}
             onMouseOver={() => onUserHover(msg.user)}
+            onMouseMove={() => onUserHover(msg.user)}
             onMouseOut={onUserHoverEnd}
-            style={{ cursor: "default" }}
+            style={{ cursor: "pointer" }}
           >
-            {msg.user.username ?? "anon"}
-          </Text>
+            <Text
+              fg={state.authorColor}
+              attributes={state.authorAttributes}
+            >
+              {authorLabel}
+            </Text>
+          </Box>
           <Text fg={state.headerStatusColor}> {state.headerStatus}</Text>
           {(showInlineReplyAction || showInlineEditAction) && (
             <>

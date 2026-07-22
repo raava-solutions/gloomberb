@@ -820,7 +820,7 @@ export const zhCN: Record<string, string> = {
 
   // ── AI ──────────────────────────────────────────────────────
   "Select a ticker to ask AI.": "选择一个代码向 AI 提问。",
-  "No AI CLI tools detected. Install one of:": "未检测到 AI 命令行工具。请安装以下任意一个：",
+  "No AI CLI tools are ready:": "没有就绪的 AI 命令行工具：",
   "Ask questions about {ticker}. Financial data will be included as context.": "可以询问关于 {ticker} 的问题，金融数据会作为上下文提供。",
   "You": "你",
   "thinking...": "思考中...",

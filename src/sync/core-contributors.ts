@@ -12,7 +12,10 @@ import {
   computeWeightedPortfolioReturns,
   type WeightedReturnSeries,
 } from "../plugins/builtin/analytics/metrics";
-import { getSyncedProfileAnalytics } from "./profile-analytics";
+import {
+  getSyncedProfileAnalytics,
+  setSyncedProfileAnalytics,
+} from "./profile-analytics";
 
 const SENSITIVE_KEY_PATTERN = /(token|secret|password|credential|private|api[_-]?key|access[_-]?key|refresh[_-]?key|session|cookie|dataDir|path|directory|localPath)/i;
 
@@ -296,6 +299,17 @@ function collectCoreCollectionsPayload(
   };
 }
 
+function hydrateProfileAnalytics(payload: Record<string, unknown>): void {
+  if (!isPlainObject(payload.analyticsByPortfolio)) return;
+  for (const [portfolioId, analytics] of Object.entries(payload.analyticsByPortfolio)) {
+    if (!isPlainObject(analytics)) continue;
+    setSyncedProfileAnalytics(portfolioId, {
+      oneYearReturn: typeof analytics.oneYearReturn === "number" ? analytics.oneYearReturn : null,
+      spyBeta: typeof analytics.spyBeta === "number" ? analytics.spyBeta : null,
+    });
+  }
+}
+
 function valuesEqual(left: unknown, right: unknown): boolean {
   return stableStringify(left) === stableStringify(right);
 }
@@ -329,14 +343,12 @@ function mergeConfigPayload(
   assign("recentTickers");
   assign("onboardingComplete");
 
+  const layoutStateUntouched = config.layout === baselineConfig.layout
+    && config.layouts === baselineConfig.layouts
+    && config.activeLayoutIndex === baselineConfig.activeLayoutIndex;
   if (
-    ["layout", "layouts", "activeLayoutIndex"].every((key) => (
-      key in payload &&
-      valuesEqual(
-        config[key as keyof AppConfig],
-        baselineConfig[key as keyof AppConfig],
-      )
-    ))
+    layoutStateUntouched
+    && ["layout", "layouts", "activeLayoutIndex"].every((key) => key in payload)
   ) {
     next.layout = payload.layout as unknown as AppConfig["layout"];
     next.layouts = payload.layouts as AppConfig["layouts"];
@@ -385,6 +397,7 @@ export const coreCollectionsSyncContributor: SyncContributor = {
   ),
   apply: async (payload, { getState, isCurrent, dispatch, tickerRepository }) => {
     if (!isPlainObject(payload)) return;
+    hydrateProfileAnalytics(payload);
     const incomingRecords: TickerRecord[] = [];
     const rawTickers = Array.isArray(payload.tickers) ? payload.tickers : [];
     for (const rawTicker of rawTickers) {

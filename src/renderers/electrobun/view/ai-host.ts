@@ -3,8 +3,9 @@ import {
   type AiRunnerEvent,
 } from "../../../capabilities";
 import {
-  getAiProviderDefinitions,
   __setDetectedProvidersForTests,
+  getAiProviderDefinitions,
+  type AiProviderAvailability,
 } from "../../../plugins/builtin/ai/providers";
 import { AiRunCancelledError, setAiRunHost } from "../../../plugins/builtin/ai/runner";
 import { backendRequest, onCapabilityEvent } from "./backend-rpc";
@@ -12,19 +13,30 @@ import { backendRequest, onCapabilityEvent } from "./backend-rpc";
 let nextRunId = 1;
 
 export async function installElectrobunAiHost(): Promise<void> {
-  const availability = await backendRequest<Record<string, boolean>>("capability.invoke", {
+  const availability = await backendRequest<Record<string, AiProviderAvailability>>("capability.invoke", {
     capabilityId: AI_RUNNER_CAPABILITY_ID,
     operationId: "getProviderAvailability",
     payload: {},
   });
   const providers = getAiProviderDefinitions().map((definition) => ({
     ...definition,
-    available: availability[definition.id] ?? false,
+    ...(availability[definition.id] ?? {
+      available: false,
+      status: "check_failed" as const,
+      unavailableReason: `${definition.name} readiness could not be checked.`,
+    }),
   }));
 
   __setDetectedProvidersForTests(providers);
   setAiRunHost({
-    run({ provider, prompt, cwd, onChunk }) {
+    checkStatus(provider) {
+      return backendRequest("capability.invoke", {
+        capabilityId: AI_RUNNER_CAPABILITY_ID,
+        operationId: "checkProviderStatus",
+        payload: { providerId: provider.id },
+      });
+    },
+    run({ provider, prompt, cwd, onChunk, outputMode, isolatedWorkspace }) {
       const subscriptionId = `ai-run:${nextRunId++}`;
       let disposed = false;
       let settled = false;
@@ -69,7 +81,7 @@ export async function installElectrobunAiHost(): Promise<void> {
         }
       });
 
-      void backendRequest("capability.subscribe", {
+      const subscribePromise = backendRequest("capability.subscribe", {
         subscriptionId,
         capabilityId: AI_RUNNER_CAPABILITY_ID,
         operationId: "run",
@@ -77,10 +89,19 @@ export async function installElectrobunAiHost(): Promise<void> {
           providerId: provider.id,
           prompt,
           cwd,
+          outputMode,
+          isolatedWorkspace,
         },
       }).catch((error) => {
         settle(() => rejectDone(error));
+      }).finally(() => {
+        // Cancellation can race the async subscribe. Unsubscribe again after it
+        // settles so a late backend subscription cannot outlive this run.
+        if (disposed) {
+          void backendRequest("capability.unsubscribe", { subscriptionId }).catch(() => {});
+        }
       });
+      void subscribePromise;
 
       return {
         done,
